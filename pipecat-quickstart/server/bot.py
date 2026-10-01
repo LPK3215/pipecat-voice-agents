@@ -132,7 +132,7 @@ VAD_STOP_SECS_DEFAULT = VAD_STOP_SECS_OFFICIAL_DEFAULT  # pipecat 官方推荐�
 # 框架只提供内存态的短期记忆（LLMContext），长期记忆只给了 mem0 适配器（云端要 key），
 # 知识库与数据库完全没有 —— 这几块只能自己接。SQLite 零依赖，之后要换随时可换。
 memory.init_db()
-memory.seed_demo_metrics()  # 示例业务数据，接入真实采集后自动被覆盖
+memory.seed_demo_business()  # 示例业务数据，接入真实采集后自动被覆盖
 SESSION_ID = memory.new_session_id()
 
 

@@ -70,6 +70,27 @@ CREATE TABLE IF NOT EXISTS metrics (
     created_at REAL    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name, id);
+
+CREATE TABLE IF NOT EXISTS hosts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT    NOT NULL UNIQUE,
+    ip         TEXT    NOT NULL DEFAULT '',
+    region     TEXT    NOT NULL DEFAULT '',
+    latency_ms REAL    NOT NULL DEFAULT 0,
+    cpu_pct    REAL    NOT NULL DEFAULT 0,
+    status     TEXT    NOT NULL DEFAULT 'running',
+    created_at REAL    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    host       TEXT    NOT NULL,
+    level      TEXT    NOT NULL DEFAULT 'warning',
+    message    TEXT    NOT NULL,
+    status     TEXT    NOT NULL DEFAULT 'firing',
+    created_at REAL    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status, id);
 """
 
 
@@ -288,20 +309,170 @@ def load_memory_into_context(context, limit: int = 10) -> int:
     return injected
 
 
-def seed_demo_metrics() -> int:
+# ------------------------------------------------- 结构化知识库（通用查询）
+#
+# 这里是「数据库也是知识库」的落点：
+#   向量知识库：非结构化文档 → 语义相似 → 命中一段话
+#   本节的库  ：结构化数据   → 精确条件 → 命中的是一行行记录
+# 两者并存，出口都是**一个工具**（见 tools.py::query_data）。
+#
+# 安全设计：**不让模型直接写 SQL**。模型只提交
+# table / filters / order_by / aggregate 这类结构化参数，
+# 由这里的白名单校验后构造带占位符的语句。
+# 表名与列名都必须在白名单内，模型无法碰到白名单外的任何东西。
+
+# 白名单：表名 -> 可查询的列
+TABLE_COLUMNS: dict[str, list[str]] = {
+    "metrics": ["name", "value", "unit", "note", "created_at"],
+    "hosts": ["name", "ip", "region", "latency_ms", "cpu_pct", "status", "created_at"],
+    "alerts": ["id", "host", "level", "message", "status", "created_at"],
+}
+
+# 可做聚合的数值列
+NUMERIC_COLUMNS: dict[str, list[str]] = {
+    "metrics": ["value"],
+    "hosts": ["latency_ms", "cpu_pct"],
+    "alerts": ["id"],
+}
+
+_AGG_FUNCS = ("count", "avg", "max", "min", "sum")
+
+
+def _fmt_row(table: str, row: sqlite3.Row) -> dict:
+    """把时间戳转成可读时间。模型看到 '2026-10-01 23:55' 比看到 1790870057 更好念。"""
+    out = dict(row)
+    ts = out.pop("created_at", None)
+    if ts is not None:
+        out["time"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+    return out
+
+
+def query_table(
+    table: str,
+    filters: dict | None = None,
+    search: str = "",
+    order_by: str = "",
+    desc: bool = True,
+    limit: int = 10,
+    aggregate: str = "",
+) -> dict:
+    """通用结构化查询。模型通过工具提交参数，本函数负责校验并执行。
+
+    aggregate 传 ``count`` / ``avg:列名`` / ``max:列名`` 等；
+    传了聚合就忽略 order_by 与 limit，直接返回一个数 —— 让模型能回答
+    「有几个未处理告警」这类问题，而不必把全部行拉回去自己数。
+    """
+    if table not in TABLE_COLUMNS:
+        return {
+            "error": f"未知的表 {table!r}",
+            "available_tables": list(TABLE_COLUMNS),
+        }
+
+    cols = TABLE_COLUMNS[table]
+    where_sql: list[str] = []
+    params: list = []
+
+    for col, val in (filters or {}).items():
+        if col not in cols:
+            return {"error": f"表 {table} 没有列 {col!r}", "available_columns": cols}
+        where_sql.append(f"{col} = ?")
+        params.append(val)
+
+    if search:
+        text_cols = [c for c in cols if c in ("name", "message", "note", "host")]
+        if text_cols:
+            where_sql.append("(" + " OR ".join(f"{c} LIKE ?" for c in text_cols) + ")")
+            params += [f"%{search}%"] * len(text_cols)
+
+    where = f"WHERE {' AND '.join(where_sql)}" if where_sql else ""
+    limit = max(1, min(int(limit), 50))
+
+    if aggregate:
+        fn, _, col = aggregate.partition(":")
+        fn = fn.strip().lower()
+        if fn not in _AGG_FUNCS:
+            return {"error": f"不支持的聚合 {fn!r}", "supported": list(_AGG_FUNCS)}
+        if fn != "count":
+            if col not in NUMERIC_COLUMNS.get(table, []):
+                return {
+                    "error": f"表 {table} 不能对 {col!r} 做 {fn}",
+                    "numeric_columns": NUMERIC_COLUMNS.get(table, []),
+                }
+            expr = f"{fn.upper()}({col})"
+        else:
+            expr = "COUNT(*)"
+        with _conn() as conn:
+            row = conn.execute(
+                f"SELECT {expr} AS result FROM {table} {where}",  # noqa: S608 - 表名列名已白名单校验
+                params,
+            ).fetchone()
+        return {"table": table, "aggregate": aggregate, "result": row["result"]}
+
+    if order_by and order_by not in cols:
+        return {"error": f"表 {table} 不能按 {order_by!r} 排序", "available_columns": cols}
+    order = f"ORDER BY {order_by} {'DESC' if desc else 'ASC'}" if order_by else ""
+
+    with _conn() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM {table} {where} {order} LIMIT ?",  # noqa: S608 - 同上
+            (*params, limit),
+        ).fetchall()
+
+    return {
+        "table": table,
+        "count": len(rows),
+        "rows": [_fmt_row(table, r) for r in rows],
+    }
+
+
+def schema_summary() -> str:
+    """给模型看的表结构说明。工具描述里用它，改表时不用同步改两份。"""
+    return "; ".join(f"{t}({', '.join(c)})" for t, c in TABLE_COLUMNS.items())
+
+
+def seed_demo_business() -> int:
     """灌入示例业务数据，便于在没有真实数据源时验证工具链路。
 
-    返回写入条数；已有数据时不重复灌。
+    这里刻意做成**多表且外键相关**（alerts.host 关联 hosts.name），
+    因为「数据库作为知识库」的价值恰恰在关系上：
+    能回答「延迟最高的那台机器有哪些告警」这种需要跨表的问题。
+
+    真实接入后这些示例数据由采集脚本替换，表结构不变。
     """
     if query_metrics(limit=1):
         return 0
-    demo = [
+
+    now = time.time()
+    for name, value, unit, note in [
         ("服务可用性", 99.95, "%", "最近 24 小时"),
         ("平均响应延迟", 187.0, "ms", "最近 1 小时"),
         ("错误率", 0.12, "%", "最近 1 小时"),
         ("活跃用户数", 3421.0, "人", "当前在线"),
-    ]
-    for name, value, unit, note in demo:
+    ]:
         record_metric(name, value, unit, note)
-    logger.info(f"[MEMORY] 已灌入 {len(demo)} 条示例指标（示例数据，非真实业务）")
-    return len(demo)
+
+    hosts = [
+        ("web-01", "10.0.1.11", "华东", 92.0, 41.0, "running"),
+        ("web-02", "10.0.1.12", "华东", 431.0, 88.5, "degraded"),
+        ("db-01", "10.0.2.21", "华北", 156.0, 63.2, "running"),
+    ]
+    alerts = [
+        ("web-02", "critical", "CPU 使用率持续超过 85%", "firing"),
+        ("web-02", "warning", "接口 P99 延迟超过 400ms", "firing"),
+        ("db-01", "warning", "磁盘剩余空间不足 20%", "resolved"),
+    ]
+
+    with _conn() as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO hosts "
+            "(name, ip, region, latency_ms, cpu_pct, status, created_at) VALUES (?,?,?,?,?,?,?)",
+            [(*h, now) for h in hosts],
+        )
+        conn.executemany(
+            "INSERT INTO alerts (host, level, message, status, created_at) VALUES (?,?,?,?,?)",
+            [(*a, now) for a in alerts],
+        )
+
+    total = 4 + len(hosts) + len(alerts)
+    logger.info(f"[MEMORY] 已灌入 {total} 条示例业务数据（示例数据，非真实业务）")
+    return total

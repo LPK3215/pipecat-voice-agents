@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -190,61 +191,98 @@ RECALL_SCHEMA = FunctionSchema(
 
 
 # ---------------------------------------------------------------------------
-# 业务数据工具
+# 业务数据工具（结构化知识库）
 #
 # 这是「接自己的业务」的模板：工具本身只管查库，不管数据从哪来。
 # 数据的来源（爬监控页面 / 调内部接口 / 定时任务）是**采集侧**的事，
 # 换数据源时只改采集脚本，工具与提示词都不用动。
+#
+# 为什么做成**一个通用查询**而不是每张表一个工具：
+#     真实业务有几十张表，一个表一个工具会迅速撑爆提示词，
+#     而且模型还得先猜该用哪个。给一个「表 + 条件 + 排序 + 聚合」的
+#     通用入口，组合能力是乘法级的，工具数量却是常数。
+#
+# 为什么不干脆让模型写 SQL：
+#     那等于把整个数据库的读写权限交给一个可能被诱导的模型。
+#     这里只放行白名单内的表与列，模型碰不到白名单外的任何东西。
 # ---------------------------------------------------------------------------
 
 
-async def query_metrics(params: FunctionCallParams) -> None:
-    """查业务指标（当前为示例数据，等接入真实采集后自动变成真实值）。"""
+async def query_data(params: FunctionCallParams) -> None:
+    """通用结构化查询（当前为示例数据，接入真实采集后自动变成真实值）。"""
     args = params.arguments or {}
-    name = args.get("name") or None
-    limit = int(args.get("limit") or 5)
 
-    rows = memory.query_metrics(name=name, limit=limit)
-    logger.info(f"[TOOL] query_metrics(name={name}) -> {len(rows)} 条")
+    # 部分模型会把 filters 传成 JSON 字符串而不是对象，两种都接受
+    filters = args.get("filters") or {}
+    if isinstance(filters, str):
+        try:
+            filters = json.loads(filters) if filters.strip() else {}
+        except json.JSONDecodeError:
+            filters = {}
 
-    if not rows:
-        await params.result_callback(
-            {"found": False, "spoken": "没有查到相关指标"},
-            properties=_RESULT_PROPS,
-        )
-        return
-
-    parts = []
-    for r in rows:
-        unit = r.get("unit") or ""
-        parts.append(f"{r['name']} {r['value']}{unit}")
-    await params.result_callback(
-        {
-            "found": True,
-            "items": rows,
-            # 同时给 spoken 字段：让模型直接照读，避免把数字念成一串
-            "spoken": "，".join(parts),
-        },
-        properties=_RESULT_PROPS,
+    result = memory.query_table(
+        table=str(args.get("table", "")).strip(),
+        filters=filters if isinstance(filters, dict) else {},
+        search=str(args.get("search") or ""),
+        order_by=str(args.get("order_by") or ""),
+        desc=bool(args.get("desc", True)),
+        limit=int(args.get("limit") or 10),
+        aggregate=str(args.get("aggregate") or ""),
     )
+    logger.info(f"[TOOL] query_data({args}) -> {str(result)[:160]}")
+
+    if "error" in result:
+        result["spoken"] = f"查询没成功：{result['error']}"
+    elif "result" in result:
+        result["spoken"] = f"结果是 {result['result']}"
+    elif not result.get("rows"):
+        result["found"] = False
+        result["spoken"] = "没有查到符合条件的记录"
+    else:
+        result["found"] = True
+        # 同时给 spoken：让模型照读，避免把数字念成一串
+        cells = []
+        for r in result["rows"]:
+            cells.append("，".join(f"{k}是{v}" for k, v in r.items() if k != "time"))
+        result["spoken"] = "；".join(cells)
+
+    await params.result_callback(result, properties=_RESULT_PROPS)
 
 
-METRICS_SCHEMA = FunctionSchema(
-    name="query_metrics",
+DATA_SCHEMA = FunctionSchema(
+    name="query_data",
     description=(
-        "查询系统监控指标，包括服务可用性、响应延迟、错误率、活跃用户数等。"
-        "当用户问「现在系统怎么样」「可用性多少」「延迟高不高」"
-        "「有多少人在线」「有没有报错」时调用。"
+        "查询业务数据库（结构化数据，精确查询）。"
+        "当用户问系统状态、监控指标、服务器、主机、告警相关的问题时调用。\n"
+        f"可用表与列：{memory.schema_summary()}。\n"
+        "用法示例：\n"
+        "  「可用性/延迟/错误率多少」→ table=metrics\n"
+        "  「哪台服务器延迟最高」→ table=hosts, order_by=latency_ms, limit=1\n"
+        "  「有几条未处理告警」→ table=alerts, filters={status:firing}, aggregate=count\n"
+        "  「web-02 有什么告警」→ table=alerts, filters={host:web-02}\n"
+        "注意：这是精确条件查询，不是文档检索。不要用它查文档内容。"
     ),
     properties={
-        "name": {
+        "table": {
             "type": "string",
-            "description": "指标名称关键词，如「可用性」「延迟」「错误率」；留空查全部",
+            "enum": list(memory.TABLE_COLUMNS),
+            "description": "要查的表",
         },
-        "limit": {"type": "integer", "description": "返回条数，默认 5"},
+        "filters": {
+            "type": "object",
+            "description": "精确匹配条件，如 {status: firing}、{host: web-02}",
+        },
+        "search": {"type": "string", "description": "对名称/告警内容做模糊匹配"},
+        "order_by": {"type": "string", "description": "排序列名"},
+        "desc": {"type": "boolean", "description": "是否降序，默认 true"},
+        "limit": {"type": "integer", "description": "返回条数，默认 10，最多 50"},
+        "aggregate": {
+            "type": "string",
+            "description": "聚合：count 或 avg:列名 / max:列名 / min:列名 / sum:列名",
+        },
     },
-    required=[],
-    handler=query_metrics,
+    required=["table"],
+    handler=query_data,
 )
 
 
@@ -255,6 +293,6 @@ def build_tools() -> ToolsSchema:
             CURRENT_TIME_SCHEMA,
             REMEMBER_SCHEMA,
             RECALL_SCHEMA,
-            METRICS_SCHEMA,
+            DATA_SCHEMA,
         ]
     )
