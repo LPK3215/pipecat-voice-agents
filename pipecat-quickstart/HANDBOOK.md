@@ -400,7 +400,7 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
    并写进了报告。用重复试验重测后被推翻 —— 减到 5 个工具并未变好，
    减到 3 个工具时反而调用了错误的工具。
    缺省采样温度下模型每次结果不同，**这类实验至少要重复 5 次看分布**。
-   （见 `TOOL_TESTS.md` §六）
+   （见 `TOOL_TESTS.md` 第 6 节）
 
 10. **先确认测量工具是对的，再去测被测对象。**
     同一个症状「机器人没好好回答」，背后可能是完全不同的原因：
@@ -431,7 +431,7 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
   包含：框架的五个扩展点、加工具的完整步骤与四条硬规范、
   schema 描述怎么写（决定模型会不会调）、数据接入（采集与查询必须分开）、
   记忆的双层设计、什么时候不能让模型自由决定、测试纪律、完整示例、自查清单。
-  进度与待办见该文 §10。
+  进度与待办见该文第 10 节。
 
 - **第三阶段（融入大系统）**：pipecat 的传输层可替换（WebRTC / WebSocket / Daily 等），
   `bot.py` 里的管线装配与传输解耦，因此可整体嵌入既有 Python 服务。
