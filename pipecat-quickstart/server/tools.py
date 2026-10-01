@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from loguru import logger
+import memory
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import (
@@ -102,6 +103,158 @@ CURRENT_TIME_SCHEMA = FunctionSchema(
 )
 
 
+# ---------------------------------------------------------------------------
+# 记忆类工具：让「长期记忆」不只是存下来，而是模型能主动读写
+#
+# 为什么做成工具而不是无条件塞进上下文：
+#     记忆会越攒越多，全塞进去会挤爆上下文窗口（且每轮都要付 token）。
+#     做成工具后，模型**自己判断**什么时候该查、什么时候该记 ——
+#     这也是 function calling 的意义：把「用不用」的决定权交给模型。
+# ---------------------------------------------------------------------------
+
+
+async def remember_fact(params: FunctionCallParams) -> None:
+    """记住一条关于用户的事实（跨会话保留）。"""
+    args = params.arguments or {}
+    key = str(args.get("key", "")).strip()
+    value = str(args.get("value", "")).strip()
+    if not key or not value:
+        await params.result_callback(
+            {"ok": False, "error": "key 和 value 都不能为空"},
+            properties=_RESULT_PROPS,
+        )
+        return
+
+    memory.put_fact(key, value)
+    logger.info(f"[TOOL] remember_fact({key}) -> {value}")
+    await params.result_callback(
+        {"ok": True, "key": key, "value": value, "spoken": f"记住了：{key}是{value}"},
+        properties=_RESULT_PROPS,
+    )
+
+
+REMEMBER_SCHEMA = FunctionSchema(
+    name="remember_fact",
+    description=(
+        "记住一条关于用户的信息，长期保留，之后的对话都记得。"
+        "当用户说「记住…」「我叫…」「我喜欢…」「以后都…」"
+        "或主动提供了自己的偏好、身份、习惯时调用。"
+        "key 用简短的中文标签（如「姓名」「喜欢的语言」「项目名」），value 是具体内容。"
+    ),
+    properties={
+        "key": {"type": "string", "description": "信息的名称，简短中文标签"},
+        "value": {"type": "string", "description": "信息的具体内容"},
+    },
+    required=["key", "value"],
+    handler=remember_fact,
+)
+
+
+async def recall_fact(params: FunctionCallParams) -> None:
+    """从长期记忆里查；找不到就明确说没有，别让模型瞎编。"""
+    query = str((params.arguments or {}).get("query", "")).strip()
+    hits = memory.search_facts(query) if query else memory.list_facts(limit=10)
+
+    logger.info(f"[TOOL] recall_fact({query}) -> {len(hits)} 条")
+    await params.result_callback(
+        {
+            "found": bool(hits),
+            "items": hits,
+            "spoken": (
+                "；".join(f"{h['key']}是{h['value']}" for h in hits)
+                if hits
+                else "没有相关的记录"
+            ),
+        },
+        properties=_RESULT_PROPS,
+    )
+
+
+RECALL_SCHEMA = FunctionSchema(
+    name="recall_fact",
+    description=(
+        "回想以前记住的关于用户的信息。"
+        "当用户问「我说过什么」「你还记得吗」「我叫什么」"
+        "或话题涉及过去约定过的偏好时调用。"
+        "也可以用于查询用户之前交代过的项目背景、习惯等信息。"
+    ),
+    properties={
+        "query": {
+            "type": "string",
+            "description": "要回想的主题关键词；留空则列出全部记忆",
+        }
+    },
+    required=[],
+    handler=recall_fact,
+)
+
+
+# ---------------------------------------------------------------------------
+# 业务数据工具
+#
+# 这是「接自己的业务」的模板：工具本身只管查库，不管数据从哪来。
+# 数据的来源（爬监控页面 / 调内部接口 / 定时任务）是**采集侧**的事，
+# 换数据源时只改采集脚本，工具与提示词都不用动。
+# ---------------------------------------------------------------------------
+
+
+async def query_metrics(params: FunctionCallParams) -> None:
+    """查业务指标（当前为示例数据，等接入真实采集后自动变成真实值）。"""
+    args = params.arguments or {}
+    name = args.get("name") or None
+    limit = int(args.get("limit") or 5)
+
+    rows = memory.query_metrics(name=name, limit=limit)
+    logger.info(f"[TOOL] query_metrics(name={name}) -> {len(rows)} 条")
+
+    if not rows:
+        await params.result_callback(
+            {"found": False, "spoken": "没有查到相关指标"},
+            properties=_RESULT_PROPS,
+        )
+        return
+
+    parts = []
+    for r in rows:
+        unit = r.get("unit") or ""
+        parts.append(f"{r['name']} {r['value']}{unit}")
+    await params.result_callback(
+        {
+            "found": True,
+            "items": rows,
+            # 同时给 spoken 字段：让模型直接照读，避免把数字念成一串
+            "spoken": "，".join(parts),
+        },
+        properties=_RESULT_PROPS,
+    )
+
+
+METRICS_SCHEMA = FunctionSchema(
+    name="query_metrics",
+    description=(
+        "查询系统监控指标，包括服务可用性、响应延迟、错误率、活跃用户数等。"
+        "当用户问「现在系统怎么样」「可用性多少」「延迟高不高」"
+        "「有多少人在线」「有没有报错」时调用。"
+    ),
+    properties={
+        "name": {
+            "type": "string",
+            "description": "指标名称关键词，如「可用性」「延迟」「错误率」；留空查全部",
+        },
+        "limit": {"type": "integer", "description": "返回条数，默认 5"},
+    },
+    required=[],
+    handler=query_metrics,
+)
+
+
 def build_tools() -> ToolsSchema:
     """返回本次会话开放给 LLM 的工具集合。"""
-    return ToolsSchema(standard_tools=[CURRENT_TIME_SCHEMA])
+    return ToolsSchema(
+        standard_tools=[
+            CURRENT_TIME_SCHEMA,
+            REMEMBER_SCHEMA,
+            RECALL_SCHEMA,
+            METRICS_SCHEMA,
+        ]
+    )

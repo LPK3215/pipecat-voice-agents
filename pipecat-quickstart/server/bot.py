@@ -92,6 +92,8 @@ from settings import (  # noqa: E402
 
 from tools import build_tools  # noqa: E402 - 与 settings 同理，需先 load_dotenv
 
+import memory  # noqa: E402 - 同上
+
 MODELSCOPE_BASE_URL = os.getenv("MODELSCOPE_BASE_URL", MODELSCOPE_BASE_URL_DEFAULT)
 
 # 可选模型：三个均已实测「关闭思考后」首 token < 1 秒，默认取最快的
@@ -125,6 +127,13 @@ SYSTEM_INSTRUCTION = os.getenv("SYSTEM_INSTRUCTION", DEFAULT_SYSTEM_INSTRUCTION)
 OPENING_MESSAGE = os.getenv("OPENING_MESSAGE", DEFAULT_OPENING_MESSAGE)
 
 VAD_STOP_SECS_DEFAULT = VAD_STOP_SECS_OFFICIAL_DEFAULT  # pipecat 官方推荐值，仅用于提示
+
+# ---------- 本地持久化 ----------
+# 框架只提供内存态的短期记忆（LLMContext），长期记忆只给了 mem0 适配器（云端要 key），
+# 知识库与数据库完全没有 —— 这几块只能自己接。SQLite 零依赖，之后要换随时可换。
+memory.init_db()
+memory.seed_demo_metrics()  # 示例业务数据，接入真实采集后自动被覆盖
+SESSION_ID = memory.new_session_id()
 
 
 def _mask(value: str | None) -> str:
@@ -288,6 +297,8 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     # TOOLS 里的 FunctionSchema 自带 handler，LLM 服务会自动注册，
     # 因此不需要再手工调用 llm.register_function。
     context = LLMContext(tools=TOOLS) if TOOLS is not None else LLMContext()
+    # 把长期记忆注入上下文 —— 模型看得到才算「记得」
+    memory.load_memory_into_context(context)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -305,6 +316,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             tts,
             transport.output(),
             assistant_aggregator,
+            # 放最后：用户侧与助手侧的文本帧都会一路传播到这里，
+            # 一个 processor 就能把两边都落库
+            memory.TurnRecorder(SESSION_ID),
         ]
     )
 

@@ -23,3 +23,8 @@ __pycache__/
 # 只忽略 .log，保留 logs/ANALYSIS.md 这类分析报告。
 # 曾误把 44 个 .log 提交进版本库，已用 git rm --cached 移出。
 *.log
+
+# SQLite 本地持久化（运行时生成，含会话内容，不入库）
+*.db
+*.db-journal
+server/data/
