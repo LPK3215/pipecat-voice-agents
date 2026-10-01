@@ -64,7 +64,7 @@ async def get_weather(params: FunctionCallParams) -> None:
         return
 
     temp, cond = _WEATHER[key]
-    logger.info(f"[TOOL] get_weather({key}) -> {temp}°C {cond}")
+    logger.debug(f"[TOOL] get_weather({key}) -> {temp}°C {cond}")
     await params.result_callback(
         {
             "found": True,
@@ -134,7 +134,7 @@ async def calculate(params: FunctionCallParams) -> None:
 
     # 整数不要显示成 391.0
     shown = int(value) if isinstance(value, float) and value.is_integer() else value
-    logger.info(f"[TOOL] calculate({expr}) -> {shown}")
+    logger.debug(f"[TOOL] calculate({expr}) -> {shown}")
     await params.result_callback(
         {"ok": True, "expression": expr, "result": shown, "spoken": f"等于 {shown}"},
         properties=_RESULT_PROPS,
@@ -206,7 +206,7 @@ async def convert_unit(params: FunctionCallParams) -> None:
         return
 
     shown = round(result, 4)
-    logger.info(f"[TOOL] convert_unit({value} {src} -> {dst}) = {shown}")
+    logger.debug(f"[TOOL] convert_unit({value} {src} -> {dst}) = {shown}")
     await params.result_callback(
         {
             "ok": True,
@@ -261,7 +261,7 @@ async def control_device(params: FunctionCallParams) -> None:
 
     target = "开启" if action in ("on", "开启", "打开", "开") else "关闭"
     _DEVICE_STATE[device] = target
-    logger.info(f"[TOOL] control_device({device}, {target})")
+    logger.debug(f"[TOOL] control_device({device}, {target})")
     await params.result_callback(
         {
             "ok": True,
@@ -304,7 +304,7 @@ async def send_notification(params: FunctionCallParams) -> None:
         )
         return
 
-    logger.info(f"[TOOL] send_notification({to}) -> {message}")
+    logger.debug(f"[TOOL] send_notification({to}) -> {message}")
     await params.result_callback(
         {"ok": True, "to": to, "message": message,
          "spoken": f"已经给{to}发了通知：{message}"},
@@ -348,7 +348,7 @@ async def set_reminder(params: FunctionCallParams) -> None:
 
     item = {"content": content, "when": when, "created": time.time()}
     _REMINDERS.append(item)
-    logger.info(f"[TOOL] set_reminder({content!r}, {when!r})")
+    logger.debug(f"[TOOL] set_reminder({content!r}, {when!r})")
     await params.result_callback(
         {
             "ok": True,

@@ -76,7 +76,7 @@ async def get_current_time(params: FunctionCallParams) -> None:
         f"现在是 {now.year}年{now.month}月{now.day}日 "
         f"{WEEKDAYS[now.weekday()]} {now.hour}点{now.minute:02d}分"
     )
-    logger.info(f"[TOOL] get_current_time(timezone={tz_name}) -> {spoken}")
+    logger.debug(f"[TOOL] get_current_time(timezone={tz_name}) -> {spoken}")
 
     await params.result_callback(
         {
@@ -129,7 +129,7 @@ async def remember_fact(params: FunctionCallParams) -> None:
         return
 
     memory.put_fact(key, value)
-    logger.info(f"[TOOL] remember_fact({key}) -> {value}")
+    logger.debug(f"[TOOL] remember_fact({key}) -> {value}")
     await params.result_callback(
         {"ok": True, "key": key, "value": value, "spoken": f"记住了：{key}是{value}"},
         properties=_RESULT_PROPS,
@@ -158,7 +158,7 @@ async def recall_fact(params: FunctionCallParams) -> None:
     query = str((params.arguments or {}).get("query", "")).strip()
     hits = memory.search_facts(query) if query else memory.list_facts(limit=10)
 
-    logger.info(f"[TOOL] recall_fact({query}) -> {len(hits)} 条")
+    logger.debug(f"[TOOL] recall_fact({query}) -> {len(hits)} 条")
     await params.result_callback(
         {
             "found": bool(hits),
@@ -231,7 +231,7 @@ async def query_data(params: FunctionCallParams) -> None:
         limit=int(args.get("limit") or 10),
         aggregate=str(args.get("aggregate") or ""),
     )
-    logger.info(f"[TOOL] query_data({args}) -> {str(result)[:160]}")
+    logger.debug(f"[TOOL] query_data({args}) -> {result}")
 
     if "error" in result:
         result["spoken"] = f"查询没成功：{result['error']}"

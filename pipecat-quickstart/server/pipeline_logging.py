@@ -13,14 +13,23 @@
     [TURN]   一轮对话的时间线与分段延迟
     [FRAME]  关键帧流水（DEBUG 级，用于排查）
     [ERROR]  管线故障（处理器 / 错误类别 / 是否还能用），并同步推送给前端
-    [TOOL]   工具调用（见 tools.py）
+    [TOOL]   工具调用的完整记录（模型原始决定 / 参数 / 结果 / 耗时 / 成功失败 / 被取消）
+
+关于 [TOOL] 日志的完整性约定：
+    工具调用的**权威记录**在本模块统一输出，而不是散落在各工具实现里。
+    原因是各工具自己打日志必然出现三种缺漏：格式不一、内容截断、
+    以及「模型调了但工具没打日志」的死角。
+    这里直接监听框架的四个工具帧，因此**不论哪个工具、不论成功失败、
+    不论是否被用户打断，都一定有记录**，且参数与结果原样完整输出、不做截断。
 
 注意：pipecat 的 runner 启动时会调用 ``logger.remove()`` 清空所有日志出口
 （pipecat/runner/run.py），因此**会话建立后需要再次调用 ``setup_logging``**。
 """
 
+import json
 import sys
 import time
+from collections import deque
 from pathlib import Path
 
 from loguru import logger
@@ -28,6 +37,10 @@ from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     ErrorFrame,
+    FunctionCallCancelFrame,
+    FunctionCallInProgressFrame,
+    FunctionCallResultFrame,
+    FunctionCallsStartedFrame,
     LLMContextFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
@@ -233,6 +246,11 @@ class ConversationLogger(BaseObserver):
         self._marks: dict[str, float] = {}
         self._reply: list[str] = []
         self._turns = 0
+        # 工具执行起始时刻，按 tool_call_id 记录，用于算单个工具的真实耗时
+        self._tool_t0: dict[str, float] = {}
+        # 广播帧去重用。有界，不会随会话无限增长（见 _is_duplicate_broadcast）
+        self._seen_broadcast: set[str] = set()
+        self._seen_order: deque[str] = deque(maxlen=512)
 
     async def on_push_frame(self, data) -> None:
         frame = data.frame
@@ -271,6 +289,61 @@ class ConversationLogger(BaseObserver):
                 logger.info("[TURN] TTS 开始出声")
                 self._report_turn()
 
+        # ---- 工具调用：完整记录 ----
+        # 监听框架的四个工具帧，因此任何工具、成功或失败、是否被打断，都必有记录。
+        # 内容一律原样输出，不截断 —— 截断过的日志在排查时等于没有。
+        # 这四个帧都是由 broadcast_frame 发出的，必须先过广播去重，
+        # 否则每一帧都会被记录两遍（原因见 _is_duplicate_broadcast）。
+        elif isinstance(frame, FunctionCallsStartedFrame):
+            if self._is_duplicate_broadcast(frame):
+                return
+            logger.info(f"[TOOL] ◆ 模型决定调用 {len(frame.function_calls)} 个工具")
+            for call in frame.function_calls:
+                logger.info(
+                    f"[TOOL] ◆   调用 {call.function_name}"
+                    f"（id={call.tool_call_id}）\n"
+                    f"[TOOL] ◆   参数: {self._render_payload(call.arguments)}"
+                )
+
+        elif isinstance(frame, FunctionCallInProgressFrame):
+            if self._is_duplicate_broadcast(frame):
+                return
+            self._tool_t0[frame.tool_call_id] = now
+            logger.info(
+                f"[TOOL] ▶ 开始执行 {frame.function_name}"
+                f"（id={frame.tool_call_id}）\n"
+                f"[TOOL] ▶   参数: {self._render_payload(frame.arguments)}\n"
+                f"[TOOL] ▶   用户打断时: "
+                f"{'取消本次调用' if frame.cancel_on_interruption else '不取消，执行到底'}"
+            )
+
+        elif isinstance(frame, FunctionCallResultFrame):
+            if self._is_duplicate_broadcast(frame):
+                return
+            cost = now - self._tool_t0.pop(frame.tool_call_id, now)
+            logger.info(
+                f"[TOOL] ◀ {frame.function_name} "
+                f"{'执行失败' if frame.error else '执行成功'}"
+                f"（耗时 {cost * 1000:.0f}ms，id={frame.tool_call_id}）\n"
+                f"[TOOL] ◀   参数: {self._render_payload(frame.arguments)}\n"
+                f"[TOOL] ◀   结果: {self._render_payload(frame.result)}\n"
+                # 只如实报告框架字段，不解释成「有没有触发下一轮生成」：
+                # 实测该字段与实际行为并不一致（值为 False 时下一轮照样发生），
+                # 把它翻译成结论会写出**误导性**日志 —— 那比不写更糟。
+                # 想知道后续有没有再生成一轮，看后面那条完整上下文日志即可。
+                f"[TOOL] ◀   框架字段 run_llm={frame.run_llm!r}"
+                + (f"\n[TOOL] ◀   错误: {frame.error}" if frame.error else "")
+            )
+
+        elif isinstance(frame, FunctionCallCancelFrame):
+            if self._is_duplicate_broadcast(frame):
+                return
+            self._tool_t0.pop(frame.tool_call_id, None)
+            logger.warning(
+                f"[TOOL] ✖ {frame.function_name} 被取消"
+                f"（id={frame.tool_call_id}）—— 通常是用户中途打断"
+            )
+
         elif isinstance(frame, BotStartedSpeakingFrame):
             logger.debug("[FRAME] 机器人开始说话")
 
@@ -296,14 +369,88 @@ class ConversationLogger(BaseObserver):
             return
         self._marks[name] = now
 
+    def _is_duplicate_broadcast(self, frame) -> bool:
+        """广播帧的第二次投递返回 True，调用方据此跳过。
+
+        为什么需要（这是框架行为，不是本项目的 bug）：
+            pipecat 的 ``broadcast_frame`` 会为上行、下行**各创建一个 Frame 实例**
+            （见 ``processors/frame_processor.py``），两个实例有各自独立的 ``id``，
+            再用 ``broadcast_sibling_id`` 互相指向。
+            而观察者的去重是按 ``frame.id`` 判定的
+            （``pipeline/worker_observer.py``: ``data.first_push = frame.id not in ...``），
+            两个实例都会被评为「首次推送」，于是观察者被通知两次 ——
+            日志里每条广播帧就出现两遍。
+
+        框架提供 ``broadcast_sibling_id`` 正是为了这种合并：
+        首次见到时把**两个 id 都记下**，第二个实例到来时即命中。
+
+        有界实现：只保留最近 512 个 id。上行/下行两个实例是紧挨着投递的，
+        不需要长期记忆，因此不会像早期版本那样随会话无限增长。
+        """
+        sibling = getattr(frame, "broadcast_sibling_id", None)
+        if sibling is None:
+            return False  # 非广播帧，不参与合并
+
+        if frame.id in self._seen_broadcast:
+            return True
+
+        for fid in (frame.id, sibling):
+            if fid in self._seen_broadcast:
+                continue
+            if len(self._seen_order) == self._seen_order.maxlen:
+                # append 会自动挤掉最旧的一个，同步从集合里移除，避免集合无限增长
+                self._seen_broadcast.discard(self._seen_order[0])
+            self._seen_broadcast.add(fid)
+            self._seen_order.append(fid)
+        return False
+
+    @staticmethod
+    def _render_payload(payload) -> str:
+        """把工具参数/结果渲染成完整字符串。**不截断**。
+
+        JSON 化而不是直接 str()：既保留嵌套结构，也避免 dict 的
+        单引号写法在日志里难以复制复用。``default=str`` 兜住不可序列化的值。
+        """
+        try:
+            return json.dumps(payload, ensure_ascii=False, default=str, indent=2)
+        except (TypeError, ValueError):
+            return repr(payload)
+
     @staticmethod
     def _render_context(frame) -> str:
+        """完整渲染发给 LLM 的上下文，**不截断**。
+
+        早期版本只保留最后 600 字符，会把最前面的系统提示词与注入的
+        长期记忆切掉 —— 而那两段恰恰是排查「模型为什么这么答」最需要看的。
+        现在逐条完整列出，并附上本轮实际可用的工具清单：
+        模型选错工具时，第一件要确认的就是「它当时到底看得到哪些工具」。
+        """
         context = getattr(frame, "context", None)
         messages = getattr(context, "messages", None) or context
         try:
-            return str(list(messages))[-600:]
-        except Exception:  # noqa: BLE001
-            return repr(frame)[:300]
+            items = list(messages)
+        except TypeError:
+            return repr(frame)
+
+        lines = [f"（共 {len(items)} 条消息）"]
+        for i, msg in enumerate(items, 1):
+            if isinstance(msg, dict):
+                role, content = msg.get("role", "?"), msg.get("content", "")
+            else:
+                role = getattr(msg, "role", "?")
+                content = getattr(msg, "content", msg)
+            # 带 tool_calls 的助手消息也要完整展示，否则「模型调了什么」这一段是空的
+            calls = msg.get("tool_calls") if isinstance(msg, dict) else None
+            suffix = f"  tool_calls={json.dumps(calls, ensure_ascii=False, default=str)}" if calls else ""
+            lines.append(f"  {i}. [{role}] {content}{suffix}")
+
+        try:
+            tools = getattr(context, "tools", None)
+            names = [t.name for t in getattr(tools, "standard_tools", [])]
+        except Exception:  # noqa: BLE001 - 工具清单只是附加信息，取不到不该影响上下文输出
+            names = []
+        lines.append(f"  本轮可用工具（{len(names)} 个）: {names}")
+        return "\n".join(lines)
 
     def _report_turn(self) -> None:
         base = self._marks.get("说完")
