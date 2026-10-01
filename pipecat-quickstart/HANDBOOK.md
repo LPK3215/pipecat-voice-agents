@@ -6,6 +6,9 @@
 > 「语音进 / 语音出」的底层搭起来，并知道每个环节能换什么、怎么换、代价是什么。
 >
 > 配套：`README.md` 是「这个项目怎么跑」，本文是「这类东西怎么搭」。
+>
+> **➡️ 下一阶段见 [`HANDBOOK-02.md`](HANDBOOK-02.md)**：
+> 在框架上写自己的业务 —— 工具开发规范、数据接入、编排、测试纪律、完整示例。
 
 ---
 
@@ -424,11 +427,11 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
 
 ## 11. 下一步
 
-- **第二阶段（写自己的业务）**：在 `tools.py` 里加 function calling 工具。
-  加一个工具的流程：写 `async def handler(params: FunctionCallParams)` → 定义
-  `FunctionSchema`（handler 指向它）→ 加进 `build_tools()` 列表。
-  `FunctionSchema` 带 handler 时会自动注册，无需手工 `register_function`。
-  前端无需改动 —— pipecat 会把调用过程以 RTVI 消息推给前端渲染。
+- **第二阶段（写自己的业务）**：**已单独成文 → [`HANDBOOK-02.md`](HANDBOOK-02.md)**
+  包含：框架的五个扩展点、加工具的完整步骤与四条硬规范、
+  schema 描述怎么写（决定模型会不会调）、数据接入（采集与查询必须分开）、
+  记忆的双层设计、什么时候不能让模型自由决定、测试纪律、完整示例、自查清单。
+  进度与待办见该文 §10。
 
 - **第三阶段（融入大系统）**：pipecat 的传输层可替换（WebRTC / WebSocket / Daily 等），
   `bot.py` 里的管线装配与传输解耦，因此可整体嵌入既有 Python 服务。
