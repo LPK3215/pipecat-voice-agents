@@ -13,14 +13,23 @@
     [TURN]   一轮对话的时间线与分段延迟
     [FRAME]  关键帧流水（DEBUG 级，用于排查）
     [ERROR]  管线故障（处理器 / 错误类别 / 是否还能用），并同步推送给前端
-    [TOOL]   工具调用的完整记录（模型原始决定 / 参数 / 结果 / 耗时 / 成功失败 / 被取消）
+    [TOOL]   工具调用的完整记录（模型要求调用 / 开始执行 / 结果 / 失败 / 超时 / 取消）
 
-关于 [TOOL] 日志的完整性约定：
-    工具调用的**权威记录**在本模块统一输出，而不是散落在各工具实现里。
-    原因是各工具自己打日志必然出现三种缺漏：格式不一、内容截断、
-    以及「模型调了但工具没打日志」的死角。
-    这里直接监听框架的四个工具帧，因此**不论哪个工具、不论成功失败、
-    不论是否被用户打断，都一定有记录**，且参数与结果原样完整输出、不做截断。
+关于 [TOOL] 日志的规范做法（有教训，改前必读）：
+    工具调用**一律走框架自带的 ``FunctionCallObserver``**，不要自己监听了
+    四个工具帧手写一套。本项目早期就是这么干的，结果同时踩了三个坑：
+      1) 漏了结局：手写版只区分「成功/失败」，而框架区分
+         started / in_progress / completed / failed / timed_out / cancelled 六种，
+         漏掉了超时与被取消 —— 而「调用了却永远没结果」正是最该查的情况；
+      2) 广播帧重复：四个工具帧都由 ``broadcast_frame`` 发出，上行下行各一个实例，
+         两个实例的 ``frame.id`` 不同、都会被判定为首次推送，于是每条记两遍。
+         框架里的处理方式是只读 DOWNSTREAM 那一个
+         （``frame.broadcast_sibling_id is not None and direction != DOWNSTREAM → return``），
+         自己写就得重新发现一遍这个约定；
+      3) 耗时靠外部推断：框架把 ``started_at`` / ``in_progress_at`` 直接写进事件，
+         一条记录就能读出「排队等了多久 + 执行了多久」两段时间。
+    ⚠️ ``FunctionCallObserver`` 的 ``include_results`` **默认是 False**（只记参数不记结果），
+       排查问题必须显式传 True，否则等于少了一半信息。
 
 注意：pipecat 的 runner 启动时会调用 ``logger.remove()`` 清空所有日志出口
 （pipecat/runner/run.py），因此**会话建立后需要再次调用 ``setup_logging``**。
@@ -29,7 +38,6 @@
 import json
 import sys
 import time
-from collections import deque
 from pathlib import Path
 
 from loguru import logger
@@ -37,10 +45,6 @@ from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     ErrorFrame,
-    FunctionCallCancelFrame,
-    FunctionCallInProgressFrame,
-    FunctionCallResultFrame,
-    FunctionCallsStartedFrame,
     LLMContextFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
@@ -53,6 +57,10 @@ from pipecat.frames.frames import (
 )
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.observers.error_observer import ErrorObserver
+from pipecat.observers.function_call_observer import (
+    FunctionCallEventKind,
+    FunctionCallObserver,
+)
 from pipecat.utils.errors import ErrorCategory
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -224,6 +232,98 @@ def install_error_reporting(worker, observer: ErrorObserver | None = None) -> Er
 
 
 # ---------------------------------------------------------------------------
+# 工具调用记录（按框架推荐方式）
+# ---------------------------------------------------------------------------
+
+# 框架把工具调用分成六种结局，这里翻译成中文。
+# 前两种是「开始」，后四种是「结局」—— 结局里除 completed 外都属于异常路径，
+# 尤其 timed_out / cancelled 是「调了却没有结果」的元凶，必须能一眼看到。
+_FUNCTION_CALL_LABELS = {
+    FunctionCallEventKind.STARTED: "◆ 模型要求调用",
+    FunctionCallEventKind.IN_PROGRESS: "▶ 开始执行",
+    FunctionCallEventKind.COMPLETED: "◀ 执行完成",
+    FunctionCallEventKind.FAILED: "✖ 执行失败",
+    FunctionCallEventKind.TIMED_OUT: "⏱ 执行超时",
+    FunctionCallEventKind.CANCELLED: "⊘ 调用被取消",
+}
+
+
+def _render_payload(payload) -> str:
+    """把参数/结果渲染成完整字符串。**不截断**。
+
+    JSON 化而不是直接 str()：既保留嵌套结构，也避免 dict 的单引号写法
+    在日志里难以复制复用。``default=str`` 兜住不可序列化的值。
+    """
+    try:
+        return json.dumps(payload, ensure_ascii=False, default=str, indent=2)
+    except (TypeError, ValueError):
+        return repr(payload)
+
+
+def install_function_call_logging(
+    observer: FunctionCallObserver | None = None,
+) -> FunctionCallObserver:
+    """记录每一次工具调用：按框架推荐方式，用自带的 ``FunctionCallObserver``。
+
+    为什么不自己写（本项目踩过的坑，详见模块文档字符串）：
+        手写版只区分成功/失败，漏掉超时与被取消；还要自行处理广播帧重复；
+        耗时也得自己从帧里推断。框架都做好了。
+
+    ⚠️ 必须显式传 ``include_results=True`` —— 它的默认值是 ``False``
+       （只记参数、不记结果），排查问题时等于少了一半信息。
+
+    Args:
+        observer: 复用已有观察者；不传则新建一个。
+
+    Returns:
+        观察者实例 —— 必须加进 ``PipelineWorker(observers=[...])`` 才生效。
+    """
+    if observer is None:
+        observer = FunctionCallObserver(include_results=True)
+
+    @observer.event_handler("on_function_call_event")
+    async def _on_function_call_event(_observer, event):
+        label = _FUNCTION_CALL_LABELS.get(event.kind, event.kind.value)
+        lines = [
+            f"[TOOL] {label} {event.function_name}（id={event.tool_call_id}）"
+        ]
+
+        # 排队与执行两段时间，由框架写在事件里，无需自己记时钟
+        now = getattr(event, "timestamp", None)
+        if event.started_at and event.in_progress_at and event.in_progress_at >= event.started_at:
+            lines.append(
+                f"[TOOL]     排队等待 {(event.in_progress_at - event.started_at) * 1000:.0f}ms"
+            )
+        if now and event.in_progress_at and now >= event.in_progress_at:
+            lines.append(f"[TOOL]     执行耗时 {(now - event.in_progress_at) * 1000:.0f}ms")
+
+        if event.arguments is not None:
+            lines.append(f"[TOOL]     参数: {_render_payload(event.arguments)}")
+        if event.result is not None:
+            lines.append(f"[TOOL]     结果: {_render_payload(event.result)}")
+        if event.error is not None:
+            lines.append(f"[TOOL]     错误: {event.error}")
+        if event.blocking is not None:
+            lines.append(
+                "[TOOL]     是否阻塞对话: "
+                f"{'是，等它返回才继续' if event.blocking else '否，稍后异步回填'}"
+            )
+
+        text = "\n".join(lines)
+        # 异常结局用 warning 级：查「为什么没回答」时可以直接过滤出来
+        if event.kind in (
+            FunctionCallEventKind.FAILED,
+            FunctionCallEventKind.TIMED_OUT,
+            FunctionCallEventKind.CANCELLED,
+        ):
+            logger.warning(text)
+        else:
+            logger.info(text)
+
+    return observer
+
+
+# ---------------------------------------------------------------------------
 # 对话时间线观察者
 # ---------------------------------------------------------------------------
 class ConversationLogger(BaseObserver):
@@ -246,11 +346,6 @@ class ConversationLogger(BaseObserver):
         self._marks: dict[str, float] = {}
         self._reply: list[str] = []
         self._turns = 0
-        # 工具执行起始时刻，按 tool_call_id 记录，用于算单个工具的真实耗时
-        self._tool_t0: dict[str, float] = {}
-        # 广播帧去重用。有界，不会随会话无限增长（见 _is_duplicate_broadcast）
-        self._seen_broadcast: set[str] = set()
-        self._seen_order: deque[str] = deque(maxlen=512)
 
     async def on_push_frame(self, data) -> None:
         frame = data.frame
@@ -289,60 +384,8 @@ class ConversationLogger(BaseObserver):
                 logger.info("[TURN] TTS 开始出声")
                 self._report_turn()
 
-        # ---- 工具调用：完整记录 ----
-        # 监听框架的四个工具帧，因此任何工具、成功或失败、是否被打断，都必有记录。
-        # 内容一律原样输出，不截断 —— 截断过的日志在排查时等于没有。
-        # 这四个帧都是由 broadcast_frame 发出的，必须先过广播去重，
-        # 否则每一帧都会被记录两遍（原因见 _is_duplicate_broadcast）。
-        elif isinstance(frame, FunctionCallsStartedFrame):
-            if self._is_duplicate_broadcast(frame):
-                return
-            logger.info(f"[TOOL] ◆ 模型决定调用 {len(frame.function_calls)} 个工具")
-            for call in frame.function_calls:
-                logger.info(
-                    f"[TOOL] ◆   调用 {call.function_name}"
-                    f"（id={call.tool_call_id}）\n"
-                    f"[TOOL] ◆   参数: {self._render_payload(call.arguments)}"
-                )
-
-        elif isinstance(frame, FunctionCallInProgressFrame):
-            if self._is_duplicate_broadcast(frame):
-                return
-            self._tool_t0[frame.tool_call_id] = now
-            logger.info(
-                f"[TOOL] ▶ 开始执行 {frame.function_name}"
-                f"（id={frame.tool_call_id}）\n"
-                f"[TOOL] ▶   参数: {self._render_payload(frame.arguments)}\n"
-                f"[TOOL] ▶   用户打断时: "
-                f"{'取消本次调用' if frame.cancel_on_interruption else '不取消，执行到底'}"
-            )
-
-        elif isinstance(frame, FunctionCallResultFrame):
-            if self._is_duplicate_broadcast(frame):
-                return
-            cost = now - self._tool_t0.pop(frame.tool_call_id, now)
-            logger.info(
-                f"[TOOL] ◀ {frame.function_name} "
-                f"{'执行失败' if frame.error else '执行成功'}"
-                f"（耗时 {cost * 1000:.0f}ms，id={frame.tool_call_id}）\n"
-                f"[TOOL] ◀   参数: {self._render_payload(frame.arguments)}\n"
-                f"[TOOL] ◀   结果: {self._render_payload(frame.result)}\n"
-                # 只如实报告框架字段，不解释成「有没有触发下一轮生成」：
-                # 实测该字段与实际行为并不一致（值为 False 时下一轮照样发生），
-                # 把它翻译成结论会写出**误导性**日志 —— 那比不写更糟。
-                # 想知道后续有没有再生成一轮，看后面那条完整上下文日志即可。
-                f"[TOOL] ◀   框架字段 run_llm={frame.run_llm!r}"
-                + (f"\n[TOOL] ◀   错误: {frame.error}" if frame.error else "")
-            )
-
-        elif isinstance(frame, FunctionCallCancelFrame):
-            if self._is_duplicate_broadcast(frame):
-                return
-            self._tool_t0.pop(frame.tool_call_id, None)
-            logger.warning(
-                f"[TOOL] ✖ {frame.function_name} 被取消"
-                f"（id={frame.tool_call_id}）—— 通常是用户中途打断"
-            )
+        # 工具调用不在这里记录 —— 交给框架自带的 FunctionCallObserver
+        # （见 install_function_call_logging：它区分六种结局，并已处理广播重复）。
 
         elif isinstance(frame, BotStartedSpeakingFrame):
             logger.debug("[FRAME] 机器人开始说话")
@@ -368,53 +411,6 @@ class ConversationLogger(BaseObserver):
         if self._turn_t0 is None or name in self._marks:
             return
         self._marks[name] = now
-
-    def _is_duplicate_broadcast(self, frame) -> bool:
-        """广播帧的第二次投递返回 True，调用方据此跳过。
-
-        为什么需要（这是框架行为，不是本项目的 bug）：
-            pipecat 的 ``broadcast_frame`` 会为上行、下行**各创建一个 Frame 实例**
-            （见 ``processors/frame_processor.py``），两个实例有各自独立的 ``id``，
-            再用 ``broadcast_sibling_id`` 互相指向。
-            而观察者的去重是按 ``frame.id`` 判定的
-            （``pipeline/worker_observer.py``: ``data.first_push = frame.id not in ...``），
-            两个实例都会被评为「首次推送」，于是观察者被通知两次 ——
-            日志里每条广播帧就出现两遍。
-
-        框架提供 ``broadcast_sibling_id`` 正是为了这种合并：
-        首次见到时把**两个 id 都记下**，第二个实例到来时即命中。
-
-        有界实现：只保留最近 512 个 id。上行/下行两个实例是紧挨着投递的，
-        不需要长期记忆，因此不会像早期版本那样随会话无限增长。
-        """
-        sibling = getattr(frame, "broadcast_sibling_id", None)
-        if sibling is None:
-            return False  # 非广播帧，不参与合并
-
-        if frame.id in self._seen_broadcast:
-            return True
-
-        for fid in (frame.id, sibling):
-            if fid in self._seen_broadcast:
-                continue
-            if len(self._seen_order) == self._seen_order.maxlen:
-                # append 会自动挤掉最旧的一个，同步从集合里移除，避免集合无限增长
-                self._seen_broadcast.discard(self._seen_order[0])
-            self._seen_broadcast.add(fid)
-            self._seen_order.append(fid)
-        return False
-
-    @staticmethod
-    def _render_payload(payload) -> str:
-        """把工具参数/结果渲染成完整字符串。**不截断**。
-
-        JSON 化而不是直接 str()：既保留嵌套结构，也避免 dict 的
-        单引号写法在日志里难以复制复用。``default=str`` 兜住不可序列化的值。
-        """
-        try:
-            return json.dumps(payload, ensure_ascii=False, default=str, indent=2)
-        except (TypeError, ValueError):
-            return repr(payload)
 
     @staticmethod
     def _render_context(frame) -> str:

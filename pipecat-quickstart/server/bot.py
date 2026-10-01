@@ -51,6 +51,7 @@ from pipeline_logging import (
     ConversationLogger,
     install_client_logging,
     install_error_reporting,
+    install_function_call_logging,
     log_boot_banner,
     resolve_log_paths,
     setup_logging,
@@ -332,7 +333,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         # ConversationLogger：对话时间线 + 每轮分段延迟
         # MetricsLogObserver：各服务 TTFB / TTFAT / TTFA
         # ErrorObserver：在错误源头捕获，写 [ERROR] 日志并推送给前端
-        observers=[ConversationLogger(), MetricsLogObserver(), error_observer],
+        observers=[
+            ConversationLogger(),
+            MetricsLogObserver(),
+            error_observer,
+            # 工具调用按框架推荐方式记录（自带的 FunctionCallObserver）
+            install_function_call_logging(),
+        ],
     )
     install_error_reporting(worker, error_observer)
 

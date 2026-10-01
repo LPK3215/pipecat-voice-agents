@@ -227,7 +227,120 @@ server/
 > 真实路径要过 Opus 编解码和多次重采样，比直接喂 WAV 更难认。
 > 曾出现「离线满分、真实链路仍错」的情况，**最终结论必须以真实链路为准**。
 
-## 7. 实测数据（可直接用于汇报）
+## 7. 可观测性：日志规范（**框架自带的，不要自己写**）
+
+> 这一节是踩过坑之后补的。核心教训一句话：
+> **动手写日志组件之前，先把 `pipecat/observers/` 目录翻一遍。**
+
+### 7.1 框架自带的可观测组件
+
+| 组件 | 作用 |
+|---|---|
+| **`FunctionCallObserver`** | **工具调用的完整生命周期** —— 六个时刻，见 7.2 |
+| `ErrorObserver` | 错误分类（错误类别 / 该处理器是否还可用），可据此推送前端 |
+| `LLMLogObserver` | LLM 进出的帧流水（DEBUG 级） |
+| `MetricsLogObserver` | 各服务的 TTFB / TTFA 等指标 |
+| `TranscriptionLogObserver` | 转写文本 |
+| `DebugLogObserver` | 通用帧流水（DEBUG） |
+| `SpeakingObserver` / `TurnTrackingObserver` / `UserBotLatencyObserver` / `StartupTimingObserver` / `ServiceMetricsObserver` | 说话状态、轮次跟踪、端到端延迟、启动耗时、服务指标 |
+
+**规范 1：先查 `observers/`，再动手写。**
+本项目早期在 `ConversationLogger` 里手写了一套「监听四个工具帧」的逻辑，
+而框架早就提供了 `FunctionCallObserver` —— 白写一遍，还写漏了。
+
+> 本仓库保留的 `ConversationLogger` 并非重复造轮子：它负责的是
+> **对话时间线 + 每轮分段延迟**（INFO 级、面向「一次运行就能看懂发生了什么」），
+> 框架没有等价实现。工具调用那部分已交回框架。
+
+### 7.2 工具调用：一律用 `FunctionCallObserver`
+
+```python
+from pipecat.observers.function_call_observer import (
+    FunctionCallEventKind,
+    FunctionCallObserver,
+)
+
+# ⚠️ include_results 默认是 False（只记参数、不记结果），排查必须显式打开
+observer = FunctionCallObserver(include_results=True)
+
+@observer.event_handler("on_function_call_event")
+async def on_function_call_event(observer, event):
+    logger.info(f"{event.kind} {event.function_name} args={event.arguments}")
+
+# 然后加进 PipelineWorker(observers=[...])
+```
+
+它把一次调用分成**六个时刻**，比「成功/失败」两分法完整得多：
+
+| 时刻 | 含义 |
+|---|---|
+| `STARTED` | 模型要求调用 |
+| `IN_PROGRESS` | 真正开始执行（**与上一个时刻可能相隔很久**：并发受限时要排队） |
+| `COMPLETED` | 正常返回 |
+| `FAILED` | 处理函数抛异常 |
+| `TIMED_OUT` | 超过截止时间 |
+| `CANCELLED` | 被取消（用户打断，或模型自己撤回） |
+
+**为什么必须区分这四种结局**：`TIMED_OUT` 和 `CANCELLED` 正是
+「工具明明调了、却永远没有结果」的元凶 —— 只看成功/失败会完全漏掉它们。
+
+另外，事件里直接带了 `started_at` / `in_progress_at`，**一次记录就能读出
+「排队等了多久 + 执行了多久」两段时间**，不必自己记时钟。
+
+### 7.3 三个必须知道的坑
+
+**坑 1：`include_results` 默认 `False`。**
+框架的选择有道理（结果可能是 provider 决定的任意内容），但对排查来说
+「只有参数没有结果」等于少了一半信息。**必须显式传 `True`。**
+
+**坑 2：广播帧会到两次，必须去重。**
+`FunctionCallsStartedFrame` / `FunctionCallInProgressFrame` /
+`FunctionCallResultFrame` / `FunctionCallCancelFrame` 都由 `broadcast_frame` 发出，
+而它会为**上行、下行各创建一个 Frame 实例**，两个实例 `frame.id` 不同、
+却都会被观察者判定为「首次推送」（去重是按 `frame.id` 做的）。
+
+框架的标准处理方式（见 `function_call_observer.py` 注释原文）：
+
+```python
+# These frames are broadcast, arriving as two frames, each pushed for the
+# first time once. Read the downstream one.
+if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.DOWNSTREAM:
+    return
+```
+
+**只读 DOWNSTREAM 那一个**即可，无需自己维护去重集合。
+（`LLMLogObserver` 里是反过来只读 UPSTREAM 的，两种都对，选一边就行。）
+
+**坑 3：不要替框架字段下结论。**
+`FunctionCallResultFrame.run_llm` 看起来像「是否触发下一轮生成」，
+但**实测与实际行为不一致**（值为 `False` 时下一轮照样发生）。
+把它翻译成结论会写出**误导性日志 —— 比不写更糟**。
+只报字段原值，让读日志的人自己判断。
+
+### 7.4 日志内容规范（与用哪个组件无关，都要守）
+
+1. **禁止截断。** 截断过的日志在排查时等于没有。
+   典型反面案例：只保留上下文最后 600 字符 —— 恰好切掉开头的**系统提示词
+   与注入的长期记忆**，而那正是查「模型为什么这么答」最需要的。
+2. **上下文要完整落盘**，并附上**本轮可用工具清单**。
+   模型选错工具时，第一件要确认的就是「它当时到底看得到哪些工具」。
+3. **工具的 `tool_calls` 字段要展开**，否则「模型调了什么」在上下文里是空的。
+4. **失败路径用 `warning` 级**，这样查「为什么没回答」时可以直接过滤出来。
+5. **一个事件只记一次。** 权威记录交给组件，工具内部不要重复回显
+   （本项目曾让同一件事在 INFO 里出现两遍，噪音很大）。
+
+### 7.5 自查清单（搭新项目时照做）
+
+- [ ] 翻一遍 `pipecat/observers/`，确认没有现成的可用
+- [ ] `FunctionCallObserver(include_results=True)` 已加入 `observers=[...]`
+- [ ] 工具调用有六种结局的记录，`TIMED_OUT` / `CANCELLED` 能看到
+- [ ] 上下文完整落盘（不截断），含可用工具清单
+- [ ] 广播帧没有重复记录
+- [ ] 工具实现里没有重复的回显日志
+
+---
+
+## 8. 实测数据（可直接用于汇报）
 
 **端到端延迟**（客户端侧计时，基准 = **用户说完的那一刻**）：
 
@@ -250,7 +363,7 @@ server/
 接工具后会多一轮 LLM 推理 + 工具本身耗时，**基础设施这 2s 不会膨胀**，大致到 3s。
 （人类对话节奏是 0.5–1s，所以 2s 属「能用但不算跟手」。）
 
-## 8. 踩过的坑（按价值排序）
+## 9. 踩过的坑（按价值排序）
 
 1. **开场白用了 `developer` 角色 → 每轮 400 静默失败。**
    魔搭接口不认该角色，而浏览器界面**没有任何提示**，看着像「连上了但没反应」。
@@ -279,7 +392,7 @@ server/
 
 8. **venv 由 uv 管理时没有 pip**，用 `uv pip install`。
 
-## 9. 常见改动对照表
+## 10. 常见改动对照表
 
 | 我想…… | 改哪里 |
 |---|---|
@@ -290,7 +403,7 @@ server/
 | 让回答更短 | `SYSTEM_INSTRUCTION` |
 | **加业务能力** | `server/tools.py` ← 第二阶段的入口 |
 
-## 10. 下一步
+## 11. 下一步
 
 - **第二阶段（写自己的业务）**：在 `tools.py` 里加 function calling 工具。
   加一个工具的流程：写 `async def handler(params: FunctionCallParams)` → 定义
