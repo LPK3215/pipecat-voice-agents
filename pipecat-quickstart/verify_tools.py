@@ -33,6 +33,7 @@ load_dotenv(BASE / "server" / ".env", override=True)
 
 from loguru import logger  # noqa: E402
 from pipecat.frames.frames import (  # noqa: E402
+    ErrorFrame,
     Frame,
     FunctionCallResultFrame,
     LLMContextFrame,
@@ -41,6 +42,7 @@ from pipecat.frames.frames import (  # noqa: E402
     LLMTextFrame,
     StartFrame,
 )
+from pipecat.observers.error_observer import ErrorObserver  # noqa: E402
 from pipecat.pipeline.pipeline import Pipeline  # noqa: E402
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker  # noqa: E402
 from pipecat.processors.aggregators.llm_context import LLMContext  # noqa: E402
@@ -96,6 +98,7 @@ class Sink(FrameProcessor):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.text: list[str] = []
+        self.errors: list[str] = []
         self.done = asyncio.Event()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -105,6 +108,11 @@ class Sink(FrameProcessor):
 
         if isinstance(frame, LLMTextFrame):
             self.text.append(frame.text)
+        elif isinstance(frame, ErrorFrame):
+            # 必须捕获：否则「调用失败」会被误报成「模型自行作答」。
+            # 曾因此把一个 429（余额不足）读成「模型没调工具」——
+            # 结论完全错，而且看起来毫无异常。
+            self.errors.append(str(getattr(frame, "error", frame)))
         elif isinstance(frame, LLMFullResponseEndFrame):
             # 工具调用那一轮没有文本，只有拿到最终文本才算完整走完
             if self.text:
@@ -191,9 +199,23 @@ async def main() -> int:
             assistant_agg,
         ]
     pipeline = Pipeline(stages)
+
+    # 错误必须走 ErrorObserver 收集，不能指望 sink 收到 ErrorFrame：
+    # LLM 报错产生的 ErrorFrame 由 worker 层处理（日志里表现为
+    # 「PipelineWorker#0: Something went wrong」），不会一路传到管线末端，
+    # 因此 Sink 里那个分支通常抓不到。曾因此把 429（余额不足）
+    # 读成「模型没调工具、自行作答」—— 结论完全错，且看不出异常。
+    err_observer = ErrorObserver()
+    errors: list[str] = []
+
+    @err_observer.event_handler("on_error")
+    async def _on_error(_observer, event):
+        errors.append(f"{event.category.value} | {event.message}")
+
     worker = PipelineWorker(
         pipeline,
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
+        observers=[err_observer],
     )
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
@@ -215,6 +237,7 @@ async def main() -> int:
     print("结果")
     print("=" * 74)
     answer = "".join(sink.text).strip()
+    all_errors = errors + sink.errors
     if args.dump_context:
         print("-" * 74)
         print("  上下文中的消息（用于排查「模型说了但没变成文本帧」）:")
@@ -224,13 +247,26 @@ async def main() -> int:
             print(f"    [{role}] {str(content)[:200]!r}")
     if tool_calls:
         print(f"  ✅ 工具被调用: {', '.join(tool_calls)}")
+    elif all_errors:
+        # 有错误时必须单独报「失败」，不能混进「模型自己答的」里 ——
+        # 两者的排查方向完全相反：前者查配置/额度/网络，后者查提示词与模型。
+        print(f"  ❌ 本轮调用失败（{len(all_errors)} 个错误），结果无效")
+    elif not answer:
+        print("  ❌ 既没调用工具，也没有回答 —— 结果无效")
     else:
         print("  ⚠️  本轮模型没有调用工具（自行作答）")
+
     print("-" * 74)
     print(f"  最终回答: {answer!r}")
-    print("=" * 74)
 
-    if not tool_calls:
+    if all_errors:
+        print("-" * 74)
+        print("  错误详情:")
+        for err in all_errors:
+            print(f"    {err}")
+
+    print("=" * 74)
+    if not tool_calls and not all_errors:
         print("  说明：模型是否调用工具是**非确定性**的，同一问题可能这次调、下次不调。")
         print("        要验证链路通不通，以「是否收到最终回答」为准。")
 

@@ -120,5 +120,16 @@ def build_llm_extra() -> dict:
     pipecat 会把 Settings.extra 里的键**直接作为 kwargs** 传给
     ``client.chat.completions.create(...)``，因此非标准参数必须用 OpenAI SDK
     的 ``extra_body`` 包一层，否则会被当成未知关键字参数报错。
+
+    ``LLM_TEMPERATURE``：采样温度。**不设置时用服务端默认值**（通常很高），
+    在工具选择这种「要么调、要么不调」的离散决策上会表现为**每次结果不同**：
+    实测同一问题、同一套工具，重复 5 次只有 2 次调用了正确的工具。
+    需要稳定复现时把它设为 0（代价是回答更死板、多样性下降）。
     """
-    return {"extra_body": {"enable_thinking": False}}
+    body: dict = {"enable_thinking": False}
+
+    temperature = os.getenv("LLM_TEMPERATURE")
+    if temperature not in (None, ""):
+        body["temperature"] = float(temperature)
+
+    return {"extra_body": body}
