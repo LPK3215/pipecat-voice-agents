@@ -28,11 +28,13 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from loguru import logger
 import memory
+import sample_tools
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import (
@@ -287,12 +289,35 @@ DATA_SCHEMA = FunctionSchema(
 
 
 def build_tools() -> ToolsSchema:
-    """返回本次会话开放给 LLM 的工具集合。"""
-    return ToolsSchema(
-        standard_tools=[
-            CURRENT_TIME_SCHEMA,
-            REMEMBER_SCHEMA,
-            RECALL_SCHEMA,
-            DATA_SCHEMA,
-        ]
-    )
+    """返回本次会话开放给 LLM 的工具集合。
+
+    工具多了以后，**描述之间的边界**比工具本身更重要：
+    描述重叠（比如「时间」与「日程」都含糊）会让模型选错。
+    新增工具时先想清楚「什么情况下**不该**调它」，把边界写进描述。
+
+    可用 ``TOOLS_EXCLUDE``（逗号分隔工具名）临时摘掉若干工具。
+    这不是调试玩具：实测工具数量变多后，模型对部分工具会「忘记调用」
+    甚至**谎报已执行**，按需分组加载是真实需要的降级手段。
+    """
+    schemas = [
+        # 系统能力
+        CURRENT_TIME_SCHEMA,
+        # 记忆
+        REMEMBER_SCHEMA,
+        RECALL_SCHEMA,
+        # 结构化数据
+        DATA_SCHEMA,
+        # 一批类型各异的示例工具（见 sample_tools.py）
+        *sample_tools.SAMPLE_SCHEMAS,
+    ]
+
+    excluded = {s.strip() for s in os.getenv("TOOLS_EXCLUDE", "").split(",") if s.strip()}
+    if excluded:
+        kept = [s for s in schemas if s.name not in excluded]
+        logger.info(
+            f"[TOOLS] 已按 TOOLS_EXCLUDE 摘掉 {len(schemas) - len(kept)} 个工具，"
+            f"剩余 {len(kept)} 个：{[s.name for s in kept]}"
+        )
+        schemas = kept
+
+    return ToolsSchema(standard_tools=schemas)
