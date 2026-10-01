@@ -49,6 +49,7 @@
 | `23-test_llm-final.log` | 最终 LLM 时延（nex，460 ms） |
 | `24-e2e-final-x3.log` | **最终端到端（nex，934 ms）** |
 | `25-bot-server-final.log` | 最终 bot.py 启动日志 |
+| `26-model-thinking-bench.log` | **思考模式 A/B 基准**（3 模型 × 3 配置 × 3 次，见 2.6） |
 
 > ⚠️ `14` / `18-e2e-*-x3.log` 的模型标注**有误**：那两批实际跑的都是
 > `Qwen3.8-Flash-Next`，原因见第 6 节「踩坑记录」。
@@ -123,6 +124,28 @@ OpenAILLMService#0 TTFAT: 1.883s (1.204s thinking)
 
 **教训：只看「首 token」选模型会严重误判。** Qwen 看似首 token 0.68 s，
 用户实际要等 1.88 s；nex 的 TTFB 与 TTFAT 几乎相同（0.005 s thinking），所以才是真快。
+
+### 2.6 思考模式 A/B 基准（`26-model-thinking-bench.log`）
+
+3 个模型 × 3 种配置 × 各 3 次，直连 API 首 token（ms）：
+
+| 模型 | baseline（不干预） | `enable_thinking=False` | `thinking=disabled` |
+|---|---|---|---|
+| `nex-agi/Nex-N2.5-mini` | 830 `[1514, 490, 487]` | **710** `[535, 1113, 480]` | 1160 `[675, 2279, 526]` |
+| `Qwen/Qwen3.8-Flash-Next` | 2869 `[1301, 5284, 2023]` | **787** `[652, 818, 890]` | 808 `[813, 795, 816]` |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | 2447 `[2572, 2478, 2293]` | **817** `[892, 757, 800]` | 950 `[1231, 778, 842]` |
+
+读法：
+
+1. **Qwen / DeepSeek：关思考是决定性优化。** 平均快 **3.6× / 3.0×**，
+   更重要的是**抖动收窄**——Qwen 从 `[1301, 5284, 2023]`（差 4 倍）变成
+   `[652, 818, 890]`（差 1.4 倍）。语音场景不需要长篇推理，这一步必做。
+2. **nex：三种配置的差异落在噪声内，干预它没收益。**
+   830 / 710 / 1160 的排序不稳定，而该模型本来 thinking 就只有 0.005 s
+   （见 2.3），没什么可关的。`thinking=disabled` 那组反而最慢，
+   说明是共享免费端点的排队抖动，而非配置生效。
+3. **结论**：默认模型选 nex 是因为它**天然不思考**，不是因为关思考关得好；
+   而 Qwen / DeepSeek 只有在关掉思考后才具备可比性。
 
 ### 2.5 该口径偏乐观
 
@@ -209,10 +232,16 @@ thinking 仅 0.005 s（无思考等待）。
 
 1. **换 STT**：瓶颈已转移到 Whisper(base) 的 0.66–0.78 s。
    可试 `--whisper small`（更准但更慢）或直接上云端 Deepgram（更快）。
-2. **浏览器端跑通**：`bot.py` 仍缺 Deepgram + Cartesia 两个 Key。
-   备选：把 `bot.py` 的 STT/TTS 换成本地 Whisper + Piper，即可零成本体验。
-3. **修 D2**：启动时校验三个 Key，缺失直接 fail-fast。
+2. ~~**浏览器端跑通**：缺 Deepgram + Cartesia 两个 Key~~
+   **✅ 已在 `pipecat-quickstart/` 完成**：改用本地 Whisper + Piper，
+   只需 1 个 `MODELSCOPE_API_KEY`，浏览器实测通过。
+3. **修 D2**：缺 Key 时 fail-fast。
+   **✅ 已在 `pipecat-quickstart/server/bot.py` 完成**（缺 key 直接终止并给出填 key 步骤，
+   保留 `ALLOW_MISSING_KEY=1` 作为纯前端调试的逃生舱）。
 4. **注意免费额度**：连续 10 次压测即触发 429；多轮对话需限速。
+
+> 本目录的 `bot.py`（云端 Deepgram/Cartesia 版）已停止演进，
+> 持续维护的实现是 `../pipecat-quickstart/`。本目录保留价值：4 个基准脚本 + 本报告。
 
 ---
 

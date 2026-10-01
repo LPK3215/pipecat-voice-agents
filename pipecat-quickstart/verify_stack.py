@@ -38,7 +38,6 @@ from pipecat.frames.frames import (  # noqa: E402
     InputAudioRawFrame,
     LLMTextFrame,
     StartFrame,
-    TextFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
     UserStoppedSpeakingFrame,
@@ -61,9 +60,21 @@ from pipecat.transcriptions.language import Language  # noqa: E402
 from pipecat.workers.runner import WorkerRunner  # noqa: E402
 
 from pipeline_logging import ConversationLogger, setup_logging  # noqa: E402
+from settings import (  # noqa: E402
+    DEFAULT_MODEL,
+    DEFAULT_PIPER_VOICE,
+    DEFAULT_SYSTEM_INSTRUCTION,
+    DEFAULT_VAD_STOP_SECS,
+    DEFAULT_WHISPER_MODEL,
+    MODELSCOPE_BASE_URL_DEFAULT,
+    VERIFY_USER_TEXT,
+    WHISPER_INITIAL_PROMPT,
+    WHISPER_TTFS_P99,
+    build_llm_extra,
+    thinking_disabled,
+)
 
 TARGET_SR = 16000
-USER_TEXT = "你好，请用一句话介绍一下你自己。"
 
 
 class Timeline:
@@ -81,7 +92,10 @@ class Timeline:
 
 
 class TimelineObserver(BaseObserver):
+    """与 ConversationLogger 同理：只观察首跳，否则 reply / transcripts 会按跳数累加。"""
+
     def __init__(self, tl: Timeline, **kwargs):
+        kwargs.setdefault("observe_every_push", False)
         super().__init__(**kwargs)
         self._tl = tl
 
@@ -96,7 +110,11 @@ class TimelineObserver(BaseObserver):
             self._tl.transcript = f.text
             self._tl.transcripts.append(f.text)
             self._tl.mark("stt_text")
-        elif isinstance(f, (LLMTextFrame, TextFrame)):
+        elif isinstance(f, LLMTextFrame):
+            # 只认 LLMTextFrame，不要把 TextFrame 也算进来：
+            # TTSService 默认 push_text_frames=True，会把刚合成的文本再往下推一次
+            # TextFrame。若两类都收，同一句回复会被累加 2~3 遍，
+            # 报告里的「模型回复」看起来像模型在复读。
             if f.text and f.text.strip():
                 self._tl.mark("llm_first")
             self._tl.reply += getattr(f, "text", "") or ""
@@ -190,7 +208,7 @@ def make_wav(voice: str, path: Path) -> None:
     logger.info(f"[VERIFY] 合成中文测试音频 -> {path}")
     pv = PiperVoice.load(str(onnx))
     with wave.open(str(path), "wb") as wf:
-        pv.synthesize_wav(USER_TEXT, wf)
+        pv.synthesize_wav(VERIFY_USER_TEXT, wf)
 
 
 async def main() -> int:
@@ -201,15 +219,18 @@ async def main() -> int:
     ap.add_argument("--stop-secs", type=float, default=None, help="覆盖 VAD_STOP_SECS")
     args = ap.parse_args()
 
-    # 与 server/bot.py 完全相同的配置来源，保证「测的就是跑的」
-    model = args.model or os.getenv("MODELSCOPE_MODEL") or "nex-agi/Nex-N2.5-mini"
-    base_url = os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
-    whisper_model = args.whisper or os.getenv("WHISPER_MODEL") or "base"
-    voice = args.voice or os.getenv("PIPER_VOICE_ID") or "zh_CN-huayan-medium"
+    # 默认值一律取自 settings.py —— 与 server/bot.py 同源，保证「测的就是跑的」
+    model = args.model or os.getenv("MODELSCOPE_MODEL") or DEFAULT_MODEL
+    base_url = os.getenv("MODELSCOPE_BASE_URL", MODELSCOPE_BASE_URL_DEFAULT)
+    whisper_model = args.whisper or os.getenv("WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
+    voice = args.voice or os.getenv("PIPER_VOICE_ID") or DEFAULT_PIPER_VOICE
     stop_secs = (
-        args.stop_secs if args.stop_secs is not None else float(os.getenv("VAD_STOP_SECS", "0.6"))
+        args.stop_secs
+        if args.stop_secs is not None
+        else float(os.getenv("VAD_STOP_SECS", str(DEFAULT_VAD_STOP_SECS)))
     )
-    disable_thinking = os.getenv("LLM_DISABLE_THINKING", "1") not in ("0", "false", "False")
+    disable_thinking = thinking_disabled()
+    system_instruction = os.getenv("SYSTEM_INSTRUCTION") or DEFAULT_SYSTEM_INSTRUCTION
 
     if not os.getenv("MODELSCOPE_API_KEY"):
         print("缺少 MODELSCOPE_API_KEY（应写在 server/.env）")
@@ -234,21 +255,19 @@ async def main() -> int:
 
     source = WavSource(pcm, tl)
     stt = WhisperSTTService(
-        settings=WhisperSTTService.Settings(model=whisper_model, language=Language.ZH),
-        ttfs_p99_latency=1.0,
+        settings=WhisperSTTService.Settings(
+            model=whisper_model,
+            language=Language.ZH,
+            initial_prompt=WHISPER_INITIAL_PROMPT,
+        ),
+        ttfs_p99_latency=WHISPER_TTFS_P99,
     )
     tts = PiperTTSService(settings=PiperTTSService.Settings(voice=voice))
 
-    llm_kwargs: dict = {
-        "model": model,
-        "system_instruction": (
-            "你是一个语音助手，正在进行语音对话。你的回答会被朗读出来，"
-            "所以请口语化、简短，不要使用 emoji、markdown、列表等无法朗读的格式。"
-        ),
-    }
+    llm_kwargs: dict = {"model": model, "system_instruction": system_instruction}
     if disable_thinking:
         # 非标准参数必须用 extra_body 包一层（pipecat 会把 extra 的键直接当 kwargs 传）
-        llm_kwargs["extra"] = {"extra_body": {"enable_thinking": False}}
+        llm_kwargs["extra"] = build_llm_extra()
     llm = OpenAILLMService(
         api_key=os.getenv("MODELSCOPE_API_KEY"),
         base_url=base_url,

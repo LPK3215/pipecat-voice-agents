@@ -12,6 +12,8 @@
     [CLIENT] 前端事件（连接、断开、RTVI 消息、客户端信息）
     [TURN]   一轮对话的时间线与分段延迟
     [FRAME]  关键帧流水（DEBUG 级，用于排查）
+    [ERROR]  管线故障（处理器 / 错误类别 / 是否还能用），并同步推送给前端
+    [TOOL]   工具调用（见 tools.py）
 
 注意：pipecat 的 runner 启动时会调用 ``logger.remove()`` 清空所有日志出口
 （pipecat/runner/run.py），因此**会话建立后需要再次调用 ``setup_logging``**。
@@ -37,10 +39,11 @@ from pipecat.frames.frames import (
     VADUserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver
+from pipecat.observers.error_observer import ErrorObserver
+from pipecat.utils.errors import ErrorCategory
 
 SERVER_DIR = Path(__file__).resolve().parent
 LOG_DIR = SERVER_DIR / "logs"
-_MAX_SEEN = 20000  # 去重表上限，防止长会话内存无限增长
 
 CONSOLE_FORMAT = (
     "<green>{time:HH:mm:ss.SSS}</green> | <level>{level: <7}</level> | <level>{message}</level>"
@@ -74,8 +77,12 @@ def setup_logging(
     logger.remove()
     logger.add(sys.stderr, level="INFO", format=CONSOLE_FORMAT, colorize=True)
     # 全量落盘：DEBUG 级，包含 pipecat 内部所有细节
+    # 本次运行的历史文件用追加（同一进程内 setup_logging 会被调用多次，
+    # 用 "w" 会把本次开头的 [BOOT] 记录冲掉）。
     logger.add(run_log, level="DEBUG", format=FILE_FORMAT, encoding="utf-8")
-    logger.add(latest, level="DEBUG", format=FILE_FORMAT, encoding="utf-8")
+    # latest 必须截断：loguru 默认以追加方式打开文件，
+    # 否则它会无限累积历次运行的内容，「永远指向最近一次运行」就是假的。
+    logger.add(latest, level="DEBUG", format=FILE_FORMAT, encoding="utf-8", mode="w")
     return run_log, latest
 
 
@@ -135,17 +142,93 @@ def _describe(client) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 故障上报：日志 + 前端可见
+# ---------------------------------------------------------------------------
+# 把 pipecat 的错误类别翻译成人（和前端用户）能懂的话。
+# 分类与具体供应商无关，因此换 LLM / STT 厂商这张表依然成立。
+ERROR_HINTS: dict[ErrorCategory, str] = {
+    ErrorCategory.AUTHENTICATION: "密钥无效或缺失",
+    ErrorCategory.AUTHORIZATION: "密钥无权访问该资源",
+    ErrorCategory.INVALID_REQUEST: "请求被服务端拒绝（参数或消息格式不被接受）",
+    ErrorCategory.RATE_LIMIT: "调用过于频繁，被限流",
+    ErrorCategory.QUOTA: "账号额度已用尽",
+    ErrorCategory.CONNECTIVITY: "无法连接服务，请检查网络",
+    ErrorCategory.SERVER: "服务端内部错误",
+    ErrorCategory.APPLICATION: "应用代码异常",
+    ErrorCategory.UNKNOWN: "发生未知错误",
+}
+
+
+def install_error_reporting(worker, observer: ErrorObserver | None = None) -> ErrorObserver:
+    """把管线故障同时写进日志，并推给前端显示。
+
+    为什么需要它：
+        服务失败时浏览器端原本毫无提示 —— 连接是成功的、握手也是成功的，
+        只有用户开口之后才发现没人应答，极容易被误判成网络故障。
+        pipecat 的 ``ErrorObserver`` 在**错误发生的源头**就抓到它
+        （而不是等它传到管线末端，中途可能已被别的处理器消化掉），
+        并给出 processor / 错误类别 / 异常类型 / 该处理器是否还能用。
+
+    前端无需改动：``rtvi.send_error()`` 发出的是 ``error`` 消息，
+    已在官方 Prebuilt 前端的 RTVI 消息表中。
+
+    Args:
+        worker: 管线 worker，用来取 ``worker.rtvi``。
+        observer: 复用已有观察者；不传则新建一个。
+
+    Returns:
+        ErrorObserver —— 必须把它加进 ``PipelineWorker(observers=[...])`` 才生效。
+    """
+    if observer is None:
+        observer = ErrorObserver()
+
+    # 同一个处理器的同一类错误只推一次：否则限流或断网会把前端刷屏
+    sent: set[tuple[str, str]] = set()
+
+    @observer.event_handler("on_error")
+    async def _on_error(_observer, event):
+        hint = ERROR_HINTS.get(event.category, ERROR_HINTS[ErrorCategory.UNKNOWN])
+        scope = "服务已不可用" if not event.processor_usable else "单次失败"
+        logger.error(
+            f"[ERROR] {event.processor} | {event.category.value} | {scope} | "
+            f"异常={event.exception_type or '-'} | {event.message}"
+        )
+
+        rtvi = getattr(worker, "rtvi", None)
+        if rtvi is None:
+            return
+        key = (event.processor, event.category.value)
+        if key in sent:
+            return
+        sent.add(key)
+        try:
+            await rtvi.send_error(f"{hint}（{event.processor}）")
+            logger.info(f"[ERROR] 已推送前端: {hint}（{event.processor}）")
+        except Exception as exc:  # noqa: BLE001 - 推不动前端不能影响主流程
+            logger.warning(f"[ERROR] 推送前端失败: {exc}")
+
+    return observer
+
+
+# ---------------------------------------------------------------------------
 # 对话时间线观察者
 # ---------------------------------------------------------------------------
 class ConversationLogger(BaseObserver):
     """把管线帧翻译成人能读的对话时间线，并统计每轮分段延迟。
 
-    关键：同一帧会在每一跳都被观察到，因此用 frame.id 去重，只记录首次。
+    去重交给框架：pipecat 的 ``BaseObserver`` 提供 ``observe_every_push=False``，
+    只在帧**首次**被推送时通知观察者。
+
+    早期版本是自建 ``frame.id`` 集合去重的，这里不再需要，原因是：
+      - 手写集合随会话无限增长，只能靠「超限后整体清空」兜底；
+        而清空会把仍在管线中的帧重新判定为未见过，导致同一帧重复打日志。
+      - 框架的去重按推送次数判定，没有这两个问题。
     """
 
     def __init__(self, **kwargs):
+        # 只在首跳观察：避免同一帧经过 N 个处理器就被记录 N 次
+        kwargs.setdefault("observe_every_push", False)
         super().__init__(**kwargs)
-        self._seen: set = set()
         self._turn_t0: float | None = None
         self._marks: dict[str, float] = {}
         self._reply: list[str] = []
@@ -153,14 +236,6 @@ class ConversationLogger(BaseObserver):
 
     async def on_push_frame(self, data) -> None:
         frame = data.frame
-        fid = getattr(frame, "id", None)
-        if fid is not None:
-            if fid in self._seen:
-                return
-            self._seen.add(fid)
-            if len(self._seen) > _MAX_SEEN:
-                self._seen.clear()
-
         now = time.perf_counter()
 
         if isinstance(frame, VADUserStartedSpeakingFrame):
