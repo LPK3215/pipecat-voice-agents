@@ -1,0 +1,45 @@
+2026-10-01 19:15:59.966 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.12.0 (Python 3.12.14 (main, Sep 29 2026, 15:01:18) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-10-01 19:16:00.265 | INFO     | __main__:main:206 - 日志文件: /workspace/pipecat-modelscope/logs/06-local-chain-sink-all.log
+2026-10-01 19:16:00.581 | INFO     | __main__:main:219 - STT=Whisper(base) | LLM=Stub(替代) | TTS=Piper(zh_CN-huayan-medium)
+2026-10-01 19:16:00.583 | INFO     | __main__:run_local_chain:143 - 测试音频: /workspace/pipecat-modelscope/test-input-zh.wav | 16kHz 单声道 | 时长 3.12s
+/workspace/pipecat-modelscope/scripts/test_local_chain.py:146: DeprecationWarning: The `model` parameter is deprecated. Use `settings=WhisperSTTService.Settings(model=...)` instead. If both are provided, `settings` takes precedence.
+  stt = WhisperSTTService(model=WhisperModel(whisper), device="cpu", compute_type="int8")
+[1;31m2026-10-01 19:16:01.349860470 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 3079, index: 0, mask: {0, 1, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:16:01.349883459 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 3080, index: 1, mask: {2, 3, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:16:01.349937388 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 3081, index: 2, mask: {4, 5, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:16:01.349973417 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 3082, index: 3, mask: {6, 7, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+2026-10-01 19:16:02.295 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - WhisperSTTService#0: ttfs_p99_latency not set, using default 1.0s
+2026-10-01 19:16:06.608 | WARNING  | pipecat.workers.runner:_print_dangling_tasks:581 - runner-c48c067a dangling tasks detected: ['WavSource#0::_feed']
+2026-10-01 19:16:06.608 | INFO     | __main__:run_local_chain:186 - 收尾耗时(cancel -> 管线结束): 0.00s
+========================================================================
+Part 1  ModelScope 鉴权探测（使用假 Key）
+========================================================================
+  [OK]   /models 免鉴权可达 | 模型 35 个 | 耗时 225 ms
+  [OK]   chat/completions 假 Key -> 401 鉴权失败（符合预期）
+         status=401 | Error code: 401 - {'error': {'message': 'Authentication failed, please make sure that a valid ModelS
+  => 结论：网络与协议正常，唯一缺口是缺少有效 MODELSCOPE_API_KEY
+
+========================================================================
+Part 2  本地链路 WAV -> Whisper -> Stub -> Piper -> Sink(all)
+========================================================================
+
+========================================================================
+端到端延迟实测结果
+========================================================================
+  语音结束 -> VAD 判定说完                -504 ms
+  语音结束 -> STT 最终文本                 -20 ms
+  语音结束 -> LLM 首 token              -18 ms
+  语音结束 -> TTS 首帧音频                 302 ms
+  语音结束 -> 机器人开口                    302 ms
+------------------------------------------------------------------------
+  识别文本 : ' Please use a sentence to introduce yourself. '
+  模型回复 : '你好，我是一个语音助手，很高兴为你服务。你好，我是一个语音助手，很高兴为你服务。你好，我是一个语音助手，很高兴为你服务。'
+========================================================================
+链路判定:
+  Whisper 转写出文本      : 是
+  Stub 回复到达 TTS       : 是
+  TTS 产出音频字节        : 180732
+  收尾耗时                : 0.00 s
+========================================================================
+STATS {'auth_ok': True, 'transcript': True, 'tts_ok': True, 'teardown': 0.004065972054377198, 'audio_bytes': 180732}
+exit=0

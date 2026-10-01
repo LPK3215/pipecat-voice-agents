@@ -1,0 +1,68 @@
+2026-10-01 19:39:25.535 | INFO     | __main__:main:329 - 日志文件: /workspace/pipecat-modelscope/e2e-20261001-193925.log
+2026-10-01 19:39:25.535 | INFO     | __main__:main:346 - STT=Whisper(base) | LLM=ModelScope | TTS=Piper(zh_CN-huayan-medium)
+2026-10-01 19:39:25.536 | INFO     | __main__:run_benchmark:231 - 测试音频: /workspace/pipecat-modelscope/test-input-zh.wav | 16kHz 单声道 | 时长 3.12s
+2026-10-01 19:39:25.536 | DEBUG    | pipecat.services.whisper.stt:_load:347 - Loading Whisper model...
+2026-10-01 19:39:26.253 | DEBUG    | pipecat.services.whisper.stt:_load:350 - Loaded Whisper model
+2026-10-01 19:39:26.254 | DEBUG    | pipecat.services.piper.tts:__init__:126 - Loading Piper 'zh_CN-huayan-medium' model from /root/.cache/pipecat/piper/zh_CN-huayan-medium.onnx
+2026-10-01 19:39:27.160 | DEBUG    | pipecat.services.piper.tts:__init__:130 - Loaded Piper 'zh_CN-huayan-medium' model
+2026-10-01 19:39:27.173 | DEBUG    | pipecat.services.openai.base_llm:__init__:264 - OpenAILLMService#0: Using system instruction: 你是一个语音助手，回答要口语化、简短。
+2026-10-01 19:39:27.173 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-10-01 19:39:27.210 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-10-01 19:39:27.213 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-10-01 19:39:27.243 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Pipeline#0::Source -> WavSource#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking WavSource#0 -> WhisperSTTService#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking WhisperSTTService#0 -> LLMUserAggregator#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMUserAggregator#0 -> OpenAILLMService#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking OpenAILLMService#0 -> PiperTTSService#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking PiperTTSService#0 -> LLMAssistantAggregator#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMAssistantAggregator#0 -> Sink#0
+2026-10-01 19:39:27.244 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Sink#0 -> Pipeline#0::Sink
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-c8f62146': added worker 'PipelineWorker#0'
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-c8f62146': started running
+2026-10-01 19:39:27.245 | DEBUG    | pipecat.workers.runner:_start_worker:463 - WorkerRunner 'runner-c8f62146': starting worker 'PipelineWorker#0'
+2026-10-01 19:39:27.246 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-10-01 19:39:27.246 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1195 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-10-01 19:39:27.247 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - WhisperSTTService#0: ttfs_p99_latency not set, using default 1.0s
+2026-10-01 19:39:27.247 | DEBUG    | pipecat.services.llm_service:_compose_system_instruction:693 - OpenAILLMService#0: System instruction composed: 你是一个语音助手，回答要口语化、简短。
+2026-10-01 19:39:27.248 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-10-01 19:39:27.248 | DEBUG    | pipecat.workers.runner:_send_registry:515 - WorkerRunner 'runner-c8f62146': broadcasting registry: ['PipelineWorker#0']
+2026-10-01 19:39:27.248 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-10-01 19:39:27.248 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1208 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-10-01 19:39:28.272 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1346 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-10-01 19:39:28.273 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1018 - LLMUserAggregator#0: broadcasting interruption
+2026-10-01 19:39:30.752 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - WhisperSTTService#0 usage audio seconds: 3.620
+2026-10-01 19:39:31.271 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - WhisperSTTService#0 processing time: 0.519s
+2026-10-01 19:39:31.272 | DEBUG    | pipecat.services.whisper.stt:run_stt:452 - Transcription: [你好請用一句話介紹一下,你自己。 ]
+2026-10-01 19:39:31.272 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - WhisperSTTService#0 TTFB: 0.720s
+2026-10-01 19:39:31.272 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-10-01 19:39:31.275 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1393 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-10-01 19:39:31.275 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1441 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-10-01 19:39:31.276 | DEBUG    | pipecat.services.openai.base_llm:get_chat_completions:336 - OpenAILLMService#0: Generating chat from context [{'role': 'user', 'content': '你好請用一句話介紹一下,你自己。'}]
+2026-10-01 19:39:32.272 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - OpenAILLMService#0 TTFB: 0.996s
+2026-10-01 19:39:33.988 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfat_metrics:269 - OpenAILLMService#0 TTFAT: 2.712s (1.716s thinking)
+2026-10-01 19:39:33.990 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_text_aggregation_metrics:387 - PiperTTSService#0 text aggregation time: 4.553794860839844e-05
+2026-10-01 19:39:33.990 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1419 - PiperTTSService#0: Generating TTS [你好！]
+2026-10-01 19:39:33.990 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - PiperTTSService#0 usage characters: 3
+2026-10-01 19:39:34.021 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - PiperTTSService#0 TTFB: 0.031s
+2026-10-01 19:39:34.023 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - PiperTTSService#0 TTFA: 0.085s (0.054s leading silence)
+2026-10-01 19:39:34.023 | DEBUG    | pipecat.workers.runner:cancel:360 - WorkerRunner 'runner-c8f62146': cancelling (reason=None)
+2026-10-01 19:39:34.023 | DEBUG    | pipecat.services.piper.tts:run_tts:191 - PiperTTSService#0: Finished TTS [你好！]
+2026-10-01 19:39:34.023 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - PiperTTSService#0 processing time: 0.033s
+2026-10-01 19:39:34.024 | DEBUG    | pipecat.pipeline.worker:_handle_worker_cancel:1349 - Worker 'PipelineWorker#0': received cancel
+2026-10-01 19:39:34.024 | DEBUG    | pipecat.pipeline.worker:_cancel:1128 - Cancelling pipeline worker PipelineWorker#0
+2026-10-01 19:39:34.024 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1228 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: runner exiting) to reach the end of the pipeline...
+2026-10-01 19:39:34.025 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_llm_usage_metrics:337 - OpenAILLMService#0 prompt tokens: 0, completion tokens: 0
+2026-10-01 19:39:34.026 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - OpenAILLMService#0 processing time: 2.750s
+2026-10-01 19:39:34.026 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_text_aggregation_metrics:387 - PiperTTSService#0 text aggregation time: 0.0027599334716796875
+2026-10-01 19:39:34.026 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1419 - PiperTTSService#0: Generating TTS [我是你的语音助手]
+2026-10-01 19:39:34.026 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - PiperTTSService#0 usage characters: 8
+2026-10-01 19:39:34.027 | DEBUG    | pipecat.services.piper.tts:run_tts:191 - PiperTTSService#0: Finished TTS [我是你的语音助手]
+2026-10-01 19:39:34.027 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:1219 - PipelineWorker#0: CancelFrame#0(reason: runner exiting) reached the end of the pipeline.
+2026-10-01 19:39:34.027 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-10-01 19:39:34.028 | DEBUG    | pipecat.pipeline.worker:run:878 - Pipeline worker PipelineWorker#0 is finishing...
+2026-10-01 19:39:34.028 | DEBUG    | pipecat.pipeline.worker:run:882 - Pipeline worker PipelineWorker#0 has finished
+2026-10-01 19:39:34.028 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-c8f62146': finished running

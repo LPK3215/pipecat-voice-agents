@@ -1,0 +1,47 @@
+2026-10-01 19:37:40.786 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.12.0 (Python 3.12.14 (main, Sep 29 2026, 15:01:18) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-10-01 19:37:41.331 | INFO     | __main__:main:313 - 日志文件: /workspace/pipecat-modelscope/e2e-20261001-193741.log
+2026-10-01 19:37:41.331 | INFO     | __main__:main:326 - STT=Whisper(base) | LLM=ModelScope | TTS=Piper(zh_CN-huayan-medium)
+2026-10-01 19:37:41.332 | INFO     | __main__:run_benchmark:225 - 测试音频: /workspace/pipecat-modelscope/test-input-zh.wav | 16kHz 单声道 | 时长 3.12s
+/workspace/pipecat-modelscope/test_e2e.py:228: DeprecationWarning: The `model` parameter is deprecated. Use `settings=WhisperSTTService.Settings(model=...)` instead. If both are provided, `settings` takes precedence.
+  stt = WhisperSTTService(model=WhisperModel(args.whisper), device="cpu", compute_type="int8")
+[1;31m2026-10-01 19:37:42.035053950 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 6465, index: 0, mask: {0, 1, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:37:42.035061260 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 6466, index: 1, mask: {2, 3, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:37:42.035095379 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 6467, index: 2, mask: {4, 5, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:37:42.035127808 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 6468, index: 3, mask: {6, 7, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+2026-10-01 19:37:42.936 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - WhisperSTTService#0: ttfs_p99_latency not set, using default 1.0s
+2026-10-01 19:38:10.316 | WARNING  | pipecat.pipeline.worker:wait_for_cancel:1221 - PipelineWorker#0: timeout waiting for CancelFrame#0(reason: runner exiting) to reach the end of the pipeline (being blocked somewhere?).
+Traceback (most recent call last):
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/workers/runner.py", line 299, in run
+    await self._cancel_spawned_workers()
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/workers/runner.py", line 411, in _cancel_spawned_workers
+    await asyncio.gather(
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/pipecat-modelscope/test_e2e.py", line 332, in <module>
+    main()
+  File "/workspace/pipecat-modelscope/test_e2e.py", line 327, in main
+    tl = asyncio.run(run_benchmark(args))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 195, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/workspace/pipecat-modelscope/test_e2e.py", line 265, in run_benchmark
+    await asyncio.wait_for(run_task, timeout=10)
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py", line 519, in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/asyncio/timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError

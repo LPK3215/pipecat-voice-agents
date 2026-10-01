@@ -1,0 +1,105 @@
+2026-10-01 19:14:00.737 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.12.0 (Python 3.12.14 (main, Sep 29 2026, 15:01:18) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-10-01 19:14:01.761 | DEBUG    | pipecat.transports.smallwebrtc.connection:<module>:67 - [SCTP] USERDATA_MAX_LENGTH set to 1100
+INFO:     Started server process [2304]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://localhost:7860 (Press CTRL+C to quit)
+
+╭─────────────────────────────────────────────────────╮
+│ ᓚᘏᗢ PIPECAT DEVELOPMENT RUNNER                      │
+│                                                     │
+│ Learn about running bots locally and in production: │
+│ https://docs.pipecat.ai/pipecat/deployment/overview │
+╰─────────────────────────────────────────────────────╯
+
+🚀 Bot ready!
+   → Open: http://localhost:7860
+   → Enabled transports: webrtc, telephony, websocket
+   → Disabled transports: daily (install pipecat-ai[daily]), livekit (install pipecat-ai[livekit]), moq (install pipecat-ai[moq])
+   → Allowed origins: all (no restriction)
+
+Looking for dist directory at: /workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat_ai_prebuilt/client/dist
+INFO:     ::1:38288 - "GET /client/ HTTP/1.1" 200 OK
+INFO:     ::1:38304 - "GET / HTTP/1.1" 307 Temporary Redirect
+2026-10-01 19:14:15.718 | DEBUG    | pipecat.transports.smallwebrtc.connection:_initialize:312 - Initializing new peer connection
+2026-10-01 19:14:15.733 | DEBUG    | pipecat.transports.smallwebrtc.connection:_create_answer:405 - Creating answer
+2026-10-01 19:14:15.733 | DEBUG    | pipecat.transports.smallwebrtc.connection:_create_answer:408 - Setting the answer after the local description is created
+2026-10-01 19:14:15.733 | DEBUG    | pipecat.transports.smallwebrtc.request_handler:handle_web_request:218 - webrtc_connection_callback executed successfully for peer: SmallWebRTCConnection#0-451f8de209074f699a7bdab9b55b936d
+INFO:     ::1:38320 - "POST /api/offer HTTP/1.1" 200 OK
+2026-10-01 19:14:15.733 | DEBUG    | pipecat.runner.utils:_get_transport_params:482 - Using transport params for webrtc
+2026-10-01 19:14:15.739 | INFO     | __main__:run_bot:59 - Starting bot
+2026-10-01 19:14:15.739 | INFO     | __main__:run_bot:60 - LLM = ModelScope | https://api-inference.modelscope.cn/v1 | Qwen/Qwen3.8-Flash-Next
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1215, in __call__
+    await super().__call__(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/telemetry/_asgi.py", line 151, in __call__
+    await self.app(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 91, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 149, in simple_response
+    await self.app(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 2786, in app
+    await route.handle(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 1310, in handle
+    await super().handle(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 165, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 152, in app
+    await response(scope, receive, send)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/responses.py", line 172, in __call__
+    await self.background()
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/fastapi/background.py", line 67, in __call__
+    await task()
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/starlette/background.py", line 21, in __call__
+    await self.func(*self.args, **self.kwargs)
+  File "/workspace/pipecat-modelscope/bot.py", line 157, in bot
+    await run_bot(transport, runner_args)
+  File "/workspace/pipecat-modelscope/bot.py", line 63, in run_bot
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/services/deepgram/stt.py", line 463, in __init__
+    self._client = AsyncDeepgramClient(api_key=api_key)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/deepgram/client.py", line 208, in __init__
+    super().__init__(*args, **kwargs)
+  File "/workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/deepgram/base_client.py", line 267, in __init__
+    raise ApiError(
+deepgram.core.api_error.ApiError: headers: None, status_code: None, body: The client must be instantiated be either passing in api_key or setting DEEPGRAM_API_KEY
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2026-10-01 19:14:31.133 | DEBUG    | pipecat.transports.smallwebrtc.connection:send_app_message:774 - Data channel not ready, queuing message
+2026-10-01 19:14:31.133 | DEBUG    | pipecat.transports.smallwebrtc.connection:on_iceconnectionstatechange:377 - ICE connection state is closed, connection is closed
+2026-10-01 19:14:31.133 | DEBUG    | pipecat.transports.smallwebrtc.connection:_handle_new_connection_state:659 - Connection state changed to: closed
+2026-10-01 19:14:31.133 | INFO     | pipecat.transports.smallwebrtc.request_handler:handle_disconnected:212 - Discarding peer connection for pc_id: SmallWebRTCConnection#0-451f8de209074f699a7bdab9b55b936d
+2026-10-01 19:14:31.133 | DEBUG    | pipecat.transports.smallwebrtc.transport:on_closed:257 - Client connection closed.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [2304]

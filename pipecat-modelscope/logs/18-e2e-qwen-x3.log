@@ -1,0 +1,12 @@
+########## Qwen/Qwen3.8-Flash-Next 第 1 次 ##########
+  语音结束 -> LLM 首 token             2311 ms
+  语音结束 -> TTS 首帧音频                2659 ms
+  语音结束 -> 机器人开口                   2659 ms
+########## Qwen/Qwen3.8-Flash-Next 第 2 次 ##########
+  语音结束 -> LLM 首 token             3883 ms
+  语音结束 -> TTS 首帧音频                4287 ms
+  语音结束 -> 机器人开口                   4287 ms
+########## Qwen/Qwen3.8-Flash-Next 第 3 次 ##########
+  语音结束 -> LLM 首 token             5139 ms
+  语音结束 -> TTS 首帧音频                5514 ms
+  语音结束 -> 机器人开口                   5514 ms

@@ -1,0 +1,23 @@
+[project]
+name = "pipecat-modelscope"
+version = "0.1.0"
+description = "Pipecat 最小语音 Agent（LLM 使用魔搭 ModelScope）"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[cartesia,deepgram,openai,runner,silero,webrtc]>=1.12.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pipecat-ai[piper,whisper]>=1.12.0",
+    "ruff>=0.12.0,<1",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["I", "UP"]

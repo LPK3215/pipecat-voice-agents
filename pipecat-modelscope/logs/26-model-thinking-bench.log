@@ -1,0 +1,12 @@
+#### nex-agi/Nex-N2.5-mini
+  baseline（不干预）              平均     830 ms   各次 [1514, 490, 487]
+  enable_thinking=False      平均     710 ms   各次 [535, 1113, 480]
+  thinking=disabled          平均    1160 ms   各次 [675, 2279, 526]
+#### Qwen/Qwen3.8-Flash-Next
+  baseline（不干预）              平均    2869 ms   各次 [1301, 5284, 2023]
+  enable_thinking=False      平均     787 ms   各次 [652, 818, 890]
+  thinking=disabled          平均     808 ms   各次 [813, 795, 816]
+#### deepseek-ai/DeepSeek-V4.1-Flash
+  baseline（不干预）              平均    2447 ms   各次 [2572, 2478, 2293]
+  enable_thinking=False      平均     817 ms   各次 [892, 757, 800]
+  thinking=disabled          平均     950 ms   各次 [1231, 778, 842]

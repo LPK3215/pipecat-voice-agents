@@ -1,0 +1,69 @@
+2026-10-01 19:13:13.436 | INFO     | pipecat:<module>:54 - ᓚᘏᗢ Pipecat 1.12.0 (Python 3.12.14 (main, Sep 29 2026, 15:01:18) [Clang 22.1.3 ]) ᓚᘏᗢ
+2026-10-01 19:13:14.554 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-10-01 19:13:14.593 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-10-01 19:13:14.595 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-10-01 19:13:14.625 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Pipeline#0::Source -> input
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking input -> DeepgramSTTService#0
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking DeepgramSTTService#0 -> LLMUserAggregator#0
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMUserAggregator#0 -> OpenAILLMService#0
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking OpenAILLMService#0 -> CartesiaTTSService#0
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking CartesiaTTSService#0 -> output
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking output -> LLMAssistantAggregator#0
+2026-10-01 19:13:14.626 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMAssistantAggregator#0 -> Pipeline#0::Sink
+/workspace/pipecat-modelscope/scripts/check_wiring.py:165: DeprecationWarning: The `model` parameter is deprecated. Use `settings=WhisperSTTService.Settings(model=...)` instead. If both are provided, `settings` takes precedence.
+  stt = WhisperSTTService(model=WhisperModel("base"), device="cpu", compute_type="int8")
+2026-10-01 19:13:14.627 | DEBUG    | pipecat.services.whisper.stt:_load:347 - Loading Whisper model...
+2026-10-01 19:13:40.465 | DEBUG    | pipecat.services.whisper.stt:_load:350 - Loaded Whisper model
+2026-10-01 19:13:40.465 | DEBUG    | pipecat.services.piper.tts:__init__:123 - Downloading Piper 'zh_CN-huayan-medium' model
+2026-10-01 19:13:51.689 | DEBUG    | pipecat.services.piper.tts:__init__:126 - Loading Piper 'zh_CN-huayan-medium' model from /root/.cache/pipecat/piper/zh_CN-huayan-medium.onnx
+[1;31m2026-10-01 19:13:51.689826980 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 2165, index: 0, mask: {0, 1, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:13:51.689837350 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 2166, index: 1, mask: {2, 3, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:13:51.689857559 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 2167, index: 2, mask: {4, 5, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+[1;31m2026-10-01 19:13:51.689880429 [E:onnxruntime:Default, env.cc:227 ThreadMain] pthread_setaffinity_np failed for thread: 2168, index: 3, mask: {6, 7, }, error code: 22 error msg: Invalid argument. Specify the number of threads explicitly so the affinity is not set.[m
+2026-10-01 19:13:52.506 | DEBUG    | pipecat.services.piper.tts:__init__:130 - Loaded Piper 'zh_CN-huayan-medium' model
+2026-10-01 19:13:52.507 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-10-01 19:13:52.541 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-10-01 19:13:52.542 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-10-01 19:13:52.570 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+==============================================================================
+Pipecat 项目连通性 / 装配自检
+==============================================================================
+[PASS] import pipecat.pipeline.pipeline
+[PASS] import pipecat.pipeline.worker
+[PASS] import pipecat.processors.aggregators.llm_context
+[PASS] import pipecat.processors.aggregators.llm_response_universal
+[PASS] import pipecat.audio.vad.silero
+[PASS] import pipecat.observers.loggers.metrics_log_observer
+[PASS] import pipecat.observers.user_bot_latency_observer
+[PASS] import pipecat.runner.run
+[PASS] import pipecat.runner.utils
+[PASS] import pipecat.services.deepgram.stt
+[PASS] import pipecat.services.cartesia.tts
+[PASS] import pipecat.services.openai.llm
+[PASS] import pipecat.transports.base_transport
+[PASS] import pipecat.workers.runner
+[PASS] import pipecat.services.whisper.stt
+[PASS] import pipecat.services.piper.tts
+[PASS] import piper
+[PASS] import piper.download_voices
+[PASS] import faster_whisper
+[PASS] import soxr
+[PASS] import numpy
+[PASS] import dotenv
+[PASS] import loguru
+[PASS] import openai
+[PASS] bot.py: 服务实例化 + Pipeline 装配
+       PipelineSource -> Endpoint -> DeepgramSTTService -> LLMUserAggregator -> OpenAILLMService -> CartesiaTTSService -> Endpoint -> LLMAssistantAggregator -> PipelineSink
+[FAIL] bot.py: 无 Key 时服务构造行为
+       ApiError: headers: None, status_code: None, body: The client must be instantiated be either passing in api_key or setting DEEPGRAM_API_KEY || deepgram.core.api_error.ApiError: headers: None, status_code: None, body: The client must be instantiated be either passing in api_key or setting DEEP
+[PASS] test_e2e.py: 本地 STT/TTS 服务实例化
+       WhisperSTT(Model) + PiperTTS + OpenAILLM 均可实例化
+[PASS] 环境信息
+       python=3.12.14 pipecat=1.12.0 platform=Linux/x86_64
+[PASS] API Key 盘点
+       MODELSCOPE_API_KEY(LLM)=MISSING | DEEPGRAM_API_KEY(STT)=MISSING | CARTESIA_API_KEY(TTS)=MISSING || .env 文件: 不存在
+------------------------------------------------------------------------------
+结果: 28/29 通过
+==============================================================================
+exit=1

@@ -1,0 +1,2 @@
+2026-10-01 16:33:42.973 | INFO     | __main__:main:313 - 日志文件: /workspace/pipecat-modelscope/e2e-20261001-163342.log
+2026-10-01 16:33:42.973 | INFO     | __main__:ensure_voice:185 - 下载 Piper 语音模型: zh_CN-huayan-medium

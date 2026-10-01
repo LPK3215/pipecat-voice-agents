@@ -1,0 +1,60 @@
+2026-10-01 19:41:41.531 | INFO     | __main__:main:207 - 日志文件: /workspace/pipecat-modelscope/logs/19-local-chain-recheck.log
+2026-10-01 19:41:41.864 | INFO     | __main__:main:220 - STT=Whisper(base) | LLM=Stub(替代) | TTS=Piper(zh_CN-huayan-medium)
+2026-10-01 19:41:41.866 | INFO     | __main__:run_local_chain:144 - 测试音频: /workspace/pipecat-modelscope/test-input-zh.wav | 16kHz 单声道 | 时长 3.12s
+2026-10-01 19:41:41.866 | DEBUG    | pipecat.services.whisper.stt:_load:347 - Loading Whisper model...
+2026-10-01 19:41:42.586 | DEBUG    | pipecat.services.whisper.stt:_load:350 - Loaded Whisper model
+2026-10-01 19:41:42.586 | DEBUG    | pipecat.services.piper.tts:__init__:126 - Loading Piper 'zh_CN-huayan-medium' model from /root/.cache/pipecat/piper/zh_CN-huayan-medium.onnx
+2026-10-01 19:41:43.378 | DEBUG    | pipecat.services.piper.tts:__init__:130 - Loaded Piper 'zh_CN-huayan-medium' model
+2026-10-01 19:41:43.379 | DEBUG    | pipecat.audio.vad.silero:__init__:147 - Loading Silero VAD model...
+2026-10-01 19:41:43.414 | DEBUG    | pipecat.audio.vad.silero:__init__:169 - Loaded Silero VAD
+2026-10-01 19:41:43.417 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from /workspace/pipecat-modelscope/.venv/lib/python3.12/site-packages/pipecat/audio/turn/smart_turn/data/smart-turn-v3.2-cpu.onnx...
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Pipeline#0::Source -> WavSource#0
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking WavSource#0 -> WhisperSTTService#0
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking WhisperSTTService#0 -> LLMUserAggregator#0
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMUserAggregator#0 -> StubLLM
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking StubLLM -> PiperTTSService#0
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking PiperTTSService#0 -> LLMAssistantAggregator#0
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking LLMAssistantAggregator#0 -> SinkAll
+2026-10-01 19:41:43.445 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking SinkAll -> Pipeline#0::Sink
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking RTVIProcessor#0 -> Pipeline#0
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.processors.frame_processor:link:678 - Linking Pipeline#0 -> PipelineWorker#0::Sink
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.workers.runner:add_workers:233 - WorkerRunner 'runner-d33d32dd': added worker 'PipelineWorker#0'
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.workers.runner:run:277 - WorkerRunner 'runner-d33d32dd': started running
+2026-10-01 19:41:43.446 | DEBUG    | pipecat.workers.runner:_start_worker:463 - WorkerRunner 'runner-d33d32dd': starting worker 'PipelineWorker#0'
+2026-10-01 19:41:43.447 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:157 - Setting VAD params to: confidence=0.7 start_secs=0.2 stop_secs=0.2 min_volume=0.6
+2026-10-01 19:41:43.447 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1195 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-10-01 19:41:43.447 | WARNING  | pipecat.services.stt_service:service_metadata_frame:575 - WhisperSTTService#0: ttfs_p99_latency not set, using default 1.0s
+2026-10-01 19:41:43.448 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-10-01 19:41:43.448 | DEBUG    | pipecat.workers.runner:_send_registry:515 - WorkerRunner 'runner-d33d32dd': broadcasting registry: ['PipelineWorker#0']
+2026-10-01 19:41:43.448 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1277 - Worker 'PipelineWorker#0': activated
+2026-10-01 19:41:43.448 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:1208 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-10-01 19:41:44.473 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_started:1346 - LLMUserAggregator#0: User started speaking (strategy: VADUserTurnStartStrategy#0)
+2026-10-01 19:41:44.473 | DEBUG    | pipecat.processors.frame_processor:broadcast_interruption:1018 - LLMUserAggregator#0: broadcasting interruption
+2026-10-01 19:41:46.955 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_stt_usage_metrics:352 - WhisperSTTService#0 usage audio seconds: 3.620
+2026-10-01 19:41:47.477 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - WhisperSTTService#0 processing time: 0.522s
+2026-10-01 19:41:47.477 | DEBUG    | pipecat.services.whisper.stt:run_stt:452 - Transcription: [ Please use a sentence to introduce yourself. ]
+2026-10-01 19:41:47.477 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - WhisperSTTService#0 TTFB: 0.723s
+2026-10-01 19:41:47.478 | DEBUG    | pipecat.audio.turn.smart_turn.base_smart_turn:analyze_end_of_turn:167 - End of Turn result: EndOfTurnState.COMPLETE
+2026-10-01 19:41:47.481 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_inference_triggered:1393 - LLMUserAggregator#0: User turn inference triggered (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-10-01 19:41:47.481 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_on_user_turn_stopped:1441 - LLMUserAggregator#0: User stopped speaking (strategy: TurnAnalyzerUserTurnStopStrategy#0)
+2026-10-01 19:41:47.685 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_text_aggregation_metrics:387 - PiperTTSService#0 text aggregation time: 0.2021329402923584
+2026-10-01 19:41:47.685 | DEBUG    | pipecat.services.tts_service:_push_tts_frames:1419 - PiperTTSService#0: Generating TTS [你好，我是一个语音助手，很高兴为你服务。]
+2026-10-01 19:41:47.685 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:370 - PiperTTSService#0 usage characters: 20
+2026-10-01 19:41:47.788 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:175 - PiperTTSService#0 TTFB: 0.103s
+2026-10-01 19:41:47.790 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:process_ttfa_metrics:228 - PiperTTSService#0 TTFA: 0.151s (0.048s leading silence)
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.workers.runner:cancel:360 - WorkerRunner 'runner-d33d32dd': cancelling (reason=None)
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.services.piper.tts:run_tts:191 - PiperTTSService#0: Finished TTS [你好，我是一个语音助手，很高兴为你服务。]
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:308 - PiperTTSService#0 processing time: 0.106s
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.services.tts_service:push_frame:1042 - PiperTTSService#0 cleaning up TTS context ad4bdb18-21cd-49f9-9b3b-7b5fe00eb09e
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.pipeline.worker:_handle_worker_cancel:1349 - Worker 'PipelineWorker#0': received cancel
+2026-10-01 19:41:47.791 | DEBUG    | pipecat.pipeline.worker:_cancel:1128 - Cancelling pipeline worker PipelineWorker#0
+2026-10-01 19:41:47.792 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:1228 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: runner exiting) to reach the end of the pipeline...
+2026-10-01 19:41:47.794 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:1219 - PipelineWorker#0: CancelFrame#0(reason: runner exiting) reached the end of the pipeline.
+2026-10-01 19:41:47.794 | DEBUG    | pipecat.utils.base_object:cleanup:176 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-10-01 19:41:47.795 | DEBUG    | pipecat.pipeline.worker:run:878 - Pipeline worker PipelineWorker#0 is finishing...
+2026-10-01 19:41:47.795 | DEBUG    | pipecat.pipeline.worker:run:882 - Pipeline worker PipelineWorker#0 has finished
+2026-10-01 19:41:47.795 | WARNING  | pipecat.workers.runner:_print_dangling_tasks:581 - runner-d33d32dd dangling tasks detected: ['WavSource#0::_feed']
+2026-10-01 19:41:47.795 | DEBUG    | pipecat.workers.runner:run:320 - WorkerRunner 'runner-d33d32dd': finished running
+2026-10-01 19:41:47.795 | INFO     | __main__:run_local_chain:187 - 收尾耗时(cancel -> 管线结束): 0.00s
