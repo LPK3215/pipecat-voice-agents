@@ -1,4 +1,10 @@
-# Pipecat 调研文档（实操版）
+# 📄 Pipecat 调研文档（实操版）
+
+> **这是什么**：对 Pipecat 这个**框架**的调研 —— 它能干什么、怎么组装、适合什么场景。
+> 上手前了解全貌时读它；判断「该不该用这个框架」也读它。
+>
+> **不是什么**：不是本项目的使用说明。要看具体实现，
+> 去 [`pipecat-quickstart/`](pipecat-quickstart/)；三个东西的区别见 [`README.md`](README.md)。
 
 > 调研对象：https://github.com/pipecat-ai/pipecat
 > 官网：https://www.pipecat.ai/ ｜ 文档：https://docs.pipecat.ai/
