@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""真实链路 ASR 对比：同一批句子，分别用不同 STT 引擎跑完整的 WebRTC 链路。
+"""Live-path ASR comparison: run the same sentences through different STT engines over a
+full WebRTC path.
 
-为什么需要它（离线基准 asr_bench.py 不够）：
-    离线基准把 WAV **直接喂给模型**，跳过了真实链路里的 Opus 编解码、
-    WebRTC 抖动缓冲和多次重采样。实测发现离线满分的配置，在真实链路里
-    照样认错 —— 所以只有走完整链路测出来的字错率才是可信的。
+Why this is needed (the offline asr_bench.py is not enough):
+    The offline bench feeds the WAV **directly to the model**, skipping the real path's
+    Opus codec, WebRTC jitter buffer, and repeated resampling. Measured: a configuration
+    that scores perfectly offline still mishears over the real path -- so only CER measured
+    over the full path is trustworthy.
 
-做法：
-    拉起一个 bot.py（用 STT_ENGINE 环境变量指定引擎），然后对每一句测试音频
-    跑一次 audio_probe.py（--no-spawn 复用同一个服务），收集识别文本与延迟。
+Approach:
+    Spawn one bot.py (engine chosen via the STT_ENGINE environment variable), then for each
+    test audio run audio_probe.py (--no-spawn reuses the same server) and collect the
+    transcript and latency.
 
-用法:
-    cd server && uv run ../live_asr_bench.py                      # 只测默认引擎
+NOTE: audio_probe.py's output is a contract -- the regexes below parse its stdout. If you
+change its printed labels, update them here too.
+
+Usage:
+    cd server && uv run ../live_asr_bench.py                      # only the default engine
     cd server && uv run ../live_asr_bench.py --engines sensevoice whisper
 """
 
@@ -61,10 +67,11 @@ def spawn_bot(engine: str, port: int) -> subprocess.Popen:
 
 
 def run_one(wav: Path, ref: str, port: int) -> dict:
-    """跑一句，从探针输出里解析出识别文本、字错率、ASR 延迟。
+    """Run one sentence and parse transcript, CER, and ASR latency from the probe output.
 
-    audio_probe 的服务地址取自 ``PROBE_PORT``，必须和 bot 实际监听的端口一致，
-    否则它会连到默认端口（那里没有服务），静默拿不到任何结果。
+    audio_probe's server address comes from ``PROBE_PORT`` and must match the port the bot
+    actually listens on, otherwise it connects to the default port (nothing there) and
+    silently gets no results.
     """
     proc = subprocess.run(
         [
@@ -85,14 +92,14 @@ def run_one(wav: Path, ref: str, port: int) -> dict:
         timeout=180,
     )
     out = proc.stdout
-    if "音频未发送完成" in out or proc.returncode != 0:
+    if "audio not fully sent" in out or proc.returncode != 0:
         tail = "\n".join(out.strip().splitlines()[-6:])
-        print(f"    [探针失败 rc={proc.returncode}] {tail}")
+        print(f"    [probe failed rc={proc.returncode}] {tail}")
         if proc.stderr.strip():
             print(f"    [stderr] {proc.stderr.strip().splitlines()[-1][:200]}")
-    m_cer = re.search(r"字错率\s*:\s*([\d.]+)%", out)
-    m_lat = re.search(r"收到识别文本\s+(\d+)\s*ms", out)
-    m_txt = re.search(r"识别文本\s*:\s*(.*)", out)
+    m_cer = re.search(r"CER\s*:\s*([\d.]+)%", out)
+    m_lat = re.search(r"user transcript\s+(\d+)\s*ms", out)
+    m_txt = re.search(r"transcript\s*:\s*(.*)", out)
     return {
         "text": m_txt.group(1).strip() if m_txt else "",
         "cer": float(m_cer.group(1)) / 100 if m_cer else None,
@@ -102,28 +109,28 @@ def run_one(wav: Path, ref: str, port: int) -> dict:
 
 def bench_engine(engine: str, wavs: list[Path], port: int) -> dict:
     print(f"\n{'=' * 74}")
-    print(f"引擎: {engine}")
+    print(f"engine: {engine}")
     print("=" * 74)
     proc = spawn_bot(engine, port)
     try:
         if not wait_up(f"http://127.0.0.1:{port}/"):
-            print("  bot.py 未就绪，跳过该引擎")
+            print("  bot.py not ready; skipping this engine")
             return {}
-        print("  服务已就绪，开始逐句测试…")
+        print("  server ready; testing sentence by sentence ...")
 
         rows = []
         for ref, wav in zip(SENTENCES, wavs):
             try:
                 r = run_one(wav, ref, port)
             except subprocess.TimeoutExpired:
-                print(f"  超时: {ref}")
+                print(f"  timeout: {ref}")
                 continue
             rows.append((ref, r))
             cer_s = "N/A" if r["cer"] is None else f"{r['cer'] * 100:.1f}%"
             lat_s = "N/A" if r["asr_ms"] is None else f"{r['asr_ms']}ms"
             flag = "OK " if r["cer"] == 0 else "ERR"
             print(f"  [{flag}] {ref}")
-            print(f"        识别={r['text']}  (CER {cer_s}, ASR {lat_s})")
+            print(f"        transcript={r['text']}  (CER {cer_s}, ASR {lat_s})")
 
         if not rows:
             return {}
@@ -146,17 +153,17 @@ def bench_engine(engine: str, wavs: list[Path], port: int) -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="真实链路 ASR 引擎对比")
+    ap = argparse.ArgumentParser(description="live-path ASR engine comparison")
     ap.add_argument("--engines", nargs="+", default=["sensevoice"])
     ap.add_argument("--voice", default="zh_CN-huayan-medium")
     args = ap.parse_args()
 
     print("=" * 74)
-    print("真实链路 ASR 对比（走完整 WebRTC，含 Opus 编解码与重采样）")
+    print("Live-path ASR comparison (full WebRTC, incl. Opus codec and resampling)")
     print("=" * 74)
-    print(f"  测试句数: {len(SENTENCES)}  引擎: {', '.join(args.engines)}")
+    print(f"  sentences: {len(SENTENCES)}  engines: {', '.join(args.engines)}")
     wavs = synthesize(args.voice)
-    print(f"  测试音频已就绪: {CACHE}")
+    print(f"  test audio ready: {CACHE}")
 
     results = []
     for i, engine in enumerate(args.engines):
@@ -165,13 +172,13 @@ def main() -> int:
             results.append(r)
 
     if not results:
-        print("\n没有引擎跑通。")
+        print("\nno engine completed.")
         return 1
 
     print(f"\n{'=' * 74}")
-    print("真实链路汇总")
+    print("live-path summary")
     print("=" * 74)
-    print(f"{'引擎':<16}{'字错率':>9}{'完全正确':>10}{'ASR 耗时':>11}")
+    print(f"{'engine':<16}{'CER':>9}{'exact':>10}{'ASR ms':>11}")
     print("-" * 74)
     for r in sorted(results, key=lambda x: x["avg_cer"] or 9):
         cer_s = "N/A" if r["avg_cer"] is None else f"{r['avg_cer'] * 100:.1f}%"

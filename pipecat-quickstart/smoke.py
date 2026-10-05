@@ -1,15 +1,16 @@
-"""无浏览器冒烟测试：验证「前端可访问 + WebRTC 握手 + 后端装配」三件事。
+"""Headless smoke test: verify "frontend reachable + WebRTC handshake + backend wiring".
 
-覆盖 README 里声称可用但从未在无头环境验证过的部分：
-    1. GET  /client/          官方 Prebuilt 前端是否真的能拿到（200 + 含 HTML）
-    2. POST /api/offer        WebRTC 握手是否成功（用小 WebRTC 客户端产生真实 offer）
-    3. 后端日志              是否出现装配错误（缺 key / 服务构造失败）
+Covers the parts README claims work but that were never verified in a headless environment:
+    1. GET  /client/          is the official prebuilt frontend really served (200 + HTML)
+    2. POST /api/offer        does the WebRTC handshake succeed (a small WebRTC client
+                              generates a real offer)
+    3. backend log            any wiring errors (missing key / service construction failure)
 
-用法：
-    cd server && uv run ../smoke.py                # 自动拉起 bot.py 再测
-    cd server && uv run ../smoke.py --no-spawn     # 只测已经跑起来的 bot.py
+Usage:
+    cd server && uv run ../smoke.py                # spawn bot.py, then test
+    cd server && uv run ../smoke.py --no-spawn     # test an already-running bot.py
 
-退出码 0 = 全部通过。
+Exit code 0 = everything passed.
 """
 
 import argparse
@@ -29,7 +30,7 @@ HOST = "127.0.0.1"
 PORT = int(os.getenv("SMOKE_PORT", "7860"))
 ROOT = f"http://{HOST}:{PORT}"
 
-OK, FAIL, WARN = "✅", "❌", "⚠️ "
+OK, FAIL, WARN = "[OK]", "[FAIL]", "[WARN]"
 
 
 def _http(path: str, timeout: float = 5.0):
@@ -44,13 +45,13 @@ def wait_up(timeout: float = 90.0) -> bool:
         try:
             _http("/", timeout=2.0)
             return True
-        except Exception:  # noqa: BLE001 - 轮询期间任何异常都视为未就绪
+        except Exception:  # noqa: BLE001 - during polling any exception means "not ready"
             time.sleep(0.5)
     return False
 
 
 def check_client_ui() -> bool:
-    """前端页面是否真的可访问。"""
+    """Is the frontend page actually reachable?"""
     try:
         status, body = _http("/client/")
     except urllib.error.HTTPError as e:
@@ -62,21 +63,21 @@ def check_client_ui() -> bool:
 
     html = body.decode("utf-8", "replace")
     ok = status == 200 and "<html" in html.lower()
-    print(f"  {'✅' if ok else FAIL} GET /client/ -> HTTP {status}, {len(body)} 字节")
+    print(f"  {OK if ok else FAIL} GET /client/ -> HTTP {status}, {len(body)} bytes")
     if not ok:
         return False
-    # 官方 Prebuilt 是打包产物，用 script/assets 引用判断是否完整
+    # The official prebuilt is a bundle; use script/assets references to judge completeness.
     has_assets = bool(re.search(r'<script[^>]+src=', html))
-    print(f"  {'✅' if has_assets else WARN} 前端资源引用完整: {has_assets}")
+    print(f"  {OK if has_assets else WARN} frontend asset references complete: {has_assets}")
     return has_assets
 
 
 def check_offer() -> tuple[bool, str]:
-    """用小 WebRTC 客户端发起真实握手，检验 /api/offer。"""
+    """Perform a real handshake with a small WebRTC client to exercise /api/offer."""
     try:
         from aiortc import RTCPeerConnection, RTCSessionDescription
     except ImportError:
-        print(f"  {WARN} 未安装 aiortc，跳过 WebRTC 握手检查")
+        print(f"  {WARN} aiortc not installed; skipping the WebRTC handshake check")
         return True, "skipped"
 
     import asyncio
@@ -107,22 +108,22 @@ def check_offer() -> tuple[bool, str]:
 
     status, body = asyncio.run(_offer())
     ok = status == 200
-    print(f"  {'✅' if ok else FAIL} POST /api/offer -> HTTP {status}")
+    print(f"  {OK if ok else FAIL} POST /api/offer -> HTTP {status}")
     if not ok:
-        print(f"     响应: {body[:400]}")
+        print(f"     response: {body[:400]}")
     return ok, body
 
 
 def scan_logs() -> list[str]:
-    """扫描本次 spawn 的运行日志，找出装配期的硬错误。"""
-    # 与 audio_probe 同理：bot-latest.log 是各次运行共用的固定名，
-    # 会残留上次运行内容；smoke-server.log 才是本次这一份。
+    """Scan this spawn's runtime log for hard wiring errors."""
+    # Same reasoning as audio_probe: bot-latest.log is a fixed name shared across runs and
+    # keeps the previous run's content; smoke-server.log is this run's log.
     log = SERVER / "logs" / "smoke-server.log"
     if not log.exists():
-        return [f"未找到日志 {log}"]
+        return [f"log not found: {log}"]
     text = log.read_text(encoding="utf-8", errors="replace")
     patterns = [
-        r"缺少\s*\w*API_KEY",
+        r"missing\s+\w*_API_KEY",
         r"can no longer do its job",
         r"Traceback \(most recent call last\)",
         r"ERROR\s+\|.*?(api[_ ]?key|API key|Unauthorized|401)",
@@ -139,16 +140,16 @@ def scan_logs() -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-spawn", action="store_true", help="不拉起 bot.py，只测已运行的实例")
+    ap.add_argument("--no-spawn", action="store_true", help="do not spawn bot.py; test a running instance")
     args = ap.parse_args()
 
     print("=" * 72)
-    print("无浏览器冒烟测试（前端可访问性 + WebRTC 握手 + 后端装配）")
+    print("Headless smoke test (frontend reachability + WebRTC handshake + backend wiring)")
     print("=" * 72)
 
     proc = None
     if not args.no_spawn:
-        print(f"[1/4] 拉起 bot.py（{HOST}:{PORT}）…")
+        print(f"[1/4] spawning bot.py ({HOST}:{PORT}) ...")
         log = SERVER / "logs" / "smoke-server.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "wb") as fh:
@@ -159,21 +160,21 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
             )
     else:
-        print("[1/4] 跳过拉起，使用已运行的实例")
+        print("[1/4] spawn skipped, using a running instance")
 
     try:
         if proc is not None and not wait_up():
-            print(f"  {FAIL} bot.py 在 90s 内未就绪")
+            print(f"  {FAIL} bot.py not ready within 90s")
             return 1
-        print(f"  {OK} 服务已就绪")
+        print(f"  {OK} server ready")
 
-        print("[2/4] 前端页面")
+        print("[2/4] frontend page")
         ui_ok = check_client_ui()
 
-        print("[3/4] WebRTC 握手")
+        print("[3/4] WebRTC handshake")
         offer_ok, _ = check_offer()
 
-        print("[4/4] 后端装配（扫描日志中的硬错误）")
+        print("[4/4] backend wiring (scan the log for hard errors)")
         hits = scan_logs()
         if hits:
             seen = set()
@@ -183,11 +184,11 @@ def main() -> int:
                 seen.add(h)
                 print(f"  {WARN} {h[:160]}")
         else:
-            print(f"  {OK} 未发现装配期硬错误")
+            print(f"  {OK} no hard wiring errors found")
 
         print("=" * 72)
         all_ok = ui_ok and offer_ok
-        print("结论:", f"{OK} 前端 + 后端握手均通过" if all_ok else f"{FAIL} 存在未通过项")
+        print("verdict:", f"{OK} frontend and backend handshake passed" if all_ok else f"{FAIL} some checks failed")
         print("=" * 72)
         return 0 if all_ok else 1
     finally:

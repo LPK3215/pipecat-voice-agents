@@ -1,17 +1,18 @@
-"""官方栈端到端自检（不需要浏览器、不需要麦克风、不需要云 STT/TTS key）。
+"""Official-stack end-to-end self-check (no browser, no microphone, no cloud STT/TTS key).
 
-它读取 server/.env 的**同一套配置**，把一段中文测试音频喂进管线：
-    测试音频 → Whisper(本地 STT) → ModelScope(LLM) → Piper(本地 TTS) → 统计
-用于在不打开浏览器的前提下，证明三个环节 + 整条编排都真的工作。
+It reads the **same configuration** from server/.env and feeds a Chinese test audio clip
+through the pipeline:
+    test audio -> local STT -> LLM -> local TTS -> stats
+proving that all three stages plus the orchestration really work without opening a browser.
 
-用法（在 server 目录下用它的虚拟环境运行）：
+Usage (run from the server dir with its virtualenv):
     cd server
-    uv run ../verify_stack.py                                  # 用 .env 里的配置
-    uv run ../verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # 临时换模型对比
-    uv run ../verify_stack.py --stop-secs 0.2                   # 复现"被切成两段"
+    uv run ../verify_stack.py                                  # use the .env config
+    uv run ../verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # temporarily try another model
+    uv run ../verify_stack.py --stop-secs 0.2                   # reproduce "split into two"
     uv run ../verify_stack.py --whisper small
 
-日志：server/logs/verify-<时间戳>.log
+Log: server/logs/verify-<timestamp>.log
 """
 
 import argparse
@@ -87,7 +88,8 @@ class Timeline:
 
 
 class TimelineObserver(BaseObserver):
-    """与 ConversationLogger 同理：只观察首跳，否则 reply / transcripts 会按跳数累加。"""
+    """Same as ConversationLogger: observe only the first push, otherwise reply/transcripts
+    accumulate once per hop."""
 
     def __init__(self, tl: Timeline, **kwargs):
         kwargs.setdefault("observe_every_push", False)
@@ -106,10 +108,10 @@ class TimelineObserver(BaseObserver):
             self._tl.transcripts.append(f.text)
             self._tl.mark("stt_text")
         elif isinstance(f, LLMTextFrame):
-            # 只认 LLMTextFrame，不要把 TextFrame 也算进来：
-            # TTSService 默认 push_text_frames=True，会把刚合成的文本再往下推一次
-            # TextFrame。若两类都收，同一句回复会被累加 2~3 遍，
-            # 报告里的「模型回复」看起来像模型在复读。
+            # Only LLMTextFrame, not TextFrame: TTSService defaults to push_text_frames=True
+            # and pushes the just-synthesized text downstream again as a TextFrame. Counting
+            # both would add the same reply 2-3 times and make it look like the model is
+            # repeating itself.
             if f.text and f.text.strip():
                 self._tl.mark("llm_first")
             self._tl.reply += getattr(f, "text", "") or ""
@@ -120,7 +122,7 @@ class TimelineObserver(BaseObserver):
 
 
 class WavSource(FrameProcessor):
-    """按实时速度把 PCM 推进管线，末尾补静音让 VAD 判定说完。"""
+    """Push PCM into the pipeline at real-time speed, then append silence so VAD detects end of speech."""
 
     def __init__(self, pcm: bytes, tl: Timeline, sr: int = TARGET_SR, chunk_ms: int = 20):
         super().__init__(name="WavSource")
@@ -157,7 +159,8 @@ class WavSource(FrameProcessor):
 
 
 class Sink(FrameProcessor):
-    """终点：只消费音频帧；其余帧（含 CancelFrame）必须放行，否则收尾会阻塞。"""
+    """Terminal: consumes audio frames only; all other frames (incl. CancelFrame) must pass
+    through, otherwise shutdown blocks."""
 
     def __init__(self) -> None:
         super().__init__(name="Sink")
@@ -197,10 +200,10 @@ def make_wav(voice: str, path: Path) -> None:
     cache = Path.home() / ".cache" / "pipecat" / "piper"
     onnx = cache / f"{voice}.onnx"
     if not onnx.exists():
-        logger.info(f"[VERIFY] 下载 Piper 音色: {voice}")
+        logger.info(f"[VERIFY] downloading Piper voice: {voice}")
         cache.mkdir(parents=True, exist_ok=True)
         download_voice(voice, cache)
-    logger.info(f"[VERIFY] 合成中文测试音频 -> {path}")
+    logger.info(f"[VERIFY] synthesizing Chinese test audio -> {path}")
     pv = PiperVoice.load(str(onnx))
     with wave.open(str(path), "wb") as wf:
         pv.synthesize_wav(VERIFY_USER_TEXT, wf)
@@ -208,43 +211,43 @@ def make_wav(voice: str, path: Path) -> None:
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=None, help="覆盖当前服务商的模型名")
-    ap.add_argument("--whisper", default=None, help="强制用 Whisper 引擎并覆盖模型名")
-    ap.add_argument("--stt-engine", default=None, help="覆盖 STT_ENGINE（sensevoice/whisper）")
-    ap.add_argument("--voice", default=None, help="覆盖 PIPER_VOICE_ID")
-    ap.add_argument("--stop-secs", type=float, default=None, help="覆盖 VAD_STOP_SECS")
+    ap.add_argument("--model", default=None, help="override the current provider's model name")
+    ap.add_argument("--whisper", default=None, help="force the Whisper engine and override the model name")
+    ap.add_argument("--stt-engine", default=None, help="override STT_ENGINE (sensevoice/whisper)")
+    ap.add_argument("--voice", default=None, help="override PIPER_VOICE_ID")
+    ap.add_argument("--stop-secs", type=float, default=None, help="override VAD_STOP_SECS")
     args = ap.parse_args()
 
-    # 默认值一律取自 settings.py —— 与 server/bot.py 同源，保证「测的就是跑的」
+    # Defaults all come from settings.py -- same source as server/bot.py, so "tested == running".
     llm_cfg = llm_config()
     model = args.model or llm_cfg["model"]
     base_url = llm_cfg["base_url"]
     voice = args.voice or os.getenv("PIPER_VOICE_ID") or DEFAULT_PIPER_VOICE
-    # --whisper 隐含「强制改用 whisper 引擎」；否则沿用 .env 里配置的引擎
+    # --whisper implies "force the whisper engine"; otherwise keep the .env engine.
     stt_engine_arg = args.stt_engine or ("whisper" if args.whisper else None)
     stop_secs = (
         args.stop_secs
         if args.stop_secs is not None
         else float(os.getenv("VAD_STOP_SECS", str(DEFAULT_VAD_STOP_SECS)))
     )
-    # 关思考的写法各服务商不同，交给 thinking_body（见 settings.LLM_PROVIDERS）
+    # How to disable thinking differs per provider; that is what thinking_body is for.
     disable_thinking = thinking_disabled()
     system_instruction = os.getenv("SYSTEM_INSTRUCTION") or DEFAULT_SYSTEM_INSTRUCTION
 
     if not llm_cfg["api_key"]:
-        print(f"缺少 {llm_cfg['api_key_env']}（应写在 server/.env）")
+        print(f"missing {llm_cfg['api_key_env']} (it belongs in server/.env)")
         return 1
 
-    # 与 bot.py 用同一套构造逻辑，因此这里测的就是 bot 真正跑的引擎
-    stt, stt_desc = build_stt(engine=stt_engine_arg, whisper_model=args.whisper)
-    tts, tts_desc = build_tts(piper_voice=args.voice)
+    # Same construction logic as bot.py, so this tests the engine the bot actually runs.
+    stt, stt_desc_actual = build_stt(engine=stt_engine_arg, whisper_model=args.whisper)
+    tts, tts_desc_actual = build_tts(piper_voice=args.voice)
 
     print("=" * 74)
-    print("官方栈端到端自检（与 server/bot.py 同配置）")
-    print(f"  STT = {stt_desc}")
+    print("Official-stack end-to-end self-check (same config as server/bot.py)")
+    print(f"  STT = {stt_desc_actual}")
     print(f"  LLM = {llm_cfg['provider']} | {model}")
-    print(f"          关闭思考={disable_thinking}")
-    print(f"  TTS = {tts_desc}")
+    print(f"          disable_thinking={disable_thinking}")
+    print(f"  TTS = {tts_desc_actual}")
     print(f"  VAD stop_secs = {stop_secs}")
     print("=" * 74)
 
@@ -254,12 +257,12 @@ async def main() -> int:
 
     tl = Timeline()
     pcm = load_pcm16k(wav)
-    logger.info(f"[VERIFY] 测试音频: {wav} | 时长 {len(pcm) / (TARGET_SR * 2):.2f}s")
+    logger.info(f"[VERIFY] test audio: {wav} | duration {len(pcm) / (TARGET_SR * 2):.2f}s")
 
     source = WavSource(pcm, tl)
 
     llm_kwargs: dict = {"model": model, "system_instruction": system_instruction}
-    # 非标准参数必须用 extra_body 包一层（pipecat 会把 extra 的键直接当 kwargs 传）
+    # Non-standard parameters must be wrapped in extra_body (pipecat passes extra keys as kwargs).
     extra = build_llm_extra(
         thinking_body=(llm_cfg["thinking_body"] if disable_thinking else None)
     )
@@ -293,34 +296,34 @@ async def main() -> int:
     try:
         await asyncio.wait_for(tl.done.wait(), timeout=120)
     except TimeoutError:
-        logger.error("[VERIFY] 超时 120s，未收到 TTS 音频")
+        logger.error("[VERIFY] timed out after 120s, no TTS audio received")
     finally:
         await runner.cancel()
         try:
             await asyncio.wait_for(run_task, timeout=30)
         except (TimeoutError, asyncio.CancelledError):
-            logger.warning("[VERIFY] 管线收尾超时，已强制结束")
+            logger.warning("[VERIFY] pipeline shutdown timed out; forcing exit")
 
     base = tl.audio_end
     print()
     print("=" * 74)
-    print("结果")
+    print("results")
     print("=" * 74)
     if base:
         for name, key in (
-            ("语音结束 -> VAD 判定说完", "vad_stop"),
-            ("语音结束 -> STT 最终文本", "stt_text"),
-            ("语音结束 -> LLM 首 token", "llm_first"),
-            ("语音结束 -> TTS 首帧音频", "tts_audio"),
-            ("语音结束 -> 机器人开口", "bot_speaking"),
+            ("speech end -> VAD end of turn", "vad_stop"),
+            ("speech end -> STT final text", "stt_text"),
+            ("speech end -> LLM first token", "llm_first"),
+            ("speech end -> TTS first audio", "tts_audio"),
+            ("speech end -> bot speaks", "bot_speaking"),
         ):
             ts = tl.marks.get(key)
             print(f"  {name:<28}{(ts - base) * 1000:8.0f} ms" if ts else f"  {name:<28}     N/A")
     print("-" * 74)
-    print(f"  识别文本 : {tl.transcript!r}")
-    print(f"  全部分段 : {tl.transcripts}")
-    print(f"  模型回复 : {tl.reply[:100]!r}")
-    print(f"  TTS 音频 : {sink.audio_bytes} 字节")
+    print(f"  transcript : {tl.transcript!r}")
+    print(f"  all segments : {tl.transcripts}")
+    print(f"  model reply : {tl.reply[:100]!r}")
+    print(f"  TTS audio   : {sink.audio_bytes} bytes")
     print("=" * 74)
 
     ok = (
@@ -328,11 +331,11 @@ async def main() -> int:
         and tl.marks.get("tts_audio") is not None
         and sink.audio_bytes > 0
     )
-    print("判定:", "✅ 全链路通过" if ok else "❌ 有环节未通过")
+    print("verdict:", "[OK] full path passed" if ok else "[ERR] some stage did not pass")
     return 0 if ok else 1
 
 
 if __name__ == "__main__":
     _, VERIFY_LOG = setup_logging(prefix="verify")
-    logger.info(f"[VERIFY] 日志: {VERIFY_LOG}")
+    logger.info(f"[VERIFY] log: {VERIFY_LOG}")
     sys.exit(asyncio.run(main()))

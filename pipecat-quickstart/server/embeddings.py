@@ -1,17 +1,18 @@
-"""文本嵌入（embedding）—— RAG 的底座，**接口先行、实现可换**。
+"""Text embeddings -- the base layer of RAG, with an interface first and swappable backends.
 
-为什么单独成模块：
-    嵌入是"知识库/语义记忆"的前置能力，但它**不属于任何一家 LLM 服务商**。
-    本项目当前用的商汤**没有 embeddings 接口**（实测 /v1/embeddings 返回 404），
-    所以默认用本地模型——这也和 STT/TTS 的选择一致：能本地就本地，省钱且不受
-    服务商绑定。
+Why a separate module:
+    Embeddings are a prerequisite for "knowledge base / semantic memory", but they
+    **belong to no single LLM provider**. The provider used here has **no embeddings
+    endpoint** (measured: /v1/embeddings returns 404), so the default is a local model --
+    consistent with the STT/TTS choice: local when possible, cheaper and not vendor-locked.
 
-两个实现，由 ``EMBEDDING_PROVIDER`` 切换（默认 local）：
-    local   本地 transformers + torch 跑 ``BAAI/bge-small-zh-v1.5``（512 维，中文，无需 key）
-    api     任何 OpenAI 兼容的 ``/v1/embeddings``（需 EMBEDDING_BASE_URL / EMBEDDING_API_KEY）
+Two implementations, switched by ``EMBEDDING_PROVIDER`` (default local):
+    local   local transformers + torch running ``BAAI/bge-small-zh-v1.5`` (512-dim, Chinese, no key)
+    api     any OpenAI-compatible ``/v1/embeddings`` (needs EMBEDDING_BASE_URL / EMBEDDING_API_KEY)
 
-设计约束：对外只暴露 ``embed(texts) -> ndarray[N, dim]``（已 L2 归一化），
-上层（knowledge.py）只依赖这个协议；换后端时上层与工具都不用动。
+Design constraint: expose only ``embed(texts) -> ndarray[N, dim]`` (L2-normalized).
+Upper layers (knowledge.py) depend only on this contract, so swapping the backend
+requires no changes there or in the tools.
 """
 
 from __future__ import annotations
@@ -26,25 +27,27 @@ _MAX_LEN = 512
 
 
 class Embedder(Protocol):
-    """嵌入后端协议：输入一批文本，返回 L2 归一化后的向量矩阵。"""
+    """Embedding backend contract: takes a batch of texts, returns an L2-normalized matrix."""
 
     dim: int
 
-    def embed(self, texts: list[str]) -> np.ndarray:  # pragma: no cover - 协议
+    def embed(self, texts: list[str]) -> np.ndarray:  # pragma: no cover - protocol
         ...
 
 
 class LocalEmbedder:
-    """本地嵌入：transformers + torch 跑句向量模型（默认 bge-small-zh-v1.5）。
+    """Local embeddings: transformers + torch running a sentence-embedding model
+    (default bge-small-zh-v1.5).
 
-    懒加载：模型只在首次 ``embed()`` 时载入，避免拖慢不用的场景。
+    Lazy loading: the model is loaded only on the first ``embed()`` call, so unused
+    scenarios are not slowed down.
     """
 
     def __init__(self, model_name: str | None = None) -> None:
         self._name = model_name or os.getenv("EMBEDDING_MODEL", DEFAULT_LOCAL_MODEL)
         self._tok = None
         self._mdl = None
-        self.dim = 0  # 载入后确定
+        self.dim = 0  # determined after loading
 
     def _ensure(self) -> None:
         if self._mdl is not None:
@@ -66,14 +69,14 @@ class LocalEmbedder:
         )
         with torch.no_grad():
             out = self._mdl(**batch)
-        # 均值池化 + L2 归一化（bge 系列的常规用法）
+        # Mean pooling + L2 normalization (standard usage for the bge family).
         vec = out.last_hidden_state.mean(dim=1)
         vec = torch.nn.functional.normalize(vec, p=2, dim=1)
         return vec.cpu().numpy().astype("float32")
 
 
 class OpenAICompatEmbedder:
-    """OpenAI 兼容的 ``/v1/embeddings`` 后端（给以后换云端嵌入用）。"""
+    """OpenAI-compatible ``/v1/embeddings`` backend (for switching to a cloud embedder later)."""
 
     def __init__(
         self,
@@ -88,7 +91,7 @@ class OpenAICompatEmbedder:
             api_key=api_key or os.getenv("EMBEDDING_API_KEY"),
         )
         self._model = model or os.getenv("EMBEDDING_MODEL", "bge-m3")
-        self.dim = 0  # 由首次返回决定
+        self.dim = 0  # determined by the first response
 
     def embed(self, texts: list[str]) -> np.ndarray:
         if not texts:
@@ -105,7 +108,7 @@ _EMBEDDER: Embedder | None = None
 
 
 def build_embedder(force: bool = False) -> Embedder:
-    """按 ``EMBEDDING_PROVIDER`` 返回单例嵌入器（默认 local）。"""
+    """Return the singleton embedder chosen by ``EMBEDDING_PROVIDER`` (default local)."""
     global _EMBEDDER
     if _EMBEDDER is None or force:
         provider = os.getenv("EMBEDDING_PROVIDER", "local").strip().lower()

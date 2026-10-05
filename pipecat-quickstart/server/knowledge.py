@@ -1,18 +1,19 @@
-"""本地知识库：文档切块 + 向量检索（RAG 的检索侧）。
+"""Local knowledge base: document chunking + vector retrieval (the retrieval side of RAG).
 
-定位与边界：
-    这是"**非结构化文档**语义检索"——与 ``memory.py`` 的"**结构化数据**精确查询"
-    互补。两者出口都是**一个工具**：
-        query_data       查表（订单、指标、告警……）
-        search_knowledge 查文档（手册、合同、知识文章……）
+Scope and boundaries:
+    This is semantic retrieval over **unstructured documents** -- complementary to
+    ``memory.py``'s exact querying of **structured data**. Both are exposed as **one tool**:
+        query_data        query tables (orders, metrics, alerts, ...)
+        search_knowledge  query documents (manuals, contracts, articles, ...)
 
-存储选型（与项目一贯的"能零依赖就零依赖"一致）：
-    向量存 **SQLite BLOB**（float32），检索用 **NumPy 余弦**暴力扫描。
-    几百 ~ 几千块文档规模下这是毫秒级且零新增依赖。
-    数据量真的上来了要换向量库（sqlite-vec / FAISS / Chroma），
-    **替换点只有本模块的 ``search()``**，上层工具与提示词都不用动。
+Storage choice (consistent with the project's "zero deps when possible" stance):
+    Vectors are stored as **SQLite BLOBs** (float32) and retrieval is a brute-force
+    **NumPy cosine** scan. At a few hundred to a few thousand chunks this is millisecond
+    scale with no new dependencies. If volume really grows, swap in a vector store
+    (sqlite-vec / FAISS / Chroma); the **only replacement point is ``search()``** in this
+    module, so upper-layer tools and prompts stay untouched.
 
-嵌入后端由 ``embeddings.py`` 提供（默认本地 bge-small-zh，无需 key）。
+The embedding backend is provided by ``embeddings.py`` (default local bge-small-zh, no key).
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ from pathlib import Path
 import numpy as np
 from loguru import logger
 
-# 默认与 memory 同目录，但独立文件 —— 知识库可以整体替换/清空而不动业务数据
+# Same directory as memory by default, but a separate file -- the knowledge base can be
+# swapped or cleared wholesale without touching business data.
 DB_PATH = Path(
     os.getenv("KNOWLEDGE_DB", str(Path(__file__).resolve().parent / "data" / "knowledge.db"))
 )
@@ -66,16 +68,17 @@ def init_db() -> None:
         conn.executescript(_SCHEMA)
 
 
-# ---------------------------------------------------------------- 切块
-# 中文没有空格，按「句子」切比按固定长度切更不容易切断语义
+# ---------------------------------------------------------------- chunking
+# Chinese has no spaces, so splitting on "sentences" breaks semantics less often than
+# splitting on a fixed length. NOTE: this pattern intentionally matches Chinese punctuation.
 _SENT_RE = re.compile(r"[^。！？!?\n；;]+[。！？!?\n；;]?")
 
 
 def chunk_text(text: str, size: int = 300, overlap: int = 50) -> list[str]:
-    """把长文本切成带重叠的块。
+    """Split long text into overlapping chunks.
 
-    ``size`` 是目标字符数，``overlap`` 是相邻块的重叠 —— 重叠是为了避免
-    「答案正好落在两块交界处」导致检索不到。
+    ``size`` is the target character count and ``overlap`` is the overlap between adjacent
+    chunks -- the overlap avoids "the answer sits exactly on a chunk boundary" misses.
     """
     text = (text or "").strip()
     if not text:
@@ -96,9 +99,9 @@ def chunk_text(text: str, size: int = 300, overlap: int = 50) -> list[str]:
     return chunks
 
 
-# ---------------------------------------------------------------- 写入
+# ---------------------------------------------------------------- writes
 def ingest(text: str, source: str, title: str = "", embedder=None) -> int:
-    """写入/覆盖一篇文档（按 source 去重）。返回切块数。"""
+    """Insert/overwrite a document (deduplicated by source). Returns the chunk count."""
     from embeddings import build_embedder
 
     emb = embedder or build_embedder()
@@ -125,7 +128,7 @@ def ingest(text: str, source: str, title: str = "", embedder=None) -> int:
                 for i, (ch, v) in enumerate(zip(chunks, vecs))
             ],
         )
-    logger.info(f"[KB] 已入库 {source}（{len(chunks)} 块）")
+    logger.info(f"[KB] ingested {source} ({len(chunks)} chunks)")
     return len(chunks)
 
 
@@ -144,11 +147,11 @@ def list_documents() -> list[dict]:
     return [dict(r) for r in rows]
 
 
-# ---------------------------------------------------------------- 检索
+# ---------------------------------------------------------------- retrieval
 def search(query: str, k: int = 3, embedder=None) -> list[dict]:
-    """语义检索：返回 top-k 块（含来源与相似度分数）。
+    """Semantic search: return the top-k chunks (with source and similarity score).
 
-    换向量库时**只改这个函数**（保持返回结构不变即可）。
+    Swapping the vector store means **changing only this function** (keep the return shape).
     """
     from embeddings import build_embedder
 
@@ -167,7 +170,7 @@ def search(query: str, k: int = 3, embedder=None) -> list[dict]:
         return []
 
     mat = np.stack([np.frombuffer(r["vec"], dtype="float32") for r in rows])
-    sims = mat @ qv  # 向量已归一化，点积即余弦
+    sims = mat @ qv  # vectors are normalized, so the dot product is the cosine
     order = np.argsort(-sims)[: max(1, min(k, len(rows)))]
     return [
         {

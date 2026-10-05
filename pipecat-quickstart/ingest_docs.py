@@ -1,16 +1,17 @@
-"""把文档灌入本地知识库（RAG 的「写入侧」）。
+"""Ingest documents into the local knowledge base (the "write side" of RAG).
 
-为什么写入与查询要分开（与 HANDBOOK-02 的原则一致）：
-    工具里的检索必须是**毫秒级同步**返回。如果检索时现去解析文件、现算嵌入，
-    用户就要多等几秒 —— 语音场景直接崩。所以解析/切块/算向量都在这里离线做好、
-    落库；运行时工具只查库。
+Why writes and queries are separated (consistent with HANDBOOK-02):
+    Retrieval inside a tool must return **synchronously in milliseconds**. If retrieval
+    parsed files and computed embeddings on the fly, the user would wait seconds -- fatal for
+    voice. So parsing / chunking / embedding all happen offline here and are written to the
+    DB; at runtime the tool only queries the DB.
 
-用法：
+Usage:
     cd server
-    uv run ../ingest_docs.py ../README.md                     # 单个文件
-    uv run ../ingest_docs.py --dir ./docs                     # 目录（递归，含 .md/.txt）
-    uv run ../ingest_docs.py ../README.md --source 使用手册    # 指定 source 名
-    uv run ../ingest_docs.py --list                           # 看已入库文档（不加载模型）
+    uv run ../ingest_docs.py ../README.md                     # single file
+    uv run ../ingest_docs.py --dir ./docs                     # directory (recursive, .md/.txt)
+    uv run ../ingest_docs.py ../README.md --source manual     # custom source name
+    uv run ../ingest_docs.py --list                           # list ingested docs (no model load)
 """
 
 import argparse
@@ -37,10 +38,10 @@ def collect(paths: list[Path], directory: Path | None) -> list[Path]:
         elif p.is_file():
             files.append(p)
         else:
-            print(f"  [跳过] 不存在: {p}")
+            print(f"  [skip] does not exist: {p}")
     if directory:
         files += [f for f in sorted(directory.rglob("*")) if f.suffix.lower() in SUFFIXES]
-    # 去重且保持顺序
+    # Deduplicate while preserving order.
     seen, out = set(), []
     for f in files:
         r = f.resolve()
@@ -51,48 +52,48 @@ def collect(paths: list[Path], directory: Path | None) -> list[Path]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="把文档灌入本地知识库")
-    ap.add_argument("paths", nargs="*", type=Path, help="要入库的文件或目录")
-    ap.add_argument("--dir", type=Path, default=None, help="目录（递归收录 .md/.txt）")
-    ap.add_argument("--source", default=None, help="自定义 source 名（仅单文件时有效）")
-    ap.add_argument("--list", action="store_true", help="列出已入库文档后退出")
+    ap = argparse.ArgumentParser(description="ingest documents into the local knowledge base")
+    ap.add_argument("paths", nargs="*", type=Path, help="files or directories to ingest")
+    ap.add_argument("--dir", type=Path, default=None, help="directory (recursively collects .md/.txt)")
+    ap.add_argument("--source", default=None, help="custom source name (single file only)")
+    ap.add_argument("--list", action="store_true", help="list ingested documents and exit")
     args = ap.parse_args()
 
     knowledge.init_db()
 
     if args.list or (not args.paths and not args.dir):
         st = knowledge.stats()
-        print(f"知识库：{st['documents']} 篇 / {st['chunks']} 块")
+        print(f"knowledge base: {st['documents']} documents / {st['chunks']} chunks")
         for d in knowledge.list_documents():
-            print(f"  - {d['source']}（{d['chunks']} 块）{d['title']}")
+            print(f"  - {d['source']} ({d['chunks']} chunks) {d['title']}")
         return 0
 
     files = collect(args.paths, args.dir)
     if not files:
-        print("没有找到可入库的文件（支持 .md/.txt）")
+        print("no ingestable files found (supports .md/.txt)")
         return 1
 
     print("=" * 70)
-    print(f"入库 {len(files)} 个文件（首次会加载嵌入模型，稍等）")
+    print(f"ingesting {len(files)} file(s) (the embedding model loads on first use, please wait)")
     print("=" * 70)
     total = 0
     for f in files:
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except Exception as exc:  # noqa: BLE001
-            print(f"  ❌ 读取失败 {f}: {exc}")
+            print(f"  [FAIL] read failed {f}: {exc}")
             continue
         source = args.source if (args.source and len(files) == 1) else str(f)
         try:
             n = knowledge.ingest(text, source=source, title=f.stem)
             total += n
-            print(f"  ✅ {source} → {n} 块")
+            print(f"  [OK] {source} -> {n} chunks")
         except Exception as exc:  # noqa: BLE001
-            print(f"  ❌ 入库失败 {f}: {type(exc).__name__}: {exc}")
+            print(f"  [FAIL] ingest failed {f}: {type(exc).__name__}: {exc}")
 
     st = knowledge.stats()
     print("-" * 70)
-    print(f"完成：本次 {total} 块；累计 {st['documents']} 篇 / {st['chunks']} 块")
+    print(f"done: {total} chunks this run; total {st['documents']} documents / {st['chunks']} chunks")
     return 0
 
 

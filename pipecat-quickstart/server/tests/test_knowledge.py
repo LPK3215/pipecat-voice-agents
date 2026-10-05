@@ -1,7 +1,9 @@
-"""知识库单测：切块 / 入库 / 语义检索 / 工具注册。
+"""Knowledge base unit tests: chunking / ingestion / semantic search / tool registration.
 
-用**假嵌入器**，不下载真实模型 —— 单测必须秒级、可离线。
-真模型的检索质量由仓库根的端到端脚本验证。
+Uses a **fake embedder**, no real model download -- unit tests must be instant and offline.
+Retrieval quality with the real model is verified by the repo-root end-to-end scripts.
+
+NOTE: the Chinese strings below are test data -- do not translate.
 """
 
 import asyncio
@@ -11,7 +13,7 @@ import pytest
 
 
 class FakeEmbedder:
-    """确定性假嵌入：按关键词给正交方向，便于断言排序。"""
+    """Deterministic fake embedding: orthogonal directions per keyword, to make ordering assertable."""
 
     dim = 4
 
@@ -42,7 +44,7 @@ def kb(tmp_path, monkeypatch):
     return knowledge
 
 
-# ---------------------------------------------------------------- 切块
+# ---------------------------------------------------------------- chunking
 def test_chunk_text_splits_and_keeps_content():
     import knowledge
 
@@ -58,13 +60,13 @@ def test_chunk_text_empty():
     assert knowledge.chunk_text("   ") == []
 
 
-# ---------------------------------------------------------------- 入库 + 检索
+# ---------------------------------------------------------------- ingest + search
 def test_ingest_and_search_ranking(kb):
     kb.ingest("忘记密码可以点击登录页的重置密码按钮。", source="faq.md", title="FAQ", embedder=FakeEmbedder())
     kb.ingest("退款需要联系客服并提供订单号。", source="refund.md", title="退款", embedder=FakeEmbedder())
 
     hits = kb.search("怎么重置密码", k=1, embedder=FakeEmbedder())
-    assert hits, "应检索到结果"
+    assert hits, "should retrieve a result"
     assert hits[0]["source"] == "faq.md"
     assert hits[0]["score"] > 0.9
 
@@ -89,7 +91,8 @@ def test_search_empty_db_and_empty_query(kb):
 
 
 def test_dim_mismatch_filtered(kb):
-    """换嵌入模型后维度变了，旧向量必须被过滤（否则矩阵乘法会崩）。"""
+    """After switching embedding models the dimension changes; old vectors must be filtered out
+    (otherwise the matrix multiply crashes)."""
     kb.ingest("密码相关内容。", source="a.md", embedder=FakeEmbedder())
 
     class Other(FakeEmbedder):
@@ -101,7 +104,7 @@ def test_dim_mismatch_filtered(kb):
     assert kb.search("密码", embedder=Other()) == []
 
 
-# ---------------------------------------------------------------- 工具层
+# ---------------------------------------------------------------- tool layer
 class _P:
     def __init__(self, arguments=None):
         self.arguments = arguments or {}

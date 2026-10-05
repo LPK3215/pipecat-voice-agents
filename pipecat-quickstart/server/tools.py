@@ -1,28 +1,33 @@
-"""LLM 可调用的工具（function calling）。
+"""Tools the LLM can call (function calling).
 
-为什么单独成模块：
-    工具是后端能力的主要扩展点 —— 换模型、换传输、甚至换前端都不影响它们。
-    把它们从 ``bot.py`` 的管线装配里挪出来，装配代码才不会被工具的实现细节淹没，
-    新增能力时也只改这一个文件。
+Why a separate module:
+    Tools are the main extension point for backend capability -- they survive changing
+    the model, the transport, or even the frontend. Moving them out of the pipeline
+    assembly in ``bot.py`` keeps that assembly readable and makes new capabilities a
+    single-file change.
 
-前端无需任何改动：
-    pipecat 会把工具调用以 ``llm-function-call``/``llm-function-call-started``/
-    ``llm-function-call-result`` 等消息推送给官方 Prebuilt 前端，
-    调用过程与结果由前端自己渲染（该系列消息已在前端的 RTVI 消息表中）。
+No frontend changes required:
+    pipecat pushes tool calls to the official prebuilt frontend as
+    ``llm-function-call`` / ``llm-function-call-started`` / ``llm-function-call-result``
+    messages, and the frontend renders the process and results itself.
 
-添加一个新工具的流程：
-    1. 写一个 ``async def xxx(params: FunctionCallParams) -> None`` 处理函数，
-       结束时调用 ``await params.result_callback(结果, properties=...)``。
-    2. 定义对应的 ``FunctionSchema``，把 handler 指向它。
-    3. 加进 ``build_tools()`` 的列表。
-    ``FunctionSchema`` 带 handler 时，LLM 服务会自动注册，
-    不需要再手工调用 ``llm.register_function``。
+Adding a new tool:
+    1. Write an ``async def xxx(params: FunctionCallParams) -> None`` handler that ends
+       with ``await params.result_callback(result, properties=...)``.
+    2. Define the matching ``FunctionSchema`` and point its handler at it.
+    3. Add it to the list in ``build_tools()``.
+    When a ``FunctionSchema`` carries a handler, the LLM service registers it
+    automatically -- no manual ``llm.register_function``.
 
-⚠️ 必须显式传 ``run_llm=True``（见 ``_RESULT_PROPS``）：
-    ``FunctionCallResultProperties.run_llm`` 默认是 ``None``，而 None 是假值，
-    不传就**不会触发工具结果之后的那一次 LLM 生成** —— 表现是工具正常执行、
-    日志里有结果，但机器人永远不回答，直到超时。这个失败是**静默**的：
-    没有报错、没有异常，只能靠「一直等不到回答」发现。
+NOTE: ``run_llm=True`` must be passed explicitly (see ``_RESULT_PROPS``):
+    ``FunctionCallResultProperties.run_llm`` defaults to ``None``, and None is falsy, so
+    omitting it means **no LLM generation after the tool result** -- the tool runs, the
+    log shows a result, but the bot never answers until it times out. The failure is
+    **silent**: no error, no exception, only "no answer ever arrives".
+
+NOTE: the ``description=`` fields and ``spoken`` values below are intentionally Chinese:
+they are prompts for a Chinese-speaking agent and are read aloud to the user. Do not
+translate them.
 """
 
 from __future__ import annotations
@@ -33,8 +38,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from loguru import logger
-import memory
-import sample_tools
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import (
@@ -42,32 +45,37 @@ from pipecat.services.llm_service import (
     FunctionCallResultProperties,
 )
 
-# 每个工具的 result_callback 都要带上它，否则工具执行完不会触发下一轮 LLM 生成
-# （详见本模块文档字符串里的说明）。
+import memory
+import sample_tools
+
+# Every tool's result_callback needs this, otherwise the tool completing does not trigger
+# the next LLM generation (see the module docstring).
 _RESULT_PROPS = FunctionCallResultProperties(run_llm=True)
 
-# 语音助手默认按中国时区报时；容器里没有 tzdata 时会退到下面的固定偏移
+# The voice assistant reports time in China's timezone by default; containers without
+# tzdata fall back to the fixed offset below.
 DEFAULT_TZ = "Asia/Shanghai"
 FALLBACK_OFFSET = timedelta(hours=8)
 
-# weekday() 返回 0=周一，这里按中文习惯排列
+# weekday() returns 0=Monday; ordered here the Chinese way.
 WEEKDAYS = ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日")
 
 
 def _resolve_tz(name: str) -> tuple[datetime, str]:
-    """解析时区并取当前时间；时区不可用时退到 UTC+8。"""
+    """Resolve a timezone and get the current time; fall back to UTC+8 if unavailable."""
     try:
         return datetime.now(ZoneInfo(name)), name
-    except Exception:  # noqa: BLE001 - 缺 tzdata 或时区名不合法都应降级而非报错
-        logger.warning(f"[TOOL] 时区 {name!r} 不可用，退化为 UTC+8")
+    except Exception:  # noqa: BLE001 - missing tzdata or a bad name should degrade, not raise
+        logger.warning(f"[TOOL] timezone {name!r} unavailable; falling back to UTC+8")
         return datetime.now(timezone(FALLBACK_OFFSET)), "UTC+8"
 
 
 async def get_current_time(params: FunctionCallParams) -> None:
-    """回答「现在几点 / 今天几号 / 今天星期几」。
+    """Answer "what time is it / what is today's date / what weekday is it".
 
-    结果里同时给出 ``spoken``（可直接朗读的中文）与 ``iso``（结构化值）：
-    让模型直接照读 ``spoken``，可避免它把 ISO 时间串念成一串数字。
+    The result includes both ``spoken`` (ready-to-read Chinese) and ``iso`` (a structured
+    value): letting the model read ``spoken`` directly avoids it reading an ISO string as
+    a stream of digits.
     """
     requested = (params.arguments or {}).get("timezone") or DEFAULT_TZ
     now, tz_name = _resolve_tz(requested)
@@ -106,17 +114,18 @@ CURRENT_TIME_SCHEMA = FunctionSchema(
 
 
 # ---------------------------------------------------------------------------
-# 记忆类工具：让「长期记忆」不只是存下来，而是模型能主动读写
+# Memory tools: long-term memory is not just stored, the model can read and write it.
 #
-# 为什么做成工具而不是无条件塞进上下文：
-#     记忆会越攒越多，全塞进去会挤爆上下文窗口（且每轮都要付 token）。
-#     做成工具后，模型**自己判断**什么时候该查、什么时候该记 ——
-#     这也是 function calling 的意义：把「用不用」的决定权交给模型。
+# Why expose it as a tool instead of always injecting it into the context:
+#     Memory grows without bound, and injecting all of it would blow the context window
+#     (and cost tokens every turn). As a tool, the model **decides** when to look
+#     something up and when to store something -- which is the point of function calling:
+#     leaving the "use it or not" decision to the model.
 # ---------------------------------------------------------------------------
 
 
 async def remember_fact(params: FunctionCallParams) -> None:
-    """记住一条关于用户的事实（跨会话保留）。"""
+    """Remember one fact about the user (persisted across sessions)."""
     args = params.arguments or {}
     key = str(args.get("key", "")).strip()
     value = str(args.get("value", "")).strip()
@@ -152,7 +161,7 @@ REMEMBER_SCHEMA = FunctionSchema(
 
 
 async def recall_fact(params: FunctionCallParams) -> None:
-    """从长期记忆里查；找不到就明确说没有，别让模型瞎编。"""
+    """Look something up in long-term memory; say clearly when it is missing, do not guess."""
     query = str((params.arguments or {}).get("query", "")).strip()
     hits = memory.search_facts(query) if query else memory.list_facts(limit=10)
 
@@ -190,28 +199,31 @@ RECALL_SCHEMA = FunctionSchema(
 
 
 # ---------------------------------------------------------------------------
-# 业务数据工具（结构化知识库）
+# Business data tool (structured knowledge base)
 #
-# 这是「接自己的业务」的模板：工具本身只管查库，不管数据从哪来。
-# 数据的来源（爬监控页面 / 调内部接口 / 定时任务）是**采集侧**的事，
-# 换数据源时只改采集脚本，工具与提示词都不用动。
+# This is the template for "wiring in your own business": the tool only queries the DB;
+# where the data comes from is not its concern. Data sources (scraping a monitoring page,
+# calling an internal API, a scheduled job) are the **ingestion side**; changing the
+# source means changing only the ingestion script, not the tool or the prompts.
 #
-# 为什么做成**一个通用查询**而不是每张表一个工具：
-#     真实业务有几十张表，一个表一个工具会迅速撑爆提示词，
-#     而且模型还得先猜该用哪个。给一个「表 + 条件 + 排序 + 聚合」的
-#     通用入口，组合能力是乘法级的，工具数量却是常数。
+# Why **one generic query** instead of one tool per table:
+#     A real business has dozens of tables; one tool per table would blow up the prompt
+#     and force the model to guess which one to use. A single "table + filters + order +
+#     aggregate" entry point multiplies the combinations while keeping the tool count
+#     constant.
 #
-# 为什么不干脆让模型写 SQL：
-#     那等于把整个数据库的读写权限交给一个可能被诱导的模型。
-#     这里只放行白名单内的表与列，模型碰不到白名单外的任何东西。
+# Why not just let the model write SQL:
+#     That hands read/write access to the whole database to a model that can be steered.
+#     Only whitelisted tables and columns are allowed here; nothing outside the whitelist
+#     is reachable.
 # ---------------------------------------------------------------------------
 
 
 async def query_data(params: FunctionCallParams) -> None:
-    """通用结构化查询（当前为示例数据，接入真实采集后自动变成真实值）。"""
+    """Generic structured query (currently demo data; becomes real once ingestion is wired in)."""
     args = params.arguments or {}
 
-    # 部分模型会把 filters 传成 JSON 字符串而不是对象，两种都接受
+    # Some models pass filters as a JSON string rather than an object; accept both.
     filters = args.get("filters") or {}
     if isinstance(filters, str):
         try:
@@ -238,7 +250,7 @@ async def query_data(params: FunctionCallParams) -> None:
         result["spoken"] = "没有查到符合条件的记录"
     else:
         result["found"] = True
-        # 同时给 spoken：让模型照读，避免把数字念成一串
+        # Also provide spoken so the model reads it out instead of reading digits one by one.
         cells = []
         for r in result["rows"]:
             cells.append("，".join(f"{k}是{v}" for k, v in r.items() if k != "time"))
@@ -285,15 +297,16 @@ DATA_SCHEMA = FunctionSchema(
 
 
 # ---------------------------------------------------------------------------
-# 知识库检索（RAG，非结构化文档语义检索）
+# Knowledge base retrieval (RAG, semantic search over unstructured documents)
 #
-# 与 query_data 的分工：这是「模糊语义」检索文档，query_data 是「精确条件」查表。
-# 两者描述里都写清边界，避免模型选错（描述重叠是选错的主因）。
+# Division of labor with query_data: this does "fuzzy semantic" document search, while
+# query_data does "exact condition" table queries. Both descriptions state the boundary
+# explicitly, because overlapping descriptions are the main cause of wrong tool choice.
 # ---------------------------------------------------------------------------
 
 
 async def search_knowledge(params: FunctionCallParams) -> None:
-    """在本地知识库中做语义检索，回答需要依据文档的问题。"""
+    """Semantic search over the local knowledge base, for questions that need documents."""
     args = params.arguments or {}
     query = str(args.get("query", "")).strip()
     if not query:
@@ -307,7 +320,7 @@ async def search_knowledge(params: FunctionCallParams) -> None:
     except (TypeError, ValueError):
         k = 3
 
-    import knowledge  # 懒加载：不查知识库就不加载嵌入模型
+    import knowledge  # lazy import: do not load the embedding model unless KB is queried
 
     hits = knowledge.search(query, k=k)
     if not hits:
@@ -317,7 +330,7 @@ async def search_knowledge(params: FunctionCallParams) -> None:
         )
         return
 
-    # spoken：把片段截短给模型照读，避免它把长文档整段念出来
+    # spoken: truncate chunks so the model reads a short excerpt, not a whole document.
     await params.result_callback(
         {
             "found": True,
@@ -346,28 +359,95 @@ KNOWLEDGE_SCHEMA = FunctionSchema(
 )
 
 
+# ---------------------------------------------------------------------------
+# Explicit orchestration: composite tools (multi-step tasks are ordered by code, not by
+# the model improvising).
+#
+# Fixes the problem measured in HANDBOOK-02 sections 4/5: asked "what is the weather
+# here", the model **skips** the "recall the city" step and invents "Beijing" -- the call
+# is fine, the format is fine, only the content is wrong. Here it becomes a deterministic
+# two-step chain and the model calls a single tool.
+# ---------------------------------------------------------------------------
+
+
+async def my_local_weather(params: FunctionCallParams) -> None:
+    """Composite tool: recall the user's city, then look up that city's weather (ordered by code)."""
+    import sample_tools
+    from flows import first_value, run_steps
+
+    def city_from(prev: list[dict]) -> dict:
+        items = prev[0].get("items") or []
+        city = first_value(items, "value") if items else ""
+        return {"city": str(city or "")}
+
+    results = await run_steps(
+        [
+            (recall_fact, {"query": "城市"}),
+            (sample_tools.get_weather, city_from),
+        ]
+    )
+    weather = results[-1]
+    if not weather.get("found"):
+        await params.result_callback(
+            {
+                "found": False,
+                "spoken": "我还不知道你在哪个城市，先告诉我你在哪，我就能报天气了",
+                "steps": results,
+            },
+            properties=_RESULT_PROPS,
+        )
+        return
+    await params.result_callback(
+        {
+            "found": True,
+            "city": weather.get("city"),
+            "spoken": weather.get("spoken", ""),
+            "steps": results,
+        },
+        properties=_RESULT_PROPS,
+    )
+
+
+LOCAL_WEATHER_SCHEMA = FunctionSchema(
+    name="my_local_weather",
+    description=(
+        "查询**用户所在地**的天气。"
+        "当用户说「我这边天气怎么样」「我这冷不冷」等**不带具体城市**的天气问题时调用。"
+        "本工具会先回想用户记住的城市再查天气，顺序由系统保证；"
+        "用户明确说了城市名时才用 get_weather。"
+    ),
+    properties={},
+    required=[],
+    handler=my_local_weather,
+)
+
+
 def build_tools() -> ToolsSchema:
-    """返回本次会话开放给 LLM 的工具集合。
+    """Return the set of tools exposed to the LLM for this session.
 
-    工具多了以后，**描述之间的边界**比工具本身更重要：
-    描述重叠（比如「时间」与「日程」都含糊）会让模型选错。
-    新增工具时先想清楚「什么情况下**不该**调它」，把边界写进描述。
+    As tools multiply, the **boundaries between their descriptions** matter more than the
+    tools themselves: overlapping descriptions (say, "time" and "schedule" both vague)
+    make the model choose wrong. When adding a tool, first decide "when should it NOT be
+    called" and write that boundary into the description.
 
-    可用 ``TOOLS_EXCLUDE``（逗号分隔工具名）临时摘掉若干工具。
-    这不是调试玩具：实测工具数量变多后，模型对部分工具会「忘记调用」
-    甚至**谎报已执行**，按需分组加载是真实需要的降级手段。
+    ``TOOLS_EXCLUDE`` (comma-separated tool names) temporarily removes tools.
+    This is not a debugging toy: measured, as the tool count grows the model "forgets"
+    some tools or even **claims it ran them**; loading groups on demand is a real
+    degradation lever.
     """
     schemas = [
-        # 系统能力
+        # system capabilities
         CURRENT_TIME_SCHEMA,
-        # 记忆
+        # memory
         REMEMBER_SCHEMA,
         RECALL_SCHEMA,
-        # 结构化数据
+        # structured data
         DATA_SCHEMA,
-        # 非结构化文档（知识库 / RAG）
+        # unstructured documents (knowledge base / RAG)
         KNOWLEDGE_SCHEMA,
-        # 一批类型各异的示例工具（见 sample_tools.py）
+        # explicitly orchestrated composite tool (multi-step, ordered by code)
+        LOCAL_WEATHER_SCHEMA,
+        # a set of assorted sample tools (see sample_tools.py)
         *sample_tools.SAMPLE_SCHEMAS,
     ]
 
@@ -375,8 +455,8 @@ def build_tools() -> ToolsSchema:
     if excluded:
         kept = [s for s in schemas if s.name not in excluded]
         logger.info(
-            f"[TOOLS] 已按 TOOLS_EXCLUDE 摘掉 {len(schemas) - len(kept)} 个工具，"
-            f"剩余 {len(kept)} 个：{[s.name for s in kept]}"
+            f"[TOOLS] TOOLS_EXCLUDE removed {len(schemas) - len(kept)} tools; "
+            f"{len(kept)} remain: {[s.name for s in kept]}"
         )
         schemas = kept
 

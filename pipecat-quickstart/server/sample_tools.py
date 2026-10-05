@@ -1,18 +1,25 @@
-"""示例工具集：一批类型各异的低成本工具，用于压测模型的「灵活调用」能力。
+"""Sample tool set: a batch of assorted low-cost tools for stress-testing the model's
+"flexible calling" behavior.
 
-为什么单独成模块：
-    ``tools.py`` 是**注册中心**，负责把工具交给框架；
-    具体工具的实现按主题分模块放，新增一批能力不必改动装配代码。
+Why a separate module:
+    ``tools.py`` is the **registry** that hands tools to the framework; concrete tool
+    implementations live in per-topic modules, so adding a batch of capabilities does not
+    require touching the assembly code.
 
-为什么全部是零成本实现：
-    测的是「模型会不会选对工具、参数传得对不对」，
-    与工具背后接的是真实 API 还是本地假数据**无关**。
-    用本地数据可以把变量隔离干净：调用错了，一定是模型的问题，不是网络抖动。
-    真实业务接入时，只把函数体换成真调用，schema 与描述基本不动。
+Why everything is zero-cost to implement:
+    What is being tested is "does the model pick the right tool and pass good arguments" --
+    **independent of whether the tool talks to a real API or local fake data**. Local data
+    isolates the variables: a wrong call is then definitely the model's fault, not network
+    flakiness. When wiring in a real business, only the function bodies change; the schemas
+    and descriptions barely move.
 
-工具类型刻意做得**多样**，因为不同「形状」的调用错误方式不一样：
-    无参数查询（时间）／单参数查询（天气）／计算（表达式）／
-    换算（两个单位）／写操作（开关设备）／副作用操作（发通知）
+The tool types are deliberately **diverse**, because different "shapes" fail differently:
+    no-arg query (time) / single-arg query (weather) / computation (expression) /
+    conversion (two units) / write (toggle a device) / side-effecting action (send a notice)
+
+NOTE: the ``description`` and ``spoken`` strings below are intentionally Chinese -- they
+are prompts and read-aloud text for a Chinese-speaking agent. Data keys (cities, devices,
+units) are functional too. Do not translate them.
 """
 
 from __future__ import annotations
@@ -28,13 +35,13 @@ from pipecat.services.llm_service import (
     FunctionCallResultProperties,
 )
 
-# 与 tools.py 里同名常量含义一致：不传 run_llm=True 就不会触发工具后的那一次
-# LLM 生成 —— 表现是「工具执行了，但机器人永远不回答」，且完全静默。
-# 这里重复定义是为了避免与 tools.py 形成循环导入。
+# Same meaning as the constant in tools.py: without run_llm=True there is no LLM
+# generation after the tool result -- the tool runs but the bot never answers, silently.
+# Duplicated here to avoid a circular import with tools.py.
 _RESULT_PROPS = FunctionCallResultProperties(run_llm=True)
 
 
-# ---------------------------------------------------------------- 天气（假数据）
+# ---------------------------------------------------------------- weather (fake data)
 
 
 _WEATHER = {
@@ -48,7 +55,7 @@ _WEATHER = {
 
 
 async def get_weather(params: FunctionCallParams) -> None:
-    """查天气。数据是本地写死的假数据，仅用于验证调用链路。"""
+    """Look up weather. Data is hard-coded locally; it only validates the call path."""
     city = str((params.arguments or {}).get("city", "")).strip()
     key = city.rstrip("市")
 
@@ -91,10 +98,11 @@ WEATHER_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- 计算（真实）
+# ---------------------------------------------------------------- calculation (real)
 
 
-# 只放行安全的运算符，绝不用 eval —— 工具参数由模型生成，不能当可信输入
+# Only safe operators are allowed; never use eval -- tool arguments come from the model
+# and are not trusted input.
 _OPS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -118,20 +126,20 @@ def _safe_eval(node: ast.AST) -> float:
 
 
 async def calculate(params: FunctionCallParams) -> None:
-    """算数。真实计算，但只放行四则与乘方，不用 eval。"""
+    """Arithmetic. Real computation, but only four operations and power; no eval."""
     expr = str((params.arguments or {}).get("expression", "")).strip()
 
     try:
         value = _safe_eval(ast.parse(expr, mode="eval").body)
-    except Exception as exc:  # noqa: BLE001 - 表达式来自模型，任何异常都应回报而非抛出
-        logger.warning(f"[TOOL] calculate 失败: {expr!r} -> {exc}")
+    except Exception as exc:  # noqa: BLE001 - expression comes from the model; report, do not raise
+        logger.warning(f"[TOOL] calculate failed: {expr!r} -> {exc}")
         await params.result_callback(
             {"ok": False, "spoken": f"这个算式我算不了：{expr}", "error": str(exc)},
             properties=_RESULT_PROPS,
         )
         return
 
-    # 整数不要显示成 391.0
+    # Do not show integers as 391.0
     shown = int(value) if isinstance(value, float) and value.is_integer() else value
     await params.result_callback(
         {"ok": True, "expression": expr, "result": shown, "spoken": f"等于 {shown}"},
@@ -157,10 +165,10 @@ CALC_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- 单位换算（真实）
+# ---------------------------------------------------------------- unit conversion (real)
 
 
-# 每类单位统一换算到基准单位：长度→米，重量→千克
+# Each unit class is normalized to a base unit: length -> meter, weight -> kilogram.
 _LENGTH = {"米": 1.0, "m": 1.0, "千米": 1000.0, "公里": 1000.0, "km": 1000.0,
            "厘米": 0.01, "cm": 0.01, "毫米": 0.001, "mm": 0.001,
            "英里": 1609.344, "mile": 1609.344, "英尺": 0.3048, "ft": 0.3048}
@@ -183,7 +191,7 @@ def _convert_temperature(value: float, src: str, dst: str) -> float | None:
 
 
 async def convert_unit(params: FunctionCallParams) -> None:
-    """单位换算。换算逻辑是真的，输入输出都是真实计算。"""
+    """Unit conversion. The conversion logic is real; input and output are computed."""
     args = params.arguments or {}
     value = float(args.get("value") or 0)
     src = str(args.get("from_unit", "")).strip()
@@ -231,7 +239,7 @@ CONVERT_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- 设备控制（假执行）
+# ---------------------------------------------------------------- device control (fake)
 
 
 _DEVICES = ["客厅灯", "卧室灯", "空调", "加湿器"]
@@ -239,10 +247,10 @@ _DEVICE_STATE: dict[str, str] = {d: "关闭" for d in _DEVICES}
 
 
 async def control_device(params: FunctionCallParams) -> None:
-    """开关设备。**不会真的控制任何东西**，只改内存状态。
+    """Toggle a device. **Controls nothing real**, only changes in-memory state.
 
-    刻意保留这种「有副作用但安全」的工具：用来观察模型
-    会不会在用户只是随口一提时就抢着执行动作。
+    Deliberately kept as a "has side effects but is safe" tool: useful for observing
+    whether the model rushes to act when the user merely mentions something in passing.
     """
     args = params.arguments or {}
     device = str(args.get("device", "")).strip()
@@ -285,11 +293,11 @@ DEVICE_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- 发通知（假发送）
+# ---------------------------------------------------------------- notification (fake send)
 
 
 async def send_notification(params: FunctionCallParams) -> None:
-    """发一条通知。**不会真的发出去**，只写日志。"""
+    """Send a notification. **Nothing is actually sent**, only logged."""
     args = params.arguments or {}
     to = str(args.get("to", "")).strip() or "自己"
     message = str(args.get("message", "")).strip()
@@ -323,14 +331,14 @@ NOTIFY_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- 日程（真实存储）
+# ---------------------------------------------------------------- reminder (real storage)
 
 
 _REMINDERS: list[dict] = []
 
 
 async def set_reminder(params: FunctionCallParams) -> None:
-    """设置提醒。存在内存里（重启即失忆，真实场景应写入 memory.py 的表）。"""
+    """Set a reminder. Stored in memory (lost on restart; real usage should write to a memory.py table)."""
     args = params.arguments or {}
     content = str(args.get("content", "")).strip()
     when = str(args.get("when", "")).strip()
@@ -369,7 +377,7 @@ REMINDER_SCHEMA = FunctionSchema(
 )
 
 
-# 注册到 tools.py 的入口：新增工具只在下面这个列表里加一行
+# Entry point registered by tools.py: adding a tool means adding one line to this list.
 SAMPLE_SCHEMAS: list[FunctionSchema] = [
     WEATHER_SCHEMA,
     CALC_SCHEMA,

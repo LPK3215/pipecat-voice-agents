@@ -1,11 +1,15 @@
-"""数据层单测：长期记忆 + SQL 白名单查询（含曾经导致崩溃的边界）。"""
+"""Data-layer unit tests: long-term memory + SQL whitelist queries (including boundaries that
+once caused crashes).
+
+NOTE: the Chinese strings below are test data -- do not translate.
+"""
 
 
-# ---------------------------------------------------------------- 长期记忆
+# ---------------------------------------------------------------- long-term memory
 def test_fact_roundtrip(temp_db):
     temp_db.put_fact("姓名", "张三")
     assert temp_db.get_fact("姓名")["value"] == "张三"
-    # 同 key 覆盖
+    # same key overwrites
     temp_db.put_fact("姓名", "李四")
     assert temp_db.get_fact("姓名")["value"] == "李四"
     keys = [f["key"] for f in temp_db.list_facts()]
@@ -23,23 +27,24 @@ def test_search_facts_chinese(temp_db):
     temp_db.put_fact("居住城市", "杭州")
     temp_db.put_fact("喜欢的语言", "Python")
     hits = temp_db.search_facts("住在哪里")
-    # 中文按 2 字滑窗匹配，「居住」能命中
+    # Chinese is matched by 2-character sliding windows, so "居住" can hit
     assert any(h["key"] == "居住城市" for h in hits) or hits == []
 
 
 def test_search_facts_single_char_does_not_crash(temp_db):
-    """回归测试：单字查询曾被切成空词元，拼出 `WHERE  ORDER BY` 触发 SQL 语法错误。"""
+    """Regression: a single-character query was once split into an empty token list, producing
+    `WHERE  ORDER BY` and an SQL syntax error."""
     temp_db.put_fact("居住城市", "杭州")
-    assert temp_db.search_facts("杭") == []  # 不抛异常即通过
+    assert temp_db.search_facts("杭") == []  # not raising is the pass condition
     assert temp_db.search_facts("") == []
 
 
-# ---------------------------------------------------------------- 业务表查询（白名单）
+# ---------------------------------------------------------------- business table queries (whitelist)
 def test_query_table_basic(temp_db):
     temp_db.seed_demo_business()
     r = temp_db.query_table("hosts", order_by="latency_ms", desc=True, limit=1)
     assert r["count"] == 1
-    assert r["rows"][0]["name"] == "web-02"  # seed 里延迟最高
+    assert r["rows"][0]["name"] == "web-02"  # highest latency in the seed
 
 
 def test_query_table_filters(temp_db):
@@ -57,7 +62,7 @@ def test_query_table_aggregate(temp_db):
 
 
 def test_query_table_rejects_unknown_table(temp_db):
-    r = temp_db.query_table("users")  # 不在白名单
+    r = temp_db.query_table("users")  # not whitelisted
     assert "error" in r
     assert "available_tables" in r
 
@@ -84,3 +89,28 @@ def test_schema_summary_lists_tables():
     s = memory.schema_summary()
     for t in memory.TABLE_COLUMNS:
         assert t in s
+
+
+# ---------------------------------------------------------------- orders table (written by the ingestion side)
+def test_upsert_order_is_idempotent(temp_db):
+    """Order ids are unique: re-ingesting should overwrite, not insert duplicate rows."""
+    temp_db.upsert_order("A1", "张三", "待发货", 10.0)
+    temp_db.upsert_order("A1", "张三", "已发货", 12.0)
+    r = temp_db.query_table("orders", filters={"order_id": "A1"})
+    assert r["count"] == 1
+    assert r["rows"][0]["status"] == "已发货"
+    assert r["rows"][0]["amount"] == 12.0
+
+
+def test_orders_aggregate_and_whitelist(temp_db):
+    temp_db.upsert_order("A1", "张三", "待发货", 10.0)
+    temp_db.upsert_order("A2", "李四", "已发货", 20.0)
+    assert temp_db.query_table("orders", aggregate="sum:amount")["result"] == 30.0
+    assert temp_db.query_table("orders", aggregate="count")["result"] == 2
+    assert "orders" in temp_db.schema_summary()
+
+
+def test_orders_seeded_with_demo_data(temp_db):
+    temp_db.seed_demo_business()
+    r = temp_db.query_table("orders", filters={"status": "待发货"})
+    assert r["count"] >= 1

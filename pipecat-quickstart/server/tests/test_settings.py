@@ -1,11 +1,11 @@
-"""配置解析层单测：服务商切换、关思考参数、引擎解析。"""
+"""Config-resolution unit tests: provider switching, disable-thinking payloads, engine parsing."""
 
 import pytest
 
 import settings
 
 
-# ---------------------------------------------------------------- 服务商
+# ---------------------------------------------------------------- providers
 def test_default_provider_is_modelscope(monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("MODELSCOPE_MODEL", raising=False)
@@ -25,20 +25,20 @@ def test_switch_to_sensenova(monkeypatch):
     assert cfg["base_url"] == "https://token.sensenova.cn/v1"
     assert cfg["model"] == "sensenova-6.8-flash-lite"
     assert cfg["api_key"] == "sk-test"
-    # 商汤的关思考写法（实测唯一有效）
+    # SenseNova's disable-thinking payload (the only form measured to work)
     assert cfg["thinking_body"] == {"thinking": {"type": "disabled"}}
 
 
 def test_unknown_provider_falls_back(monkeypatch):
-    """服务商拼错不该让服务起不来 —— 静默退回默认。"""
+    """A typo in the provider name should not stop the service -- fall back to the default silently."""
     monkeypatch.setenv("LLM_PROVIDER", "no-such-provider")
     assert settings.llm_provider() == "modelscope"
 
 
-# ---------------------------------------------------------------- 关思考参数
+# ---------------------------------------------------------------- disable-thinking payloads
 def test_build_llm_extra_none_is_empty(monkeypatch):
     monkeypatch.delenv("LLM_TEMPERATURE", raising=False)
-    # 不注入任何东西时必须返回 {}，而不是空 extra_body
+    # With nothing to inject it must return {}, not an empty extra_body
     assert settings.build_llm_extra(None) == {}
 
 
@@ -57,7 +57,7 @@ def test_build_llm_extra_temperature(monkeypatch):
     assert settings.build_llm_extra(None) == {"extra_body": {"temperature": 0.0}}
 
 
-# ---------------------------------------------------------------- 引擎解析
+# ---------------------------------------------------------------- engine parsing
 @pytest.mark.parametrize(
     "value,expected",
     [("sensevoice", "sensevoice"), ("whisper", "whisper"), ("bogus", "sensevoice"), ("", "sensevoice")],

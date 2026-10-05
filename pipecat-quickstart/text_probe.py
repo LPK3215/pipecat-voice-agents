@@ -1,20 +1,21 @@
-"""不用浏览器、不用麦克风：通过 RTVI send-text 驱动**真实的 bot.py**。
+"""No browser, no microphone: drive the **real bot.py** over RTVI send-text.
 
-为什么要走真实管线：
-    合成的最小管线观测不可靠 —— assistant 聚合器会吞掉文本帧，
-    导致「有没有最终回答」看不准，还容易误判成模型问题。
-    这里起真正的 bot.py，用 WebRTC 数据通道发 RTVI 消息，
-    和官方 Prebuilt 前端点「发送」走的是同一条路径。
+Why go through the real pipeline:
+    A synthetic minimal pipeline is not a reliable observation point -- the assistant
+    aggregator swallows text frames, so "was there a final answer" is hard to judge and is
+    easily misread as a model problem. Here a real bot.py is started and RTVI messages are
+    sent over the WebRTC data channel, exactly the path the official prebuilt frontend's
+    "Send" button uses.
 
-一次运行验证三件事：
-    1. 文本通道可用（前端 sendText() 发的就是 send-text 消息）
-    2. 真实管线里工具调用是否闭环（[TOOL] → 最终回答 → 出声）
-    3. 前端实际会收到哪些 RTVI 消息（字幕 / metrics / 工具调用 / 错误）
+One run verifies three things:
+    1. the text channel works (what the frontend sendText() sends is a send-text message)
+    2. whether tool calling closes the loop in the real pipeline ([TOOL] -> final answer -> speech)
+    3. which RTVI messages the frontend actually receives (captions / metrics / tool calls / errors)
 
-用法：
+Usage:
     cd server && uv run ../text_probe.py
     cd server && uv run ../text_probe.py --question "今天星期几"
-    cd server && uv run ../text_probe.py --no-spawn        # 只连已运行的 bot.py
+    cd server && uv run ../text_probe.py --no-spawn        # connect to a running bot.py only
 """
 
 import argparse
@@ -36,12 +37,12 @@ HOST = "127.0.0.1"
 PORT = int(os.getenv("PROBE_PORT", "7861"))
 ROOT = f"http://{HOST}:{PORT}"
 
-# RTVI 线上格式：{"label": "rtvi-ai", "type": "...", "data": {...}}
+# RTVI wire format: {"label": "rtvi-ai", "type": "...", "data": {...}}
 LABEL = "rtvi-ai"
 
 
 def _post_offer(sdp: str, pc_id: str) -> tuple[int, str]:
-    """发起握手，返回 (HTTP 状态, 响应体)。响应体里是 answer SDP。"""
+    """Start the handshake; returns (HTTP status, response body). The body is the answer SDP."""
     payload = json.dumps({"sdp": sdp, "type": "offer", "pc_id": pc_id}).encode()
     req = urllib.request.Request(
         ROOT + "/api/offer", data=payload, headers={"Content-Type": "application/json"}
@@ -89,7 +90,7 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
         if isinstance(msg, dict) and msg.get("label") == LABEL:
             mtype = msg.get("type", "?")
             seen[mtype] += 1
-            # 留一份原文，便于失败时直接看出原因
+            # Keep a copy of the raw text so failures are self-explanatory.
             samples.setdefault(mtype, json.dumps(msg, ensure_ascii=False)[:300])
 
     await pc.setLocalDescription(await pc.createOffer())
@@ -99,10 +100,11 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
         await pc.close()
         return seen, samples
 
-    # 必须把 answer SDP 装回去，否则连接不会真正建立、数据通道永远打不开
+    # The answer SDP must be set back, otherwise the connection is never established and the
+    # data channel never opens.
     try:
         answer = json.loads(body)
-    except Exception:  # noqa: BLE001 - 有些版本直接返回裸 SDP
+    except Exception:  # noqa: BLE001 - some versions return a bare SDP
         answer = {"sdp": body, "type": "answer"}
     await pc.setRemoteDescription(
         RTCSessionDescription(sdp=answer["sdp"], type=answer.get("type", "answer"))
@@ -111,14 +113,15 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
     try:
         await asyncio.wait_for(opened.wait(), timeout=30)
     except TimeoutError:
-        print("  数据通道未打开")
+        print("  data channel did not open")
         await pc.close()
         return seen, samples
 
-    # 1) 声明前端就绪；2) 发文本提问（与前端 sendText() 完全一致）
-    # aiortc 的 channel.send() 是同步方法，不是协程。
-    # id 必填 —— 少了它后端会整条消息校验失败（Prebuilt 前端会带上）。
-    # version 也必填：缺了后端会回 error-response「Client version unknown」（兼容性提示）。
+    # 1) announce the client is ready; 2) send a text question (identical to frontend sendText())
+    # aiortc's channel.send() is synchronous, not a coroutine.
+    # id is required -- without it the backend rejects the whole message (the prebuilt
+    # frontend includes it). version is also required: without it the backend replies with
+    # an error-response "Client version unknown" (a compatibility hint).
     from pipecat.processors.frameworks.rtvi.models import PROTOCOL_VERSION
 
     channel.send(
@@ -145,7 +148,7 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
             }
         )
     )
-    print(f"  已发送文本提问: {question!r}")
+    print(f"  sent text question: {question!r}")
 
     await asyncio.sleep(wait_seconds)
     await pc.close()
@@ -153,7 +156,7 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
 
 
 def scan_log() -> dict:
-    """从 bot 日志里提取这一轮的关键证据。"""
+    """Extract the key evidence for this turn from the bot log."""
     log = SERVER / "logs" / "bot-latest.log"
     if not log.exists():
         return {}
@@ -161,26 +164,26 @@ def scan_log() -> dict:
     return {
         "tool_calls": re.findall(r"\[TOOL\].*", text),
         "errors": re.findall(r"\[ERROR\].*", text),
-        "stt_text": re.findall(r"\[TURN\] 识别文本:.*", text),
-        "segments": re.findall(r"\[TURN\] 分段延迟.*", text),
-        "tts": re.findall(r"\[TURN\] TTS 开始出声", text),
+        "stt_text": re.findall(r"\[TURN\] transcript:.*", text),
+        "segments": re.findall(r"\[TURN\] latency.*", text),
+        "tts": re.findall(r"\[TURN\] TTS first audio", text),
     }
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--question", default="现在几点了？")
-    ap.add_argument("--wait", type=float, default=45.0, help="发问后等待多少秒")
+    ap.add_argument("--wait", type=float, default=45.0, help="how many seconds to wait after asking")
     ap.add_argument("--no-spawn", action="store_true")
     args = ap.parse_args()
 
     print("=" * 74)
-    print("文本通道探针（真实 bot.py + 真实 WebRTC 数据通道）")
+    print("Text channel probe (real bot.py + real WebRTC data channel)")
     print("=" * 74)
 
     proc = None
     if not args.no_spawn:
-        print(f"[1/3] 拉起 bot.py（{HOST}:{PORT}）…")
+        print(f"[1/3] spawning bot.py ({HOST}:{PORT}) ...")
         log = SERVER / "logs" / "text-probe-server.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "wb") as fh:
@@ -191,17 +194,17 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
             )
     else:
-        print("[1/3] 跳过拉起，使用已运行的实例")
+        print("[1/3] spawn skipped, using a running instance")
 
     try:
         if proc is not None and not wait_up():
-            print("  bot.py 未在 180s 内就绪")
+            print("  bot.py not ready within 180s")
             return 1
         if proc is not None:
-            print("  服务已就绪")
+            print("  server ready")
 
         pc_id = f"probe-{int(time.time())}"
-        print("[2/3] 建立 WebRTC 会话并发送文本提问")
+        print("[2/3] establishing WebRTC session and sending a text question")
         seen, samples = asyncio.run(run_session(args.question, args.wait, pc_id))
     finally:
         if proc is not None:
@@ -212,38 +215,39 @@ def main() -> int:
                 proc.kill()
 
     print()
-    print("[3/3] 结果")
+    print("[3/3] results")
     print("=" * 74)
-    print("  前端在这一轮里收到的 RTVI 消息（次数）:")
+    print("  RTVI messages the frontend received this turn (count):")
     if seen:
         for t, n in seen.most_common():
             print(f"     {t:<34} x{n}")
         for key in ("error", "error-response"):
             if key in samples:
-                print(f"     {key} 原文: {samples[key]}")
+                print(f"     {key} raw: {samples[key]}")
     else:
-        print("     （无）")
+        print("     (none)")
 
     info = scan_log()
     print("-" * 74)
     if info.get("tool_calls"):
         for line in dict.fromkeys(info["tool_calls"]):
-            print(f"  工具: {line.strip()[:150]}")
+            print(f"  tool: {line.strip()[:150]}")
     else:
-        print("  工具: 未调用")
+        print("  tool: not called")
     if info.get("errors"):
         for line in dict.fromkeys(info["errors"]):
-            print(f"  错误: {line.strip()[:150]}")
+            print(f"  error: {line.strip()[:150]}")
     if info.get("segments"):
         for line in dict.fromkeys(info["segments"]):
-            print(f"  延迟: {line.strip()[:150]}")
+            print(f"  latency: {line.strip()[:150]}")
     if info.get("tts"):
-        print(f"  出声: {len(info['tts'])} 次")
+        print(f"  spoke: {len(info['tts'])} time(s)")
     print("=" * 74)
 
-    # 判定：文本通道生效 = 后端确实处理了这次提问（日志里有 TTS 出声或工具调用）
+    # Verdict: the text channel works when the backend really processed the question
+    # (the log shows TTS speech or a tool call).
     ok = bool(info.get("tts")) or bool(info.get("tool_calls"))
-    print("结论:", "文本通道生效 ✅" if ok else "文本通道未生效 ❌（见日志）")
+    print("verdict:", "[OK] text channel works" if ok else "[ERR] text channel not working (see log)")
     return 0 if ok else 1
 
 

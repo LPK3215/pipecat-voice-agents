@@ -1,24 +1,27 @@
-"""本地持久化：会话历史 + 长期记忆 + 业务数据表。
+"""Local persistence: session history + long-term memory + business data tables.
 
-为什么自己写这一层：
-    pipecat **不提供任何持久化**。它自带的只有「短期记忆」——即 ``LLMContext``
-    里的消息列表，进程一退出就没了；长期记忆只给了一个 mem0 适配器
-    （``services/mem0/memory.py``），而 mem0 云端要 key、可能收费。
-    知识库（向量检索）则完全没有。
+Why write this layer ourselves:
+    pipecat provides **no persistence at all**. It ships only "short-term memory" -- the
+    message list inside ``LLMContext``, which is gone when the process exits; long-term
+    memory is only a mem0 adapter (``services/mem0/memory.py``), and mem0's cloud needs a
+    key and may charge. There is nothing for a knowledge base (vector retrieval).
 
-    结论：这三类都只能自己接。SQLite 是零依赖、零成本、零运维的起点，
-    之后想换 mem0 或向量库，**替换位置就在本模块内** —— 对外暴露的始终是
-    「读一段文本塞进上下文」或「注册一个工具」，上层不用改。
+    Conclusion: all three must be built here. SQLite is a zero-dependency, zero-cost,
+    zero-ops starting point; to move to mem0 or a vector store later, **the replacement
+    point is inside this module** -- the external surface stays "read a block of text into
+    the context" or "register a tool", so upper layers do not change.
 
-三张表各自的定位：
-    turns    会话历史（临时记忆的持久化）：重启后能接着上一轮聊
-    facts    长期记忆：跨会话记住的用户偏好、约定、结论
-    metrics  业务数据：外部系统（如监控页面）抓来的指标，供工具查询
+The three tables and their roles:
+    turns    session history (persisted short-term memory): keep chatting after a restart
+    facts    long-term memory: user preferences, agreements, conclusions across sessions
+    metrics  business data: metrics pulled from external systems, queried by tools
 
-关于「AI 系统 = 临时记忆 + 长期记忆 + 技能 + 知识库 + 数据库」：
-    本模块承担了其中的「长期记忆 + 数据库」两块；
-    「临时记忆」由框架的 LLMContext 负责（本模块只做它的持久化）；
-    「技能」是 tools.py；「知识库」暂未实现，可在此基础上加向量检索。
+On "an AI system = short-term memory + long-term memory + skills + knowledge base + DB":
+    This module covers "long-term memory + database"; "short-term memory" is the
+    framework's LLMContext (this module only persists it); "skills" is tools.py.
+
+NOTE: demo business rows and a few context-injection strings below are intentionally
+Chinese -- they are data and prompts for a Chinese-speaking agent.
 """
 
 from __future__ import annotations
@@ -40,7 +43,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.observers.base_observer import BaseObserver
 
-# 数据库文件路径。默认放在 server/data/ 下，与代码分离
+# Database file path. Defaults to server/data/, separate from the code.
 DB_PATH = Path(
     os.getenv("MEMORY_DB", str(Path(__file__).resolve().parent / "data" / "memory.db"))
 )
@@ -93,14 +96,24 @@ CREATE TABLE IF NOT EXISTS alerts (
     created_at REAL    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status, id);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id   TEXT    NOT NULL UNIQUE,
+    customer   TEXT    NOT NULL DEFAULT '',
+    status     TEXT    NOT NULL DEFAULT '待发货',
+    amount     REAL    NOT NULL DEFAULT 0,
+    updated_at REAL    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status, id);
 """
 
 
 def _conn() -> sqlite3.Connection:
-    """取一个连接。
+    """Get a connection.
 
-    SQLite 的调用都在毫秒级，这里直接用同步接口；若将来量大再换 aiosqlite，
-    替换点只在函数内部。
+    SQLite calls are millisecond scale, so the synchronous API is used directly; for much
+    higher volume switch to aiosqlite -- the replacement point is inside this function.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -109,21 +122,21 @@ def _conn() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """建表。重复调用无副作用（都用 IF NOT EXISTS）。"""
+    """Create tables. Repeated calls are side-effect free (all IF NOT EXISTS)."""
     with _conn() as conn:
         conn.executescript(_SCHEMA)
 
 
 def new_session_id() -> str:
-    """每次连接一个会话 ID。短一点，日志里好认。"""
+    """One session ID per connection. Short, to be readable in logs."""
     return uuid.uuid4().hex[:12]
 
 
-# ---------------------------------------------------------------- 会话历史
+# ---------------------------------------------------------------- session history
 
 
 def save_turn(session_id: str, role: str, content: str) -> None:
-    """存一轮对话。空内容不存 —— 打断、静音会产生空文本。"""
+    """Save one turn. Empty content is skipped -- interruptions and silence yield empty text."""
     text = (content or "").strip()
     if not text:
         return
@@ -135,9 +148,10 @@ def save_turn(session_id: str, role: str, content: str) -> None:
 
 
 def recent_turns(session_id: str | None = None, limit: int = 20) -> list[dict]:
-    """取最近若干轮。
+    """Fetch the most recent turns.
 
-    ``session_id`` 为空时跨会话取（用于「上次我们聊到哪」这种恢复场景）。
+    When ``session_id`` is empty it queries across sessions (for "where did we leave off"
+    recovery scenarios).
     """
     with _conn() as conn:
         if session_id:
@@ -153,11 +167,11 @@ def recent_turns(session_id: str | None = None, limit: int = 20) -> list[dict]:
     return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
 
 
-# ---------------------------------------------------------------- 长期记忆
+# ---------------------------------------------------------------- long-term memory
 
 
 def put_fact(key: str, value: str, source: str = "user") -> None:
-    """记一条长期事实。同 key 覆盖（保留 created_at）。"""
+    """Store one long-term fact. Same key overwrites (created_at is preserved)."""
     now = time.time()
     with _conn() as conn:
         conn.execute(
@@ -193,18 +207,19 @@ def list_facts(limit: int = 50) -> list[dict]:
 
 
 def search_facts(query: str, limit: int = 5) -> list[dict]:
-    """按关键词查长期记忆。
+    """Keyword search over long-term memory.
 
-    没有向量库之前，这是「知识库」的最小可用形态：子串匹配 + 分词兜底。
-    中文没有空格，所以把 query 切成 2~4 字的片段再 OR 匹配，
-    比整串 LIKE 命中率高得多。之后要换向量检索，替换点就是这个函数。
+    Before a vector store exists, this is the minimum viable "knowledge base": substring
+    matching with a tokenization fallback. Chinese has no spaces, so the query is split
+    into 2-character sliding windows and OR-matched, which hits far more often than a
+    whole-string LIKE. To switch to vector retrieval, this function is the replacement point.
     """
     q = (query or "").strip()
     if not q:
         return []
 
     terms = [q]
-    # 中文按 2 字滑窗切分；英文/数字按空格切
+    # Chinese: 2-character sliding windows; English/digits: split on spaces.
     if re.search(r"[\u4e00-\u9fff]", q):
         cleaned = re.sub(r"[^\u4e00-\u9fff0-9a-zA-Z]", "", q)
         terms += [cleaned[i : i + 2] for i in range(len(cleaned) - 1)]
@@ -212,8 +227,8 @@ def search_facts(query: str, limit: int = 5) -> list[dict]:
         terms += q.split()
     terms = [t for t in dict.fromkeys(terms) if len(t) >= 2][:8]
     if not terms:
-        # 单字查询（如「杭」）经上面的切分/过滤后会变成空集，
-        # 若继续拼 SQL 会得到 "WHERE  ORDER BY ..."，直接语法错误。
+        # A single-character query (e.g. one Han character) becomes an empty set after the
+        # split/filter above; continuing would produce "WHERE  ORDER BY ...", a syntax error.
         return []
 
     where = " OR ".join(["key LIKE ? OR value LIKE ?"] * len(terms))
@@ -224,19 +239,19 @@ def search_facts(query: str, limit: int = 5) -> list[dict]:
     with _conn() as conn:
         rows = conn.execute(
             f"SELECT key, value FROM facts WHERE {where} "
-            f"ORDER BY updated_at DESC LIMIT ?",  # noqa: S608 - terms 由本地切分产生
+            f"ORDER BY updated_at DESC LIMIT ?",  # noqa: S608 - terms come from local splitting
             (*params, limit),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-# ---------------------------------------------------------------- 业务数据
+# ---------------------------------------------------------------- business data
 
 
 def record_metric(
     name: str, value: float, unit: str = "", note: str = ""
 ) -> None:
-    """写入一条业务指标。外部采集脚本（如爬监控页）调这个。"""
+    """Insert one business metric. Called by the external ingestion script."""
     with _conn() as conn:
         conn.execute(
             "INSERT INTO metrics (name, value, unit, note, created_at) VALUES (?,?,?,?,?)",
@@ -244,8 +259,28 @@ def record_metric(
         )
 
 
+def upsert_order(
+    order_id: str, customer: str = "", status: str = "待发货", amount: float = 0.0
+) -> None:
+    """Insert/update one order (called by the **ingestion script**).
+
+    Upsert rather than plain insert: the order id is unique, so re-running the ingestion
+    script must not create duplicate rows. (``record_metric`` is a plain insert because it
+    appends by time and cannot duplicate.)
+    """
+    with _conn() as conn:
+        conn.execute(
+            """INSERT INTO orders (order_id, customer, status, amount, updated_at)
+               VALUES (?,?,?,?,?)
+               ON CONFLICT(order_id) DO UPDATE SET
+                   customer=excluded.customer, status=excluded.status,
+                   amount=excluded.amount, updated_at=excluded.updated_at""",
+            (order_id, customer, status, float(amount), time.time()),
+        )
+
+
 def query_metrics(name: str | None = None, limit: int = 5) -> list[dict]:
-    """查最新指标。``name`` 为空时返回所有指标名的最新一条。"""
+    """Query the latest metrics. With empty ``name``, the latest row per metric name."""
     with _conn() as conn:
         if name:
             rows = conn.execute(
@@ -264,31 +299,33 @@ def query_metrics(name: str | None = None, limit: int = 5) -> list[dict]:
 
 
 class TurnRecorder(BaseObserver):
-    """把每轮对话写进 ``turns`` 表。
+    """Write each conversation turn into the ``turns`` table.
 
-    为什么需要它：框架的 ``LLMContext`` 只在内存里，进程重启即失忆。
+    Why it is needed: the framework's ``LLMContext`` is in memory only, so a restart loses
+    everything.
 
-    为什么是**观察者（BaseObserver）而不是管线处理器**：
-        用户侧文本（``TranscriptionFrame``）会被 ``LLMUserAggregator`` 消费、
-        助手侧文本（``LLMTextFrame``）会被 ``LLMAssistantAggregator`` 消费 ——
-        pipecat 源码里这两个分支都**不向下游 push**（用户聚合器的注释原文即
-        "consumed here and not pushed downstream"）。因此任何单一的处理器位置
-        都收不全两侧文本。早期版本把它当处理器挂在管线末端，结果 ``turns``
-        表**从未被写入**。观察者能看到每一帧的**首次推送**，与所处位置无关，
-        才是可靠的落库方式。
+    Why an **observer (BaseObserver) and not a pipeline processor**:
+        User-side text (``TranscriptionFrame``) is consumed by ``LLMUserAggregator`` and
+        assistant-side text (``LLMTextFrame``) by ``LLMAssistantAggregator`` -- in the
+        pipecat source both branches **do not push downstream** (the user aggregator's
+        comment literally says "consumed here and not pushed downstream"). So no single
+        processor position can see both sides. An earlier version attached it at the end of
+        the pipeline and the ``turns`` table was **never written**. An observer sees every
+        frame's **first push** regardless of position, which is the reliable way to persist.
 
-    助手侧要在 ``LLMFullResponseEndFrame`` 才落库：一次回答是流式产生的，
-    逐帧存会把一句话拆成几十条。``LLMFullResponseStartFrame`` 时清空缓冲，
-    避免上一轮被打断的残句污染下一轮。
+    On the assistant side, persist at ``LLMFullResponseEndFrame``: a reply is streamed, and
+    saving per frame would split one sentence into dozens of rows. The buffer is cleared at
+    ``LLMFullResponseStartFrame`` so a truncated reply from a previous turn cannot leak in.
 
-    用户侧有**两条输入通路**，都要记：
-        语音输入 → ``TranscriptionFrame``（STT 产出）
-        文本输入 → ``LLMMessagesAppendFrame``（RTVI ``send-text`` 产出，**不是** TranscriptionFrame）
-    只记前者的话，用键盘提问的会话在 ``turns`` 里会缺用户那一半。
+    The user side has **two input paths**, both must be recorded:
+        voice input -> ``TranscriptionFrame`` (produced by STT)
+        text input  -> ``LLMMessagesAppendFrame`` (produced by RTVI ``send-text``,
+                       **not** a TranscriptionFrame)
+    Recording only the former leaves keyboard-asked sessions missing their user half.
     """
 
     def __init__(self, session_id: str, **kwargs) -> None:
-        # 只在首跳观察：同一帧每跳都会被通知，不去重会重复落库
+        # Only observe the first push: every push notifies, so without dedup rows duplicate.
         kwargs.setdefault("observe_every_push", False)
         super().__init__(**kwargs)
         self._session_id = session_id
@@ -300,7 +337,7 @@ class TurnRecorder(BaseObserver):
         if isinstance(frame, TranscriptionFrame):
             save_turn(self._session_id, "user", frame.text)
         elif isinstance(frame, LLMMessagesAppendFrame):
-            # 文本通道（RTVI send-text）走这里；只取 user 角色
+            # The text channel (RTVI send-text) arrives here; only take the user role.
             for msg in getattr(frame, "messages", None) or []:
                 if isinstance(msg, dict) and msg.get("role") == "user":
                     save_turn(self._session_id, "user", str(msg.get("content", "")))
@@ -315,11 +352,13 @@ class TurnRecorder(BaseObserver):
 
 
 def load_memory_into_context(context, limit: int = 10) -> int:
-    """把长期记忆与上一轮会话塞进 LLMContext。
+    """Inject long-term memory and the previous session into the LLMContext.
 
-    这是「长期记忆」真正生效的地方：框架不管你怎么存，
-    但你要在**建上下文时**把记忆放进去，模型才看得到。
-    返回注入的消息条数。
+    This is where "long-term memory" actually takes effect: the framework does not care how
+    you store it, but you must inject it **when building the context** for the model to see
+    it. Returns the number of injected messages.
+
+    NOTE: the injected text is intentionally Chinese -- it is a prompt for a Chinese agent.
     """
     injected = 0
     facts = list_facts(limit=20)
@@ -335,37 +374,39 @@ def load_memory_into_context(context, limit: int = 10) -> int:
     return injected
 
 
-# ------------------------------------------------- 结构化知识库（通用查询）
+# ------------------------------------------------- structured knowledge base (generic query)
 #
-# 这里是「数据库也是知识库」的落点：
-#   向量知识库：非结构化文档 → 语义相似 → 命中一段话
-#   本节的库  ：结构化数据   → 精确条件 → 命中的是一行行记录
-# 两者并存，出口都是**一个工具**（见 tools.py::query_data）。
+# This is where "the database is also a knowledge base" lands:
+#   vector KB     : unstructured documents -> semantic similarity -> a passage matches
+#   the DB here   : structured data         -> exact conditions   -> rows match
+# Both coexist and both are exposed as **one tool** (see tools.py::query_data).
 #
-# 安全设计：**不让模型直接写 SQL**。模型只提交
-# table / filters / order_by / aggregate 这类结构化参数，
-# 由这里的白名单校验后构造带占位符的语句。
-# 表名与列名都必须在白名单内，模型无法碰到白名单外的任何东西。
+# Safety design: **the model never writes SQL**. It only submits structured parameters
+# (table / filters / order_by / aggregate), which are whitelist-validated here before a
+# parameterized statement is built. Table and column names must be within the whitelist,
+# so nothing outside it is reachable.
 
-# 白名单：表名 -> 可查询的列
+# Whitelist: table name -> queryable columns
 TABLE_COLUMNS: dict[str, list[str]] = {
     "metrics": ["name", "value", "unit", "note", "created_at"],
     "hosts": ["name", "ip", "region", "latency_ms", "cpu_pct", "status", "created_at"],
     "alerts": ["id", "host", "level", "message", "status", "created_at"],
+    "orders": ["id", "order_id", "customer", "status", "amount", "updated_at"],
 }
 
-# 可做聚合的数值列
+# Numeric columns that support aggregation
 NUMERIC_COLUMNS: dict[str, list[str]] = {
     "metrics": ["value"],
     "hosts": ["latency_ms", "cpu_pct"],
     "alerts": ["id"],
+    "orders": ["amount"],
 }
 
 _AGG_FUNCS = ("count", "avg", "max", "min", "sum")
 
 
 def _fmt_row(table: str, row: sqlite3.Row) -> dict:
-    """把时间戳转成可读时间。模型看到 '2026-10-01 23:55' 比看到 1790870057 更好念。"""
+    """Convert timestamps to readable time. The model reads '2026-10-01 23:55' better than 1790870057."""
     out = dict(row)
     ts = out.pop("created_at", None)
     if ts is not None:
@@ -382,11 +423,11 @@ def query_table(
     limit: int = 10,
     aggregate: str = "",
 ) -> dict:
-    """通用结构化查询。模型通过工具提交参数，本函数负责校验并执行。
+    """Generic structured query. The model submits parameters via a tool; this validates and runs.
 
-    aggregate 传 ``count`` / ``avg:列名`` / ``max:列名`` 等；
-    传了聚合就忽略 order_by 与 limit，直接返回一个数 —— 让模型能回答
-    「有几个未处理告警」这类问题，而不必把全部行拉回去自己数。
+    ``aggregate`` accepts ``count`` / ``avg:column`` / ``max:column`` etc.; when an
+    aggregate is given, order_by and limit are ignored and a single number is returned --
+    so the model can answer "how many unresolved alerts" without pulling all rows to count.
     """
     if table not in TABLE_COLUMNS:
         return {
@@ -429,7 +470,7 @@ def query_table(
             expr = "COUNT(*)"
         with _conn() as conn:
             row = conn.execute(
-                f"SELECT {expr} AS result FROM {table} {where}",  # noqa: S608 - 表名列名已白名单校验
+                f"SELECT {expr} AS result FROM {table} {where}",  # noqa: S608 - table/column whitelisted
                 params,
             ).fetchone()
         return {"table": table, "aggregate": aggregate, "result": row["result"]}
@@ -440,7 +481,7 @@ def query_table(
 
     with _conn() as conn:
         rows = conn.execute(
-            f"SELECT * FROM {table} {where} {order} LIMIT ?",  # noqa: S608 - 同上
+            f"SELECT * FROM {table} {where} {order} LIMIT ?",  # noqa: S608 - same as above
             (*params, limit),
         ).fetchall()
 
@@ -452,18 +493,20 @@ def query_table(
 
 
 def schema_summary() -> str:
-    """给模型看的表结构说明。工具描述里用它，改表时不用同步改两份。"""
+    """Table description shown to the model. Used by the tool description so tables are not described twice."""
     return "; ".join(f"{t}({', '.join(c)})" for t, c in TABLE_COLUMNS.items())
 
 
 def seed_demo_business() -> int:
-    """灌入示例业务数据，便于在没有真实数据源时验证工具链路。
+    """Seed demo business data so the tool path can be validated without a real data source.
 
-    这里刻意做成**多表且外键相关**（alerts.host 关联 hosts.name），
-    因为「数据库作为知识库」的价值恰恰在关系上：
-    能回答「延迟最高的那台机器有哪些告警」这种需要跨表的问题。
+    Deliberately **multi-table and foreign-key related** (alerts.host references
+    hosts.name), because the value of "the database as a knowledge base" is precisely the
+    relations: answering "which alerts does the slowest machine have" needs cross-table
+    queries.
 
-    真实接入后这些示例数据由采集脚本替换，表结构不变。
+    After real ingestion is wired in, the ingestion script replaces this data; the schema
+    does not change.
     """
     if query_metrics(limit=1):
         return 0
@@ -487,6 +530,11 @@ def seed_demo_business() -> int:
         ("web-02", "warning", "接口 P99 延迟超过 400ms", "firing"),
         ("db-01", "warning", "磁盘剩余空间不足 20%", "resolved"),
     ]
+    orders = [
+        ("A20261001001", "张三", "已发货", 299.0),
+        ("A20261001002", "李四", "待发货", 88.5),
+        ("A20261001003", "王五", "已完成", 1299.0),
+    ]
 
     with _conn() as conn:
         conn.executemany(
@@ -498,7 +546,12 @@ def seed_demo_business() -> int:
             "INSERT INTO alerts (host, level, message, status, created_at) VALUES (?,?,?,?,?)",
             [(*a, now) for a in alerts],
         )
+        conn.executemany(
+            "INSERT OR IGNORE INTO orders "
+            "(order_id, customer, status, amount, updated_at) VALUES (?,?,?,?,?)",
+            [(*o, now) for o in orders],
+        )
 
-    total = 4 + len(hosts) + len(alerts)
-    logger.info(f"[MEMORY] 已灌入 {total} 条示例业务数据（示例数据，非真实业务）")
+    total = 4 + len(hosts) + len(alerts) + len(orders)
+    logger.info(f"[MEMORY] seeded {total} demo business rows (demo data, not real business)")
     return total

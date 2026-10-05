@@ -1,15 +1,16 @@
-"""真实音频驱动真实 bot.py（不需要浏览器、不需要麦克风）。
+"""Drive the real bot.py with real audio (no browser, no microphone).
 
-补的是最后一块拼图：`text_probe.py` 走文本通道，**绕过了 STT 和 VAD**；
-`verify_stack.py` 测了 STT/VAD/LLM/TTS，但用的是自建管线，不走传输层。
-这里把 WAV 音频通过**真实 WebRTC 音频轨**送进真正跑起来的 `bot.py`，
-复现浏览器麦克风输入的完整路径。
+This closes the last gap: `text_probe.py` uses the text channel and **bypasses STT and
+VAD**; `verify_stack.py` tests STT/VAD/LLM/TTS but on a self-built pipeline, not through
+the transport. Here WAV audio is sent over a **real WebRTC audio track** into a genuinely
+running `bot.py`, reproducing the full browser-microphone path.
 
-延迟以**客户端侧时间戳**为准：
-    音频发完(t0) → 收到 user-transcription / bot-llm-text / bot-tts-started
-这比读日志更诚实，因为它包含了传输与编解码开销，也就是用户真实的等待。
+Latency is measured from **client-side timestamps**:
+    audio finished (t0) -> user-transcription / bot-llm-text / bot-tts-started
+That is more honest than reading logs because it includes transport and codec overhead --
+i.e. the user's real wait.
 
-用法：
+Usage:
     cd server && uv run ../audio_probe.py
     cd server && uv run ../audio_probe.py --no-spawn
 """
@@ -43,7 +44,7 @@ CHUNK_MS = 20
 
 
 def load_pcm(path: Path, target_sr: int = TARGET_SR) -> bytes:
-    """读 WAV → 单声道 16kHz 16bit PCM。"""
+    """Read WAV -> mono 16kHz 16-bit PCM."""
     import numpy as np
     import wave
 
@@ -60,7 +61,7 @@ def load_pcm(path: Path, target_sr: int = TARGET_SR) -> bytes:
 
 
 class WavTrack(MediaStreamTrack):
-    """按真实时间把 WAV 送出去，播完接着送静音（让 VAD 能判定「说完」）。"""
+    """Send the WAV in real time, then keep sending silence (so VAD can detect end of speech)."""
 
     kind = "audio"
 
@@ -75,7 +76,7 @@ class WavTrack(MediaStreamTrack):
         self.audio_done = asyncio.Event()
         self._t_end = 0.0
         self._t_speech_end = 0.0
-        self._paused = asyncio.Event()  # 未 set 时只送静音
+        self._paused = asyncio.Event()  # while unset, only silence is sent
 
     def start(self):
         self._paused.set()
@@ -86,7 +87,7 @@ class WavTrack(MediaStreamTrack):
 
     @property
     def speech_end_time(self) -> float:
-        """最后一个有效语音样本发出的时刻 —— 这才是「用户说完」。"""
+        """When the last valid speech sample was sent -- this is the true "user finished"."""
         return self._t_speech_end
 
     async def recv(self):
@@ -138,7 +139,7 @@ async def run_session(wait_seconds: float, pc_id: str) -> tuple[dict, dict]:
     from aiortc import RTCPeerConnection, RTCSessionDescription
 
     pcm = load_pcm(WAV)
-    print(f"  音频: {len(pcm) / (TARGET_SR * 2):.2f}s @ {TARGET_SR}Hz 单声道")
+    print(f"  audio: {len(pcm) / (TARGET_SR * 2):.2f}s @ {TARGET_SR}Hz mono")
 
     track = WavTrack(pcm)
     hits: dict = {}
@@ -196,7 +197,8 @@ async def run_session(wait_seconds: float, pc_id: str) -> tuple[dict, dict]:
     )
     await asyncio.wait_for(opened.wait(), timeout=30)
 
-    # version 必填：缺了后端会回 error-response「Client version unknown」。
+    # version is required: without it the backend replies with an error-response
+    # "Client version unknown".
     from pipecat.processors.frameworks.rtvi.models import PROTOCOL_VERSION
 
     channel.send(
@@ -210,14 +212,15 @@ async def run_session(wait_seconds: float, pc_id: str) -> tuple[dict, dict]:
         )
     )
 
-    # 等开场白说完再提问，否则会互相打断、测不准
+    # Wait for the opening message to finish before asking, otherwise the two interrupt
+    # each other and the measurement is useless.
     try:
         await asyncio.wait_for(bot_stopped.wait(), timeout=25)
-        print("  开场白已播报完毕，开始送音频")
+        print("  opening message finished; starting audio")
     except TimeoutError:
-        print("  未等到开场白结束，直接送音频")
+        print("  opening message did not finish; sending audio anyway")
 
-    # 开场白那一轮的事件不能计入，计时从送音频这一刻重新开始
+    # The opening-message turn must not be counted; restart the clock when audio starts.
     hits.clear()
     track.start()
     await asyncio.wait_for(track.audio_done.wait(), timeout=30)
@@ -228,16 +231,16 @@ async def run_session(wait_seconds: float, pc_id: str) -> tuple[dict, dict]:
 
 
 def scan_log() -> dict:
-    # 必须读「本次 spawn 的 stdout 日志」而不是 bot-latest.log ——
-    # 后者是所有运行共用的固定名，会残留上一次运行的内容，
-    # 导致交叉校验拿到别的运行的数据（曾出现过与客户端结果对不上的情况）。
+    # Must read the stdout log of **this spawn**, not bot-latest.log -- the latter is a
+    # fixed name shared by all runs and keeps leftovers from the previous run, which makes
+    # the cross-check report another run's data (this happened before).
     log = SERVER / "logs" / "audio-probe-server.log"
     if not log.exists():
         return {}
     text = log.read_text(encoding="utf-8", errors="replace")
     return {
-        "segments": re.findall(r"\[TURN\] 分段延迟.*", text),
-        "transcript": re.findall(r"\[TURN\] 识别文本:.*", text),
+        "segments": re.findall(r"\[TURN\] latency.*", text),
+        "transcript": re.findall(r"\[TURN\] transcript:.*", text),
         "errors": re.findall(r"\[ERROR\].*", text),
     }
 
@@ -246,23 +249,23 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--wait", type=float, default=25.0)
     ap.add_argument("--no-spawn", action="store_true")
-    ap.add_argument("--wav", default=None, help="覆盖测试音频路径（默认 verify-input-zh.wav）")
-    ap.add_argument("--ref", default=None, help="该音频的标准答案文本；给出则计算字错率")
+    ap.add_argument("--wav", default=None, help="override the test audio path (default verify-input-zh.wav)")
+    ap.add_argument("--ref", default=None, help="reference transcript for this audio; computes CER when given")
     args = ap.parse_args()
 
     wav = Path(args.wav) if args.wav else WAV
     if not wav.exists():
-        print(f"缺少测试音频 {wav}，请先运行：cd server && uv run ../verify_stack.py")
+        print(f"missing test audio {wav}; run first: cd server && uv run ../verify_stack.py")
         return 1
     globals()["WAV"] = wav
 
     print("=" * 74)
-    print("音频链路探针（真实 bot.py + 真实 WebRTC 音频轨）")
+    print("Audio pipeline probe (real bot.py + real WebRTC audio track)")
     print("=" * 74)
 
     proc = None
     if not args.no_spawn:
-        print(f"[1/3] 拉起 bot.py（{HOST}:{PORT}）…")
+        print(f"[1/3] spawning bot.py ({HOST}:{PORT}) ...")
         log = SERVER / "logs" / "audio-probe-server.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         with open(log, "wb") as fh:
@@ -273,14 +276,14 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
             )
         if not wait_up():
-            print("  bot.py 未在 180s 内就绪")
+            print("  bot.py not ready within 180s")
             return 1
-        print("  服务已就绪")
+        print("  server ready")
     else:
-        print("[1/3] 跳过拉起")
+        print("[1/3] spawn skipped")
 
     try:
-        print("[2/3] 建立 WebRTC 会话并送入音频")
+        print("[2/3] establishing WebRTC session and sending audio")
         hits, counts = asyncio.run(run_session(args.wait, f"audio-{int(time.time())}"))
     finally:
         if proc is not None:
@@ -291,39 +294,39 @@ def main() -> int:
                 proc.kill()
 
     print()
-    print("[3/3] 结果（客户端侧实测，基准 = 用户说完的那一刻）")
+    print("[3/3] results (client-side measurements, baseline = the moment the user finished)")
     print("=" * 74)
     t0 = hits.get("_t0", 0.0)
     if not t0:
-        print("  音频未发送完成")
+        print("  audio not fully sent")
         return 1
 
     rows = (
-        ("收到识别文本", "user-transcription"),
-        ("LLM 开始生成", "bot-llm-started"),
-        ("收到首个答案 token", "bot-llm-text"),
-        ("TTS 开始合成", "bot-tts-started"),
-        ("机器人开始出声", "bot-started-speaking"),
+        ("user transcript", "user-transcription"),
+        ("LLM started", "bot-llm-started"),
+        ("first answer token", "bot-llm-text"),
+        ("TTS started", "bot-tts-started"),
+        ("bot speaking", "bot-started-speaking"),
     )
     for name, key in rows:
         ts = hits.get(key)
         print(f"  {name:<22}{(ts - t0) * 1000:8.0f} ms" if ts else f"  {name:<22}     N/A")
     print("-" * 74)
-    print(f"  识别文本 : {hits.get('_transcript', '')!r}")
-    print(f"  机器人回答: {hits.get('_answer', '')!r}")
+    print(f"  transcript : {hits.get('_transcript', '')!r}")
+    print(f"  bot answer : {hits.get('_answer', '')!r}")
     if args.ref:
         from asr_bench import cer
 
-        print(f"  标准答案 : {args.ref!r}")
-        print(f"  字错率   : {cer(args.ref, hits.get('_transcript', '')) * 100:.1f}%")
+        print(f"  reference  : {args.ref!r}")
+        print(f"  CER        : {cer(args.ref, hits.get('_transcript', '')) * 100:.1f}%")
     print("-" * 74)
     if counts:
-        print(f"  收到的 RTVI 消息种类: {len(counts)}（总计 {sum(counts.values())} 条）")
+        print(f"  RTVI message kinds received: {len(counts)} (total {sum(counts.values())})")
 
     info = scan_log()
     if info.get("segments"):
         print("-" * 74)
-        print("  后端日志交叉校验:")
+        print("  backend log cross-check:")
         for line in dict.fromkeys(info["segments"]):
             print(f"    {line.strip()[:160]}")
     if info.get("transcript"):
@@ -335,9 +338,28 @@ def main() -> int:
             print(f"    {line.strip()[:160]}")
     print("=" * 74)
 
-    ok = bool(hits.get("bot-started-speaking") or hits.get("bot-tts-started"))
-    print("结论:", "语音链路打通 ✅（说完 → 机器人出声）" if ok else "语音链路未打通 ❌")
-    return 0 if ok else 1
+    # Four **mutually exclusive** verdicts (consistent with verify_tools.py / HANDBOOK-02
+    # section 6): all look like "the bot did not answer well", but the debugging direction
+    # differs completely, so they must not be lumped together.
+    errors = info.get("errors") or []
+    transcript = hits.get("_transcript", "")
+    spoke = bool(hits.get("bot-started-speaking") or hits.get("bot-tts-started"))
+    if spoke:
+        kind = "ok"
+    elif errors:
+        kind = "failed"
+    elif not transcript:
+        kind = "no_stt"
+    else:
+        kind = "no_speech"
+    labels = {
+        "ok": "[OK] voice path works (user finished -> bot speaks)",
+        "failed": "[ERR] call failed (log has [ERROR]) -> check env/config/quota",
+        "no_stt": "[ERR] no transcript -> check STT/VAD or whether audio arrived",
+        "no_speech": "[ERR] transcript present but no speech -> check LLM/TTS/pipeline",
+    }
+    print("verdict:", labels[kind])
+    return 0 if kind == "ok" else 1
 
 
 if __name__ == "__main__":

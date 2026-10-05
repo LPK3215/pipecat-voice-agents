@@ -49,7 +49,7 @@
 > ⚠️ 默认 STT 引擎 **SenseVoice 需要额外依赖**（CPU 版 torch + funasr），用
 > `uv sync --extra sensevoice` 一键安装（已配好 CPU 源，不会拖 CUDA 版）。
 > 未安装时会**自动降级为 Whisper**（实测字错率 23.8% → SenseVoice **8.2%**）。降级会写告警，
-> 且横幅 `[BOOT] STT（配置）` 之后紧跟一行 `[BOOT] STT 实际生效` —— 两者不一致即为降级。
+> 且横幅 `[BOOT] STT (configured)` 之后紧跟一行 `[BOOT] STT in effect` —— 两者不一致即为降级。
 
 **可选开关**（都在 `server/.env`，默认值已是最优）：
 
@@ -162,6 +162,116 @@ SENSENOVA_MODEL=sensenova-6.8-flash-lite
 
 ---
 
+## 知识库 / RAG（非结构化文档检索）
+
+给 Agent 接上**文档语义检索**能力（手册、合同、知识文章……）。它与 `query_data`
+（结构化表精确查询）互补：一个查"文档里怎么写的"，一个查"数据库里是多少"。
+
+**写入与查询分离**（同 HANDBOOK-02 的原则）：解析/切块/算向量在离线脚本里做，
+运行时工具只查库 —— 保证检索是毫秒级，不会让用户多等几秒。
+
+```bash
+cd server
+# 1) 灌文档（.md/.txt，可传文件或目录）
+uv run ../ingest_docs.py ../README.md
+uv run ../ingest_docs.py --dir ./docs
+uv run ../ingest_docs.py --list            # 看已入库（不加载模型）
+
+# 2) 之后正常对话即可 —— LLM 会自动调用 search_knowledge
+uv run bot.py
+```
+
+| 环节 | 选型 | 可替换点 |
+|---|---|---|
+| 嵌入 | 本地 `BAAI/bge-small-zh-v1.5`（transformers+torch，**无需 key**，512 维） | `EMBEDDING_PROVIDER=api` + `EMBEDDING_BASE_URL/API_KEY` |
+| 存储 | SQLite BLOB（float32 向量） | `KNOWLEDGE_DB` |
+| 检索 | NumPy 余弦暴力扫描（几百~几千块毫秒级） | 只改 `server/knowledge.py::search()` |
+
+> 为什么嵌入默认本地：**当前 LLM 服务商没有 embeddings 接口**（实测商汤
+> `/v1/embeddings` 返回 404），且本地免费、不受单一服务商绑定 —— 与 STT/TTS 同思路。
+
+工具注册点：`tools.py::build_tools()` 里的 `KNOWLEDGE_SCHEMA`。
+
+---
+
+## 可信性护栏：谎报执行检测
+
+**问题**：模型在没调工具时会编造成功结果（「好的，已为你设置提醒」而其实什么都没做）。
+语音场景用户看不到界面，只能相信它说的话 —— 这是最危险的失效模式。
+
+**做法**：`guards.py` 里的观察者，收集「本轮成功调用的工具」与「本轮回答文本」，
+回答结束时按规则判定，命中就写 `[GUARD]` 错误日志（可外挂回调上报前端）：
+
+```
+[GUARD] suspected false claim: reply claims 'set_reminder' but successful tool calls this turn were none
+```
+
+- 纯函数 `detect_false_claim(text, executed)` 可单测，规则见 `guards.py::ACTION_RULES`。
+- **已接入强制拦截**：命中后向模型注入「如实说明未完成」的纠正并让它重答
+  （同一动作只纠正一次，避免 `纠正→再谎报→再纠正` 的死循环）。
+- **这是启发式**（动作词 + 应有的工具），会漏也会误报；最强的约束仍是
+  「写操作走显式编排 / 确认流程」。
+
+```bash
+cd server && uv run pytest tests/test_guards.py -v   # 单独跑护栏用例
+```
+
+---
+
+## 多步编排 / 上下文摘要 / 成功率度量
+
+**多步编排（`flows.py`）** —— 模型**不会**自己串步骤（实测：问「我这边天气怎么样」，
+它跳过「回想城市」这一步，自行编了个「北京」）。把固定的调用链写成**复合工具**，
+顺序由代码保证：
+
+```
+my_local_weather  =  recall_fact(城市)  →  get_weather(city)
+```
+
+模型只需调 `my_local_weather`，中间顺序不依赖它。实测：「我这边天气怎么样」→
+正确回想出「杭州」并报天气。跨阶段的业务对话再上框架自带的 `FlowManager`。
+
+**上下文摘要（`summarize.py`）** —— 超过阈值（默认 20 条）时，把**较早**的消息压成
+一条摘要消息；`system` 与最近 8 条**原文保留**。控制 token / 成本，又不丢最近细节。
+
+**成功率度量（`verify_tools.py --repeat N`）** —— 模型是否调工具是**非确定性**的，
+样本量为 1 等于噪声。内建重复统计 + 四种**互斥**结论：
+
+```bash
+cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 20
+```
+实测（商汤，阳性对照）：
+```
+✅ 工具被调用     5/5  100.0%
+❌ 调用失败        0/5    0.0%
+❌ 无回答          0/5    0.0%
+⚠️  自行作答       0/5    0.0%
+```
+
+`audio_probe.py` 同样把结论分成四类（打通 / 调用失败 / 无识别 / 不出声），便于定位。
+
+---
+
+## 业务数据：采集与查询分离（数据库侧）
+
+工具的查询**不碰外部系统**，数据由独立的**采集脚本**写入本地库 —— 否则工具里现调接口
+会让用户多等几秒，外部源挂了问答也跟着崩。
+
+```bash
+cd server
+uv run ../collect_orders.py            # 采集示例数据入 orders 表
+uv run ../collect_orders.py --csv orders.csv   # 从 CSV 导入
+uv run ../collect_orders.py --list     # 查看
+
+# 之后模型可直接用 query_data 查：table=orders
+```
+
+- 示例表：`orders`（订单号唯一，采集用 upsert 以免重复）。
+- **换数据源只改 `collect_orders.py::fetch_from_source`**，工具/提示词不用动。
+- 新增业务表的完整步骤见 `HANDBOOK-02.md` 第 8 节。
+
+---
+
 ## 日志系统（核心）
 
 **设计目标：跑一次就能从日志看清前端、后端、每次请求的全过程。**
@@ -185,23 +295,29 @@ server/logs/bot-latest.log     固定名，永远指向最近一次运行
 实际输出示例：
 
 ```
-[BOOT]   会话 ID           = c601ecc1-8843-4aba-80ed-0fbb62d65c48
-[BOOT]   LLM 模型          = nex-agi/Nex-N2.5-mini
-[BOOT]   关闭思考模式          = True
-[BOOT]   LLM Key         = 已设置 ✅ (ms-594…4dea)
-[BOOT]   STT             = Whisper(base) 本地·无需 key
-[BOOT]   TTS             = Piper(zh_CN-huayan-medium) 本地·无需 key
-[BOOT]   VAD 说完阈值        = 0.6s（官方推荐 0.2s）
+[BOOT] ============================================================
+[BOOT] Effective configuration for this run
+[BOOT]   Session ID      = c601ecc1-8843-4aba-80ed-0fbb62d65c48
+[BOOT]   LLM model       = nex-agi/Nex-N2.5-mini
+[BOOT]   Disable thinking= True
+[BOOT]   LLM key         = set [OK] (ms-594...4dea)
+[BOOT]   STT (configured)= SenseVoice(iic/SenseVoiceSmall) local, no key (best for Chinese)
+[BOOT]   TTS (configured)= Piper(zh_CN-huayan-medium) local, no key (first chunk 76ms)
+[BOOT]   VAD stop secs   = 0.6s (official 0.2s)
+[BOOT] ============================================================
 
-[CLIENT] 浏览器已连接 | id=xxx
-[TURN] ─────── 第 1 轮对话开始 ───────
-[TURN] 用户停止说话（VAD 判定说完）
-[TURN] 识别文本: '你好请用一句话接收一下。你自己。'
-[TURN] → 发往 LLM 的上下文: [{'role': 'system', ...}, {'role': 'user', ...}]
-[TURN] ← LLM 回答完毕: '你好，我是你的语音助手，请告诉我你需要我做什么。'
-[TURN] TTS 开始出声
-[TURN] 分段延迟（基准=说完）: 识别文本 558ms | 发往LLM 560ms | 首个答案token 1091ms | 首次出声 1251ms
+[CLIENT] browser connected | id=xxx
+[TURN] ----- turn 1 started -----
+[TURN] user stopped speaking (VAD end of turn)
+[TURN] transcript: '你好请用一句话接收一下。你自己。'
+[TURN] -> context sent to LLM: [{'role': 'system', ...}, {'role': 'user', ...}]
+[TURN] <- LLM response complete: '你好，我是你的语音助手，请告诉我你需要我做什么。'
+[TURN] TTS first audio
+[TURN] latency (baseline=end_of_speech): transcript 558ms | to_llm 560ms | first_token 1091ms | first_audio 1251ms
 ```
+
+> 注：日志文案（含横幅键名、`[TURN]` 各阶段名）全部为**英文纯 ASCII**，
+> 只有对话内容（用户语音识别文本、模型回复）本身仍是中文 —— 这是运行时数据，无法避免。
 
 实现要点（`pipeline_logging.py`）：
 
@@ -228,14 +344,14 @@ uv run ../verify_stack.py --whisper small          # 换更大 STT 模型
 实测输出（nex-N2.5-mini，2026-10-01 复测，Whisper base）：
 
 ```
-语音结束 -> VAD 判定说完      454 ms
-语音结束 -> STT 最终文本     1012 ms
-语音结束 -> LLM 首 token    1545 ms
-语音结束 -> TTS 首帧音频     1705 ms
-识别文本 : '你好请用一句话接收一下。你自己。'
-模型回复 : '你好，我是你的语音助手，请告诉我你需要我做什么。'
-TTS 音频 : 200270 字节
-判定: ✅ 全链路通过
+speech end -> VAD end of turn      454 ms
+speech end -> STT final text      1012 ms
+speech end -> LLM first token     1545 ms
+speech end -> TTS first audio     1705 ms
+transcript : '你好请用一句话接收一下。你自己。'
+model reply : '你好，我是你的语音助手，请告诉我你需要我做什么。'
+TTS audio   : 200270 bytes
+verdict: [OK] full path passed
 ```
 
 三个模型均验证通过（管线内 LLM 首 token：nex 1545ms / Qwen 1963ms / deepseek 2054ms）。
@@ -257,9 +373,11 @@ uv run ../smoke.py --no-spawn # 只测已经跑起来的实例
 ```
 
 ```
-✅ GET /client/        -> HTTP 200（官方 Prebuilt 前端可访问）
-✅ POST /api/offer     -> HTTP 200（WebRTC 握手成功）
-✅ 未发现装配期硬错误
+  [OK] GET /client/ -> HTTP 200, 14203 bytes
+  [OK] frontend asset references complete: True
+  [OK] POST /api/offer -> HTTP 200
+  [OK] no hard wiring errors found
+verdict: [OK] frontend and backend handshake passed
 ```
 
 ### 文本通道探针（不用麦克风驱动真实 bot.py）
@@ -276,13 +394,19 @@ uv run ../text_probe.py --question "今天星期几"
 点「发送」走的是**同一条路径**。实测输出（2026-10-01）：
 
 ```
-前端收到的 RTVI 消息（次数）:
-  bot-llm-text x31    metrics x23        bot-output x3
-  user-llm-text x2    bot-transcription x2
-  bot-tts-started/stopped x2             bot-started-speaking x2
-  llm-function-call-started / -in-progress / -stopped  x1
-工具 : [TOOL] get_current_time -> 现在是 2026年10月1日 星期四 21点50分
-出声 : 58 次
+  RTVI messages the frontend received this turn (count):
+     bot-llm-text                       x31
+     metrics                            x23
+     bot-output                         x3
+     user-llm-text                      x2
+     bot-transcription                  x2
+     bot-tts-started                    x2
+     bot-started-speaking               x2
+     llm-function-call-started          x1
+     llm-function-call-in-progress      x1
+     llm-function-call-stopped          x1
+  tool: [TOOL] [OK] completed get_current_time (id=xxx)
+  spoke: 58 time(s)
 ```
 
 这份输出同时回答了「前端不动的话能拿到什么」：字幕、延迟指标、说话状态、
@@ -497,13 +621,20 @@ pipecat-quickstart/
 │   ├── tools.py             # LLM 可调用的工具注册中心（新增能力改这里）
 │   ├── sample_tools.py      # 示例工具集（天气/计算/换算/设备/通知/提醒）
 │   ├── memory.py            # 本地持久化：会话历史 + 长期记忆 + 业务表 + 落库观察者
+│   ├── embeddings.py        # 文本嵌入（RAG 底座，本地 bge / OpenAI 兼容可切换）
+│   ├── knowledge.py         # 知识库：文档切块 + 向量检索（换向量库只改这里）
+│   ├── flows.py             # 显式编排：多步工具链（复合工具，顺序由代码保证）
+│   ├── guards.py            # 可信性护栏：谎报执行检测 + 强制纠正
+│   ├── summarize.py         # 上下文摘要（超阈值压缩历史）
 │   ├── pipeline_logging.py  # 日志、对话时间线、故障上报（[ERROR] → 前端）
-│   ├── tests/               # pytest 单元测试（配置解析 / 工具 handler / SQL 白名单）
+│   ├── tests/               # pytest 单元测试（配置/工具/SQL/知识库）
 │   ├── pyproject.toml       # 依赖（含 sensevoice 可选 extra）
 │   ├── .env.example         # 密钥与服务商模板（按 LLM_PROVIDER 填）
 │   ├── .env                 # 真实密钥（已被 .gitignore 忽略）
 │   └── logs/                # 运行时日志（*.log 已被 .gitignore 忽略）
 ├── prewarm.py               # 预热本地模型（首次运行前跑一次）
+├── ingest_docs.py           # 把文档灌入知识库（RAG 写入侧）
+├── collect_orders.py        # 业务数据采集示例（采集与查询分离）
 ├── verify_stack.py          # 端到端自检（完整链路，较慢）
 ├── verify_tools.py          # 工具调用自检（只测后端）
 ├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
