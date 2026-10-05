@@ -1,0 +1,28 @@
+# Normalize line endings: text files use LF in the repository,
+# checkout may convert to CRLF on Windows.
+* text=auto eol=lf
+
+# Explicit text types (kept as LF regardless of platform).
+*.py   text
+*.md   text
+*.txt  text
+*.toml text
+*.json text
+*.yml  text
+*.yaml text
+*.sh   text eol=lf
+.gitignore        text
+.gitattributes    text
+
+# Binary / generated assets: never diff or merge these.
+*.wav   binary
+*.onnx  binary
+*.db    binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+
+# Keep lock files out of the language statistics on hosting platforms.
+uv.lock linguist-generated=true
+*.lock  linguist-generated=true

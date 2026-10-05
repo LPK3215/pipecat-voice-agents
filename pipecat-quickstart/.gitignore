@@ -220,3 +220,24 @@ __marimo__/
 *.debug.log
 
 # Node.js (client/)
+
+# ============================================================================
+# Project runtime artifacts (added for standalone use)
+# ============================================================================
+# The repository root's .gitignore also covers these; the rules are duplicated
+# here so this directory stays safe when published as a standalone repository.
+
+# SQLite local persistence (created at runtime; holds conversation content and
+# long-term memory). The default databases live under server/data/.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+**/server/data/
+
+# Generated test audio and local model files.
+*.wav
+*.onnx
+
+# Local caches.
+.cache/

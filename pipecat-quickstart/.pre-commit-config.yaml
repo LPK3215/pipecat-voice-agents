@@ -1,0 +1,14 @@
+# Pre-commit hooks (optional but recommended).
+#
+#   pipx install pre-commit    # or: uv tool install pre-commit
+#   pre-commit install         # run automatically before each commit
+#   pre-commit run --all-files # run once over the whole repo
+#
+# The hook set mirrors the project's own lint config in server/pyproject.toml
+# ([tool.ruff.lint] select = ["I", "UP"]).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.11
+    hooks:
+      - id: ruff
+        args: [--fix]

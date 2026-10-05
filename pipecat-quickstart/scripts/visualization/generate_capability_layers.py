@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Generate docs/capability-layers.svg -- the four-layer architecture diagram.
+
+Purpose
+    Visualize how the project is layered (see the README section
+    "分层与跨层联通性"): interface -> capability -> data access -> data,
+    i.e. the real call chain in the code.
+
+Dependencies
+    Python 3.11+ standard library only (tomllib). No third-party packages.
+
+Run
+    python3 scripts/visualization/generate_capability_layers.py
+    (paths are resolved from __file__, so the working directory does not matter)
+
+Output
+    docs/capability-layers.svg   (relative to the project root)
+
+Dynamic values
+    The version shown in the subtitle is read at run time from server/pyproject.toml.
+"""
+
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+PYPROJECT = ROOT / "server" / "pyproject.toml"
+OUT = ROOT / "docs" / "capability-layers.svg"
+
+FONT = "system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif"
+
+# (中文层名, English name, colour, [components])
+LAYERS = [
+    (
+        "接口层",
+        "Interface",
+        "#8b5cf6",
+        ["FunctionSchema 工具契约", "RTVI / WebRTC 传输", "探针 CLI（scripts/）"],
+    ),
+    (
+        "功能层",
+        "Capability",
+        "#3b82f6",
+        ["tools.py", "sample_tools.py", "flows.py", "guards.py"],
+    ),
+    (
+        "数据访问层",
+        "Data Access",
+        "#14b8a6",
+        ["memory.py", "knowledge.py", "embeddings.py"],
+    ),
+    (
+        "数据层",
+        "Data",
+        "#f59e0b",
+        ["server/data/*.db", "sample-data/*"],
+    ),
+]
+
+
+def read_version() -> str:
+    with PYPROJECT.open("rb") as fh:
+        return tomllib.load(fh)["project"]["version"]
+
+
+def build_svg(version: str) -> str:
+    w = 1080
+    lx, lw, lh, lgap = 40, 1000, 92, 24
+    y0 = 120
+    h = y0 + len(LAYERS) * lh + (len(LAYERS) - 1) * lgap + 60
+    cx = lx + lw / 2  # centre line for the downward arrows
+
+    p: list[str] = []
+    p.append(
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+        f'viewBox="0 0 {w} {h}" font-family="{FONT}">'
+    )
+    p.append(
+        "<defs>"
+        '<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#eef2f7"/>'
+        "</linearGradient>"
+        '<marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">'
+        '<path d="M0,0 L7,3 L0,6 Z" fill="#94a3b8"/></marker>'
+        '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%">'
+        '<feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.10"/>'
+        "</filter>"
+        "</defs>"
+    )
+    p.append(f'<rect width="{w}" height="{h}" fill="url(#bg)"/>')
+
+    # ---- header ----
+    p.append(
+        '<text x="40" y="46" font-size="24" font-weight="700" fill="#0f172a">'
+        "能力分层 · Capability Layers</text>"
+    )
+    p.append(
+        f'<text x="40" y="72" font-size="13" fill="#64748b">'
+        f"v{version} · 层的边界就是代码里的实际调用链（接口层 → 功能层 → 数据访问层 → 数据层）</text>"
+    )
+
+    # ---- layer bars ----
+    for i, (zh, en, color, items) in enumerate(LAYERS):
+        y = y0 + i * (lh + lgap)
+        p.append(
+            f'<g filter="url(#soft)">'
+            f'<rect x="{lx}" y="{y}" width="{lw}" height="{lh}" rx="14" fill="#ffffff"/>'
+            f"</g>"
+        )
+        p.append(f'<rect x="{lx}" y="{y}" width="8" height="{lh}" rx="4" fill="{color}"/>')
+
+        # left label
+        p.append(
+            f'<text x="{lx + 28}" y="{y + lh / 2 - 4}" font-size="16" font-weight="700" '
+            f'fill="{color}">{zh}</text>'
+        )
+        p.append(
+            f'<text x="{lx + 28}" y="{y + lh / 2 + 18}" font-size="11" fill="#94a3b8">{en}</text>'
+        )
+
+        # component chips
+        area_x, area_w, cgap, ch = lx + 210, lw - 210 - 24, 14, 38
+        n = len(items)
+        chip_w = (area_w - (n - 1) * cgap) / n
+        chip_y = y + (lh - ch) / 2
+        for j, item in enumerate(items):
+            x = area_x + j * (chip_w + cgap)
+            p.append(
+                f'<rect x="{x}" y="{chip_y}" width="{chip_w}" height="{ch}" rx="10" '
+                f'fill="{color}" fill-opacity="0.10" stroke="{color}" stroke-opacity="0.45"/>'
+            )
+            p.append(
+                f'<text x="{x + chip_w / 2}" y="{chip_y + 24}" text-anchor="middle" '
+                f'font-size="11.5" fill="#334155">{item}</text>'
+            )
+
+        # downward arrow to the next layer
+        if i < len(LAYERS) - 1:
+            p.append(
+                f'<line x1="{cx}" y1="{y + lh + 3}" x2="{cx}" y2="{y + lh + lgap - 3}" '
+                f'stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>'
+            )
+
+    # ---- footer ----
+    p.append(
+        f'<text x="40" y="{h - 22}" font-size="11" fill="#94a3b8">'
+        "Generated by scripts/visualization/generate_capability_layers.py "
+        "— re-run it after changing the layering.</text>"
+    )
+    p.append("</svg>")
+    return "".join(p)
+
+
+def main() -> None:
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(build_svg(read_version()), encoding="utf-8")
+    print(f"wrote {OUT.relative_to(ROOT)}")
+
+
+if __name__ == "__main__":
+    main()

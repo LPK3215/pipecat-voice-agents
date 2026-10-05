@@ -6,6 +6,8 @@
 > | **这是什么** | 能跑的实时语音对话 Agent，级联管线 `VAD → ASR → LLM → TTS` |
 > | **需要几个 key** | **1 个**（只有 LLM 要钱；语音识别与合成全在本地跑） |
 > | **状态** | ✅ **第二阶段已结项（`v0.1.0`，2026-10-05）** —— 能力 / 验证 / 文档三方面收口；结项快照与后续三项见 [HANDBOOK-02 §10](docs/HANDBOOK-02.md) |
+> | **仓库** | ➡️ <https://cnb.cool/lpk3215/pipecat-ai-test> |
+> | **作者** | cnb.lpk |
 > | **总览** | ➡️ [`../README.md`](../README.md)（三个东西的区别） |
 > | **找调研/基准脚本？** | ➡️ [`reference/pipecat-modelscope/`](reference/pipecat-modelscope/) （📕 已冻结，别在上面开发） |
 >
@@ -13,10 +15,14 @@
 > - 📘 [`HANDBOOK.md`](docs/HANDBOOK.md) —— 第一阶段：怎么从零搭起来（插槽 / 配置 / 踩坑）
 > - 📗 [`HANDBOOK-02.md`](docs/HANDBOOK-02.md) —— 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
 > - 📕 [`TOOL_TESTS.md`](docs/TOOL_TESTS.md) —— 工具调用压测报告（**引用数据前先读顶部的作废声明**）
+> - 📄 [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 贡献指南（环境 / 检查 / 提交规范）
+> - 📄 [`CHANGELOG.md`](CHANGELOG.md) —— 更新日志（Keep a Changelog）
 
 ---
 
 # pipecat-quickstart（官方脚手架 + 魔搭 LLM + 全量日志）
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg) ![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Tests 113 passed](https://img.shields.io/badge/tests-113%20passed-brightgreen.svg)
 
 由 **Pipecat 官方 CLI** 生成的语音 Agent，级联管线 `STT → LLM → TTS`。
 
@@ -36,6 +42,19 @@
 > **语言约定（本项目全部文档适用）**：文档正文用中文；**代码、命令与终端输出一律按原文展示
 > （英文纯 ASCII）**，不做中文意译 —— 便于直接复制运行，也避免非 UTF-8 控制台的编码问题。
 > 例外：提示词、工具 `description` 与 `spoken` 朗读文案属于**功能内容**，在代码里本来就是中文。
+
+## 架构一览
+
+级联语音管线（由 `server/bot.py` 每会话装配）与观测器挂载点：
+
+![Cascade voice pipeline](./docs/pipeline-architecture.svg)
+
+能力分层 —— 接口层 → 功能层 → 数据访问层 → 数据层（层的边界就是代码里的实际调用链）：
+
+![Capability layers](./docs/capability-layers.svg)
+
+> 两张图由 [`scripts/visualization/`](scripts/visualization/) 下的脚本生成（版本号运行时从
+> `server/pyproject.toml` 读取）；改完结构重跑脚本即可，不必手改 SVG。
 
 ## 配置一览
 
@@ -870,13 +889,22 @@ pipecat-quickstart/
 │   ├── kb_eval.py           # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
 │   ├── ingest_docs.py       # 把文档灌入知识库（RAG 写入侧）
 │   ├── collect_orders.py    # 业务数据采集示例（采集与查询分离）
-│   └── prewarm.py           # 预热本地模型（首次运行前跑一次）
+│   ├── prewarm.py           # 预热本地模型（首次运行前跑一次）
+│   └── visualization/       # 可视化脚本：生成 docs/ 下的 SVG 架构图（改结构后重跑）
 ├── docs/                    # 文档（README 留在根目录当入口）
 │   ├── HANDBOOK.md          # 第一阶段：怎么搭起来（插槽 / 配置 / 踩坑）
 │   ├── HANDBOOK-02.md       # 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
-│   └── TOOL_TESTS.md        # 工具调用压测报告（引用数据前先读顶部的作废声明）
+│   ├── TOOL_TESTS.md        # 工具调用压测报告（引用数据前先读顶部的作废声明）
+│   ├── pipeline-architecture.svg   # 管线架构图（scripts/visualization/ 生成）
+│   └── capability-layers.svg       # 能力分层图（scripts/visualization/ 生成）
 ├── reference/               # 参考案例（只读，不再开发）
 │   └── pipecat-modelscope/  #   已冻结的调研项目：模型选型报告 + 基准脚本 + ANALYSIS.md
+├── LICENSE                  # MIT 许可证
+├── CONTRIBUTING.md          # 贡献指南（环境 / 检查 / 提交规范）
+├── CHANGELOG.md             # 更新日志（Keep a Changelog）
+├── AUTHORS                  # 作者
+├── .gitattributes           # 行尾与二进制文件规范
+├── .pre-commit-config.yaml  # pre-commit 钩子（ruff）
 └── README.md                # 本文（入口）
 ```
 
@@ -899,3 +927,13 @@ pipecat-quickstart/
 4. **一条预期内的告警**：`VAD stop_secs (0.6s) differs from the recommended default (0.2s)`
    是 pipecat 的一次性信息提示，不是错误（详见上文「为什么必须改 VAD」）。
 5. **仅 Web 传输**：只启用了 SmallWebRTC。
+
+---
+
+## 许可证
+
+本项目采用 **MIT License**，全文见 [`LICENSE`](LICENSE)。
+
+> **关于上游代码**：`server/bot.py` 由 **Pipecat 官方脚手架**（`pipecat init`）生成，
+> 其顶部保留了上游的 `BSD 2-Clause` 版权声明（`Copyright (c) 2024-2025, Daily`）。
+> BSD-2-Clause 为宽松许可，允许本项目整体以 MIT 发布，但该声明需予以保留。

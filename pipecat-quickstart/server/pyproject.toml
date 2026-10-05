@@ -3,12 +3,19 @@ name = "pipecat-quickstart"
 version = "0.1.0"
 description = "Voice AI bot built with Pipecat"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "cnb.lpk", email = "4tdEacxA3Uip3zcDiU1QiA+cnb.lpk@noreply.cnb.cool" },
+]
 dependencies = [
     # 下限必须是 1.12：本项目用到 PipelineWorker / LLMContextAggregatorPair /
     # FunctionCallObserver / frame.broadcast_sibling_id 等 1.12 才有的 API。
     # 写 1.4 会让新环境解析出与代码不兼容的版本（uv.lock 里已是 1.12）。
     "pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.12.0",
 ]
+
+[project.urls]
+Repository = "https://cnb.cool/lpk3215/pipecat-ai-test"
 
 [project.optional-dependencies]
 # 中文最优的本地 ASR（STT_ENGINE=sensevoice，默认值）。
