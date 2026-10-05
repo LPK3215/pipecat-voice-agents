@@ -178,8 +178,10 @@ SENSENOVA_MODEL=sensenova-6.8-flash-lite
 cd server
 # 1) 灌文档（.md/.txt，可传文件或目录）
 uv run ../ingest_docs.py ../README.md
+uv run ../ingest_docs.py ../sample-data/product-faq.md   # 仓库自带的假手册（用于验证检索）
 uv run ../ingest_docs.py --dir ./docs
 uv run ../ingest_docs.py --list            # 看已入库（不加载模型）
+uv run ../ingest_docs.py --delete <source> # 删除某篇（按 source）
 
 # 2) 之后正常对话即可 —— LLM 会自动调用 search_knowledge
 uv run bot.py
@@ -263,8 +265,8 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 
 ```bash
 cd server
-uv run ../collect_orders.py            # 采集示例数据入 orders 表
-uv run ../collect_orders.py --csv orders.csv   # 从 CSV 导入
+uv run ../collect_orders.py            # 采集内置示例数据入 orders 表
+uv run ../collect_orders.py --csv ../sample-data/orders.csv   # 用仓库自带的假数据（18 笔，跑两次不翻倍）
 uv run ../collect_orders.py --list     # 查看
 
 # 之后模型可直接用 query_data 查：table=orders
@@ -657,6 +659,7 @@ pipecat-quickstart/
 │   ├── .env.example         # 密钥与服务商模板（按 LLM_PROVIDER 填）
 │   ├── .env                 # 真实密钥（已被 .gitignore 忽略）
 │   └── logs/                # 运行时日志（*.log 已被 .gitignore 忽略）
+├── sample-data/             # 假数据样例：orders.csv（18 笔订单）+ product-faq.md（测试 RAG 用）
 ├── prewarm.py               # 预热本地模型（首次运行前跑一次）
 ├── ingest_docs.py           # 把文档灌入知识库（RAG 写入侧）
 ├── collect_orders.py        # 业务数据采集示例（采集与查询分离）
