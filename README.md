@@ -51,7 +51,7 @@
 保留价值（这些东西现在还有用）：
 
 - **模型选型报告** —— 为什么默认是 `nex-agi/Nex-N2.5-mini`（当时把魔搭可用模型全测了一遍）
-- **4 个基准脚本** —— `test_llm.py` / `test_e2e.py` / `probe_thinking.py` / `check_wiring.py`
+- **5 个基准/验证脚本** —— `test_llm.py` / `test_e2e.py` / `scripts/probe_thinking.py` / `scripts/check_wiring.py` / `scripts/test_local_chain.py`
 - **`logs/ANALYSIS.md`** —— 当时发现并修复的缺陷记录
 - **一个关键洞察：`TTFB` ≠ `TTFAT`** —— 只看"首 token"选模型会严重误判（详见其 README）
 

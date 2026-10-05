@@ -40,7 +40,7 @@
 
 ## 1. 扩展点，就这几处
 
-第二阶段只会在这些地方动手，别的地方不用看：
+第二阶段只会在这些地方动手，别的地方不用看（前六处是业务扩展点，后两处是横切能力，按需改）：
 
 | 扩展点 | 位置 | 说明 |
 |---|---|---|
@@ -49,7 +49,9 @@
 | **③ 上下文** | `bot.py` 里的 `LLMContext` | 记忆注入、系统提示词 |
 | **④ 结构化数据** | **框架不管** —— 自建（`memory.py`） | 数据库、业务表、会话/长期记忆 |
 | **⑤ 知识库 / RAG** | **框架不管** —— 自建（`knowledge.py` + `embeddings.py`） | 文档切块 + 向量检索 |
-| **⑥ 编排** | 框架自带 `flows/` | 多步任务、需要固定顺序的流程 |
+| **⑥ 编排** | 框架自带 `flows/`（本仓库另有 `flows.py` 做固定调用链） | 多步任务、需要固定顺序的流程 |
+| **⑦ 可信性护栏** | 自建（`guards.py`，挂在 `observers=`） | 检出「谎报执行」，可注入纠正让模型如实重答 |
+| **⑧ 上下文摘要** | 自建（`summarize.py`，挂在 `observers=`） | 超阈值压缩较早消息，控制 token 与成本 |
 
 **记住一句话**：框架给的是**接线板**，业务逻辑全在你的代码里。
 
@@ -191,7 +193,7 @@ def build_tools() -> ToolsSchema:
 **这条边界也是给未来的自己省事**：换数据源时**只改采集脚本**，
 工具、schema、提示词一行都不用动。
 
-### 3.2 本仓库数据层的三张表
+### 3.2 本仓库数据层的表（三类，共 6 张）
 
 `server/memory.py`：
 
@@ -199,7 +201,7 @@ def build_tools() -> ToolsSchema:
 |---|---|---|
 | `turns` | 会话历史（框架的短期记忆持久化） | `TurnRecorder`（**观察者**，挂在 `observers=`；两侧文本帧都会被各自聚合器消费，管线处理器收不到） |
 | `facts` | 长期记忆（跨会话） | `remember_fact` 工具 |
-| `metrics` / `hosts` / `alerts` | 业务数据 | 采集脚本（当前是示例数据） |
+| `metrics` / `hosts` / `alerts` / `orders` | 业务数据 | 采集脚本（当前是示例数据，见 `collect_orders.py`） |
 
 ### 3.3 加一张业务表的步骤
 
@@ -420,10 +422,10 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 
 | 项 | 位置 | 实测 |
 |---|---|---|
-| SQLite 数据层（会话/记忆/业务三张表） | `server/memory.py` | ✅ |
+| SQLite 数据层（会话 / 记忆 / 业务三类，共 6 张表） | `server/memory.py` | ✅ |
 | 长期记忆（注入 + 工具双层） | `memory.py` + `tools.py` | ✅ 跨会话答对「你叫张三」 |
 | 通用结构化查询 + 白名单 | `query_data` | ✅ 4 类问题全对 |
-| 10 个类型各异的示例工具 | `server/sample_tools.py` | ✅ 单工具选型可靠 |
+| 12 个类型各异的工具（`tools.py` 6 个核心 + `sample_tools.py` 6 个示例） | `server/tools.py` + `server/sample_tools.py` | ✅ 单工具选型可靠 |
 | 工具调用全量日志 | `pipeline_logging.py` | ✅ 六种结局完整记录 |
 | 工具数量按需加载 | `TOOLS_EXCLUDE` | ✅ |
 | 验证脚本区分四种失败 | `verify_tools.py` | ✅ 已修（曾把 429 误报为「自行作答」） |
