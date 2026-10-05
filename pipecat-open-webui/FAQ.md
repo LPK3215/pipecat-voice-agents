@@ -129,3 +129,43 @@ echo "$CNB_VSCODE_PROXY_URI"
 - 也可在 WebIDE 的 **PORTS** 面板添加 `8000` 端口映射，从面板里点开的 URL 访问
 - 该域名前缀由**环境实例**决定，重建环境后可能变化 —— 以 `$CNB_VSCODE_PROXY_URI` 为准
 - 官方文档：<https://docs.cnb.cool/zh/workspaces/business-preview.md>
+
+## 语音（本分支接入）
+
+### Q13: 语音功能怎么用？为什么默认不可用？
+
+Open WebUI **自带**语音插槽（STT/TTS），但 **slim 模式默认禁用本地引擎**，所以开箱是"没有语音"。
+
+本分支已接好（全部走 Open WebUI 自己的插槽，**不是外挂服务**）：
+
+| 环节 | 引擎 | 说明 |
+|---|---|---|
+| **语音输入（STT）** | 本地 **faster-whisper** | 已在 `routers/audio.py` 放开 slim 限制；额外依赖见 `backend/requirements-voice.txt` |
+| **语音输出（TTS）** | **浏览器 `speechSynthesis`** | 前端直接合成，零后端依赖（`audio.tts.engine = ''`） |
+| 中间 | Open WebUI 官方 chat + 工具调用 | **未做任何改动** |
+
+**用法**：聊天输入区的**麦克风按钮**（或通话按钮）→ 说话 → 自动转写并发送 → 回复用浏览器语音朗读。
+
+### Q14: 语音识别不准 / 想换模型？
+
+默认 `WHISPER_MODEL=base`（快，中文一般）。想更准：
+
+```bash
+WHISPER_MODEL=small   # 中文明显更好，代价是更慢（CPU）
+```
+
+在 `.env` 里设，或在 **Settings → Audio → STT** 里改。
+
+### Q15: 语音没声音？
+
+TTS 走**浏览器**，依次确认：
+
+1. 浏览器未静音、允许自动播放
+2. 系统装了中文语音包（Windows/macOS 一般自带；Linux 需 `espeak-ng` 等）
+3. **Settings → Audio → TTS** 里 engine 保持为空（= 浏览器合成）
+
+### Q16: 为什么改 `audio.py` 而不写个独立语音服务？
+
+这是**设计选择**：本项目的目标是"让语音**长在 Open WebUI 身上**"，用它的原生插槽，
+而不是外挂一套语音服务让它去调。改动很小（3 处，均已标注 `[pipecat-open-webui 本分支改动]`），
+方便与上游 diff。

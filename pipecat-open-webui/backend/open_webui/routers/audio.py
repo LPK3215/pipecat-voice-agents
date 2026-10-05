@@ -215,8 +215,10 @@ def transcode_audio_to_mp3(audio_data: bytes, content_type_header: str, output_p
 
 
 def set_faster_whisper_model(model: str, auto_update: bool = False):
-    if USE_SLIM:
-        raise HTTPException(503, 'Configure an external speech-to-text engine. Local Whisper is unavailable in slim.')
+    # [pipecat-open-webui 本分支改动] 上游在 slim 下禁止本地 Whisper；本分支已在 slim 环境安装
+    # faster-whisper，故放开此限制，让"本地 STT"这一 Open WebUI 原生引擎可用。
+    # if USE_SLIM:
+    #     raise HTTPException(503, 'Configure an external speech-to-text engine. Local Whisper is unavailable in slim.')
     whisper_model = None
     if model:
         from faster_whisper import WhisperModel
@@ -291,8 +293,9 @@ async def get_audio_config(request: Request, user=Depends(get_admin_user)):
 async def update_audio_config(request: Request, form_data: AudioConfigUpdateForm, user=Depends(get_admin_user)):
     if USE_SLIM:
         current = await Config.get_many('audio.stt.engine', 'audio.tts.engine')
-        if form_data.stt.ENGINE == '' and current.get('audio.stt.engine') != '':
-            raise HTTPException(400, 'Local Whisper is unavailable in slim. Select an external speech-to-text engine.')
+        # [pipecat-open-webui 本分支改动] 放开 slim 下本地 STT（已安装 faster-whisper）
+        # if form_data.stt.ENGINE == '' and current.get('audio.stt.engine') != '':
+        #     raise HTTPException(400, 'Local Whisper is unavailable in slim. Select an external speech-to-text engine.')
         if form_data.tts.ENGINE == 'transformers' and current.get('audio.tts.engine') != 'transformers':
             raise HTTPException(400, 'Local TTS is unavailable in slim. Select an external text-to-speech engine.')
     await Config.upsert(
@@ -302,7 +305,7 @@ async def update_audio_config(request: Request, form_data: AudioConfigUpdateForm
         }
     )
 
-    if form_data.stt.ENGINE == '' and not USE_SLIM:
+    if form_data.stt.ENGINE == '':  # [pipecat-open-webui 本分支改动] 去掉 `and not USE_SLIM`，slim 下也加载本地模型
         request.app.state.faster_whisper_model = await asyncio.to_thread(
             set_faster_whisper_model, form_data.stt.WHISPER_MODEL, WHISPER_MODEL_AUTO_UPDATE
         )

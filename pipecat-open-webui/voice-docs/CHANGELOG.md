@@ -21,6 +21,16 @@
 - `CODE_OF_CONDUCT.md`、`contribution_stats.py`、`demo.png`、`banner.png`、`TROUBLESHOOTING.md`、`.github/`、`docs/SECURITY.md`
 - **说明**：这些是上游的元数据 / 宣传 / CI 文件，与本分支「语音实验」无关，移除**不影响运行**
 
+### 接入语音（使用 Open WebUI 原生插槽，非外挂服务）
+
+- **STT（语音输入）**：本地 **faster-whisper**（Open WebUI 原生引擎）
+  - `backend/open_webui/routers/audio.py` 三处二次开发：放开 slim 模式对本地 Whisper 的禁止
+    （每处均标注 `[pipecat-open-webui 本分支改动]`，便于与上游 diff）
+  - 新增 `backend/requirements-voice.txt`：本分支额外依赖（与上游 `uv.lock` 版本对齐）
+- **TTS（语音输出）**：**浏览器 `speechSynthesis`**（`audio.tts.engine = ''` 时前端直接合成，零后端依赖）
+- **中间链路**：完全走 Open WebUI 官方 `chat completion` + 工具调用，未做任何改动
+- 实测：STT 端点 `POST /api/v1/audio/transcriptions` → `HTTP 200`，正确转写
+
 ### 变更
 
 - **项目更名**：`voice-bridge` → **`pipecat-open-webui`**（Open WebUI + Pipecat 组合命名；与 `pipecat-quickstart` 一脉相承）

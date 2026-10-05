@@ -1,0 +1,19 @@
+# ============================================================
+#  [pipecat-open-webui 本分支] 在 requirements-slim.txt 之上额外需要的依赖
+#
+#  用途：让 slim 模式的「本地 STT」（Open WebUI 原生引擎 faster-whisper）可用。
+#        上游 slim 模式默认禁用本地 Whisper，本分支已在 audio.py 放开该限制。
+#
+#  安装：
+#      uv pip install --python .venv/bin/python -r requirements-voice.txt
+#
+#  版本与上游 uv.lock 对齐（避免 huggingface-hub 过新导致：
+#      open() got an unexpected keyword argument 'metadata_errors'）
+# ============================================================
+
+faster-whisper==1.2.1
+huggingface-hub==1.20.1
+tokenizers==0.22.2
+onnxruntime==1.26.0
+ctranslate2==4.8.0
+av==14.0.1
