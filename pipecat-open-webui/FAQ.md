@@ -146,15 +146,34 @@ Open WebUI **自带**语音插槽（STT/TTS），但 **slim 模式默认禁用�
 
 **用法**：聊天输入区的**麦克风按钮**（或通话按钮）→ 说话 → 自动转写并发送 → 回复用浏览器语音朗读。
 
-### Q14: 语音识别不准 / 想换模型？
+### Q14: 语音识别不准 / 识别成外语（泰语、英语）？
 
-默认 `WHISPER_MODEL=base`（快，中文一般）。想更准：
+**两个必设项**（本分支已默认配好）：
+
+| 配置 | 值 | 为什么必须 |
+|---|---|---|
+| `WHISPER_LANGUAGE` | `zh` | ⚠️ **不设它会"自动猜语种"** —— 实测把中文**误判成泰语**（`config.py:1572`，**优先级高于界面里的 STT Language**） |
+| `audio.stt.whisper_model` | `small` | `base` 对中文太弱（你另一个项目实测：base 字错率 **23.8%**） |
+
+**改法**：
 
 ```bash
-WHISPER_MODEL=small   # 中文明显更好，代价是更慢（CPU）
+# 1) 语言：写在 .env 里（纯环境变量，最高优先级）
+WHISPER_LANGUAGE=zh
 ```
 
-在 `.env` 里设，或在 **Settings → Audio → STT** 里改。
+```bash
+# 2) 模型：它是 PersistentConfig ——【数据库值优先于环境变量】！必须改 DB
+cd backend && .venv/bin/python -c "import sqlite3;c=sqlite3.connect('data/webui.db');cur=c.cursor();cur.execute('UPDATE config SET value=? WHERE key=?',('\"small\"','audio.stt.whisper_model'));c.commit()"
+# 或直接在界面 Settings → Audio → STT 里改
+```
+
+**实测对比**（同一段中文音频）：
+
+| 配置 | 结果 |
+|---|---|
+| `base` + 不指定语言 | 识别成**泰语** ❌ |
+| `small` + `WHISPER_LANGUAGE=zh` | `"你好请用一句话介绍一下,你自己。"` ✅ |
 
 ### Q15: 语音没声音？
 

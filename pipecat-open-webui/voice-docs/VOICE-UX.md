@@ -66,6 +66,16 @@ if (recording && Date.now() - lastSoundTime > 3000) {
 
 ---
 
+## 1.5 必需配置（不配就出问题）
+
+| 配置 | 值 | 为什么 |
+|---|---|---|
+| `WHISPER_LANGUAGE` | `zh` | **不设 = Whisper 自动猜语种** —— 实测把中文**误判成泰语**（回复也跟着变泰语）。`config.py:1572`，优先级高于界面设置 |
+| `audio.stt.whisper_model` | `small` | `base` 对中文太弱；`small` 已有本地缓存，无需重新下载 |
+
+> ⚠️ 第二个是 **PersistentConfig**：**数据库值优先于环境变量**，改 `.env` 不生效，必须改 DB 或在界面里改。
+> 完整命令与实测对比见 [`../FAQ.md`](../FAQ.md) Q14。
+
 ## 2. 不用改的（本来就内置）
 
 | 能力 | 位置 | 说明 |
