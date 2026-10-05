@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-![License: MIT (root & projects 1-2)](https://img.shields.io/badge/License-MIT-yellow.svg) ![License: Open WebUI (project 3)](https://img.shields.io/badge/License-Open%20WebUI-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
+![License: MIT (root + 2 of 3 projects)](https://img.shields.io/badge/License-MIT%20(root%20%2B%202%2F3)-yellow.svg) ![License: Open WebUI (pipecat-open-webui)](https://img.shields.io/badge/License-Open%20WebUI%20(pipecat--open--webui)-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
 
 > **与 Pipecat 官方无隶属关系。** Pipecat 是 **Daily / pipecat-ai** 的开源框架（BSD-2-Clause）。
 > 本仓库是对该框架的**独立学习与实践**，与 Pipecat 项目无从属、赞助或背书关系。
@@ -45,18 +45,42 @@
 
 ---
 
+## 接下来去哪（文档导航）
+
+每一处细节都写在**拥有它的那份文档**里。本页只负责告诉你**该打开哪一份**：
+
+| 我想知道…… | 打开 |
+|---|---|
+| **Pipecat 这个框架**本身适不适合我 | [`research/pipecat-项目调研.md`](research/pipecat-项目调研.md) |
+| 该用**哪个项目**、为什么是三个 | 本页 + [`FAQ.md`](FAQ.md) 第 1 / 2 条 |
+| 跑起这个**完整语音 Agent** | [`pipecat-quickstart/README.md`](pipecat-quickstart/README.md) |
+| 从零搭一个 / 写自己的业务 | `pipecat-quickstart/docs/HANDBOOK.md` · [`docs/HANDBOOK-02.md`](pipecat-quickstart/docs/HANDBOOK-02.md) |
+| 判断它的工具调用靠不靠谱 | [`pipecat-quickstart/docs/TOOL_TESTS.md`](pipecat-quickstart/docs/TOOL_TESTS.md)（先读顶部作废声明） |
+| 给**现成的智能体平台**加语音 | [`voice-module-dify/README.md`](voice-module-dify/README.md) + [`docs/PORTING.md`](voice-module-dify/docs/PORTING.md) |
+| 看一个**真实的 Dify 案例**与实测数字 | [`voice-module-dify/CASE-dify.md`](voice-module-dify/CASE-dify.md) |
+| 给**宿主系统**加语音 | [`pipecat-open-webui/README.md`](pipecat-open-webui/README.md) + [`voice-docs/INTEGRATION.md`](pipecat-open-webui/voice-docs/INTEGRATION.md) |
+| 比延迟、选模型 | [`pipecat-quickstart/reference/pipecat-modelscope/`](pipecat-quickstart/reference/)（已冻结） |
+| **改了什么**、什么时候改的 | [`CHANGELOG.md`](CHANGELOG.md) |
+| 想参与贡献 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+
+---
+
 ## 📗 `pipecat-quickstart/` —— 完整语音 Agent
 
 | 项 | 说明 |
 |---|---|
 | 是什么 | 能跑的实时语音对话 Agent，级联管线 `VAD → ASR → LLM → TTS` |
+| 核心主张 | 语音就是产品本身：这条管线端到端拥有「听 → 想 → 说」的全过程 |
 | 需要几个 key | **1 个**（只有 LLM 要钱；STT / TTS 全在本地跑） |
 | 状态 | ✅ **第二阶段已结项（`v0.1.0`，2026-10-05）** —— 能力 / 验证 / 文档三方面收口 |
 | 许可证 | MIT |
 | 技术栈 | Python + Pipecat 1.12+；SenseVoice / Whisper（本地 STT）+ Piper / Kokoro（本地 TTS） |
 | 访问方式 | 浏览器 `http://localhost:7860/client` |
 
-配套文档：
+**它负责什么**：整条链路 —— `VAD → ASR → LLM → TTS`，外加工具、记忆、知识库与编排。
+**怎么在它上面开发**不写在这里：见 `docs/HANDBOOK.md`（第一阶段）与 `docs/HANDBOOK-02.md`（第二阶段）。
+
+**配套文档** —— 细节都在里面，本页只做指引：
 
 | 文件 | 内容 |
 |---|---|
@@ -86,12 +110,14 @@ uv run bot.py                  # 浏览器打开 http://localhost:7860/client
 | 状态 | ✅ **`v0.0.1` 完成**（2026-10-05）—— 4 个探针 + 33 个单测 |
 | 许可证 | MIT |
 | 技术栈 | Python + Pipecat；本地 Whisper（STT）+ Piper（TTS）；WebSocket / SmallWebRTC 双入口 |
+| 访问方式 | 浏览器 `http://localhost:8081/voice-client.html`（页面走 8081；模块监听 8090） |
 | 案例 | 接 **Dify**（完整流程见 `CASE-dify.md`） |
 
-**它特别处理了语音里真正难的部分**：判断说完没有、打断、边收边说（首句就开口）、平台慢时填场、
+**它负责什么**：语音里真正难的那些部分 —— 判断说完没有、打断、边收边说（首句就开口）、平台慢时填场、
 页面上实时显示思考 / 工具调用 / 工具结果 / 每轮三段耗时。
+它**明确不负责**：思考、工具与记忆 —— 见 `docs/CONCEPTS.md`。
 
-配套文档：
+**配套文档** —— 细节都在里面，本页只做指引：
 
 | 文件 | 内容 |
 |---|---|
@@ -101,7 +127,7 @@ uv run bot.py                  # 浏览器打开 http://localhost:7860/client
 | `docs/PORTING.md` | 换成你自己的平台：契约 + 清单 |
 | `docs/HANDBOOK-03.md` | 阶段手册（从零搭的过程、已验证/未验证分开写） |
 
-**30 秒跑起来**（不用真平台，用本地替身顶着）：
+**快速上手**（不用真平台，用本地替身顶着）：
 
 ```bash
 cd voice-module-dify
@@ -119,30 +145,20 @@ uv run python probe/verify_speech_legs.py   # 验证它真的能说、也能听
 |---|---|
 | 是什么 | **Open WebUI 的二次开发分支**：把一个现成 agent 系统的语音能力升级/补齐 |
 | 核心主张 | 宿主系统是主人，语音是它内部的一块**可插拔零件**（用它的原生插槽，非外挂服务） |
-| 上游基线 | Open WebUI `v0.11.4` |
+| 需要几个 key | **1 个** —— 宿主要接大模型（OpenAI 兼容的 `OPENAI_API_KEY`）；STT 在本地跑，TTS 在浏览器里跑 |
 | 状态 | ✅ **已跑通**（LLM 对话 + 语音输入输出）；测试性质，非生产 |
 | 许可证 | **双协议** —— 上游代码沿用 **Open WebUI License**；**本分支新增的独立文件采用 MIT**（见 `LICENSE-SUPPLEMENT.md`） |
 | 技术栈 | Python / FastAPI 后端 + SvelteKit 前端；**只做界面与编排，不跑模型**（纯 CPU 够用） |
+| 访问方式 | 浏览器 `http://localhost:8000`（本机；本分支不自带托管 —— 见 `FAQ.md` Q12） |
 | 语音实现 | **STT** = 本地 `faster-whisper`（用 Open WebUI 原生插槽）；**TTS** = 浏览器 `speechSynthesis` |
+| 上游基线 | Open WebUI `v0.11.4` |
 
-**访问地址**：
+> **署名**：上游「Open WebUI」品牌标识原样保留 —— 这是 Open WebUI License 的要求。
 
-| 场景 | 地址 |
-|---|---|
-| 本机 | <http://localhost:8000> |
-| 仓库（源码 / 文档） | <https://github.com/LPK3215/pipecat-voice-agents> |
+**它负责什么**：只有两片薄薄的 I/O —— 语音进、语音出。思考、工具、记忆、知识库与会话管理
+**全部留给宿主**；这是设计，不是缺口（见 `voice-docs/INTEGRATION.md` 第 0 节）。
 
-> 该分支只做语音 I/O，不自带托管；公网访问需自行部署（见该项目 `FAQ.md` Q12）。
-
-**启动**（源码模式，详见该项目 `README.md` 的「本分支怎么跑」一节）：
-
-```bash
-cd pipecat-open-webui/backend
-USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT=8000 \
-  PATH="$PWD/.venv/bin:$PATH" ./start.sh
-```
-
-配套文档（本分支自有的放在 `voice-docs/`，与上游 `docs/` 分开）：
+**配套文档** —— 细节都在里面，本页只做指引（本分支自有的放在 `voice-docs/`，与上游 `docs/` 分开）：
 
 | 文件 | 内容 |
 |---|---|
@@ -153,6 +169,14 @@ USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT
 | `voice-docs/CHANGELOG.md` | 本分支相对上游的**全部改动记录** |
 | `FAQ.md` | 常见问题（含 **Q14：识别成外语怎么办**） |
 | `voice-docs/PLATFORM-SELECTION.md` | 宿主平台选型调研（Open WebUI / LibreChat / LobeChat 对比） |
+
+**快速上手**（源码模式，详见该项目 `README.md` 的「本分支怎么跑」一节）：
+
+```bash
+cd pipecat-open-webui/backend
+USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT=8000 \
+  PATH="$PWD/.venv/bin:$PATH" ./start.sh
+```
 
 ---
 
@@ -175,6 +199,9 @@ USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT
 ---
 
 ## 三个容易踩的坑
+
+> 这里只做提醒，每条一句话，让你知道有这个坑。完整答案在 [`FAQ.md`](FAQ.md)（第 6 / 2 / 5 条）
+> 与拥有该问题的项目里 —— 顺着链接看，别只信这一句摘要。
 
 **1. 延迟数字不能直接比。**
 
@@ -207,14 +234,14 @@ pipecat-voice-agents/
 │
 ├── research/
 │   └── pipecat-项目调研.md      # 框架调研：Pipecat 能干什么（非项目）
-├── docs/                        # GitHub Pages 站点（经典模式）+ 生成的资产
+├── docs/                        # GitHub Pages 站点（经典模式）—— lpk3215.github.io/pipecat-voice-agents
 │   ├── repo-map.svg             #   生成的关系图（英文，只此一份）
 │   ├── index.html / style.css / script.js / charts.js / project_card.html
 │   └── .nojekyll                #   禁用 Jekyll
 ├── scripts/
 │   └── visualization/
 │       └── generate_repo_map.mjs  # 生成上面那张图（Node，仅内置模块）
-├── project_overview/            # 自包含的全景观览站点（docs/ 副本的来源）
+├── project_overview/            # 本地版全景观览站点（index.html 用 ../ 链接；docs/ 是网页版）
 │   ├── index.html / style.css / script.js / charts.js / project_card.html
 │   └── assets/
 ├── project_overview.html        # 本地入口（meta refresh），双击即开

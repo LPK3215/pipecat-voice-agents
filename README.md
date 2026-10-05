@@ -2,7 +2,7 @@
 
 [中文](README.zh-CN.md)
 
-![License: MIT (root & projects 1-2)](https://img.shields.io/badge/License-MIT-yellow.svg) ![License: Open WebUI (project 3)](https://img.shields.io/badge/License-Open%20WebUI-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
+![License: MIT (root + 2 of 3 projects)](https://img.shields.io/badge/License-MIT%20(root%20%2B%202%2F3)-yellow.svg) ![License: Open WebUI (pipecat-open-webui)](https://img.shields.io/badge/License-Open%20WebUI%20(pipecat--open--webui)-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
 
 > **Not affiliated with the Pipecat project.** Pipecat is an open-source framework by **Daily / pipecat-ai**
 > (BSD-2-Clause licensed). This repository is an **independent study and application** of that framework —
@@ -46,18 +46,43 @@ changes instead of editing the SVG by hand.</sub>
 
 ---
 
+## Where to go next (document map)
+
+Every piece of detail lives in the document that owns it. This page tells you **which one to open**:
+
+| I want to… | Open |
+|---|---|
+| Understand whether the **Pipecat framework** itself fits | [`research/pipecat-项目调研.md`](research/pipecat-项目调研.md) |
+| Decide **which project** to use, and why there are three | this page + [`FAQ.md`](FAQ.md) Q1 / Q2 |
+| Run the **full voice agent** | [`pipecat-quickstart/README.md`](pipecat-quickstart/README.md) |
+| Build one from scratch / write my own business logic | `pipecat-quickstart/docs/HANDBOOK.md` · [`docs/HANDBOOK-02.md`](pipecat-quickstart/docs/HANDBOOK-02.md) |
+| Judge how reliable its tool calling is | [`pipecat-quickstart/docs/TOOL_TESTS.md`](pipecat-quickstart/docs/TOOL_TESTS.md) (read the retraction notice first) |
+| Add voice **to an existing agent platform** | [`voice-module-dify/README.md`](voice-module-dify/README.md) + [`docs/PORTING.md`](voice-module-dify/docs/PORTING.md) |
+| See a **real Dify case**, measured | [`voice-module-dify/CASE-dify.md`](voice-module-dify/CASE-dify.md) |
+| Add voice **to a host system** | [`pipecat-open-webui/README.md`](pipecat-open-webui/README.md) + [`voice-docs/INTEGRATION.md`](pipecat-open-webui/voice-docs/INTEGRATION.md) |
+| Compare latency, pick an LLM | [`pipecat-quickstart/reference/pipecat-modelscope/`](pipecat-quickstart/reference/) (frozen) |
+| Know **what changed** and when | [`CHANGELOG.md`](CHANGELOG.md) |
+| Contribute | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+
+---
+
 ## 📗 `pipecat-quickstart/` — Full Voice Agent
 
 | Item | Description |
 |---|---|
 | What it is | A runnable real-time voice conversation agent; cascaded pipeline `VAD → ASR → LLM → TTS` |
+| Core idea | Voice is the product itself: this pipeline owns listening, thinking and speaking end to end |
 | API keys needed | **1** (only the LLM costs money; STT / TTS run fully locally) |
 | Status | ✅ **Phase 2 closed (`v0.1.0`, 2026-10-05)** — capabilities, verification and docs all wrapped up |
 | License | MIT |
 | Stack | Python + Pipecat 1.12+; SenseVoice / Whisper (local STT) + Piper / Kokoro (local TTS) |
 | Access | Browser at `http://localhost:7860/client` |
 
-Companion documents:
+**What it deliberately owns**: the whole loop — `VAD → ASR → LLM → TTS` — plus tools, memory,
+knowledge base and orchestration. *How* to build on it is not here: see `docs/HANDBOOK.md` (phase 1)
+and `docs/HANDBOOK-02.md` (phase 2).
+
+**Companion documents** — all detail lives there, this page only points at it:
 
 | File | Content |
 |---|---|
@@ -87,13 +112,15 @@ uv run bot.py                  # open http://localhost:7860/client
 | Status | ✅ **`v0.0.1` complete** (2026-10-05) — 4 probes + 33 unit tests |
 | License | MIT |
 | Stack | Python + Pipecat; local Whisper (STT) + Piper (TTS); WebSocket / SmallWebRTC dual entry points |
+| Access | Browser at `http://localhost:8081/voice-client.html` (page served on 8081; module listens on 8090) |
 | Case study | Dify (full walkthrough in `CASE-dify.md`) |
 
-**It handles the genuinely hard parts of voice**: end-of-turn detection, interruption, speaking while still
-receiving (first sentence out immediately), filling the silence while the platform is slow, and showing
-thinking / tool calls / tool results / per-turn latency live on the page.
+**What it deliberately owns**: the parts of voice that are genuinely hard — end-of-turn detection,
+interruption, speaking while still receiving (first sentence out immediately), filling the silence while the
+platform is slow, and showing thinking / tool calls / tool results / per-turn latency live on the page.
+What it deliberately **does not** own: thinking, tools and memory — see `docs/CONCEPTS.md`.
 
-Companion documents:
+**Companion documents** — all detail lives there, this page only points at it:
 
 | File | Content |
 |---|---|
@@ -103,7 +130,7 @@ Companion documents:
 | `docs/PORTING.md` | Swap in your own platform: contract + checklist |
 | `docs/HANDBOOK-03.md` | Phase handbook (how it was built; verified and unverified kept separate) |
 
-**Run it in 30 seconds** (no real platform needed — a local stand-in takes its place):
+**Quick start** (no real platform needed — a local stand-in takes its place):
 
 ```bash
 cd voice-module-dify
@@ -121,31 +148,22 @@ uv run python probe/verify_speech_legs.py   # verify it can really speak and lis
 |---|---|
 | What it is | A **fork of Open WebUI**: upgrades / completes the voice capabilities of an existing agent system |
 | Core idea | The host system is the owner; voice is a **pluggable component** inside it (using its native slots, not an external service) |
-| Upstream baseline | Open WebUI `v0.11.4` |
+| API keys needed | **1** — an OpenAI-compatible LLM key for the host's chat (`OPENAI_API_KEY`); STT runs locally, TTS runs in the browser |
 | Status | ✅ **Working end to end** (LLM chat + voice I/O); experimental, not production |
 | License | **Dual** — upstream code stays under the **Open WebUI License**; **files newly added on this branch are MIT** (see `LICENSE-SUPPLEMENT.md`) |
 | Stack | Python / FastAPI backend + SvelteKit frontend; **UI and orchestration only, no model inference** (plain CPU is enough) |
+| Access | Browser at `http://localhost:8000` (local; this branch ships no hosting — see `FAQ.md` Q12) |
 | Voice implementation | **STT** = local `faster-whisper` (through Open WebUI's native slot); **TTS** = browser `speechSynthesis` |
+| Upstream baseline | Open WebUI `v0.11.4` |
 
-**Access**:
+> **Attribution**: the "Open WebUI" branding is preserved exactly as upstream ships it — required by the Open WebUI License.
 
-| Scenario | Address |
-|---|---|
-| Local | <http://localhost:8000> |
-| Repository (source / docs) | <https://github.com/LPK3215/pipecat-voice-agents> |
+**What it deliberately owns**: only the two thin I/O edges — speech in, speech out. Thinking, tools, memory,
+knowledge base and conversation management are **left entirely to the host**; that is the design, not a gap
+(see `voice-docs/INTEGRATION.md` §0).
 
-> This branch only does voice I/O and ships no hosting; public access is up to your own
-> deployment (see that project's `FAQ.md` Q12).
-
-**Startup** (source mode; see the "how to run this branch" section of that project's `README.md`):
-
-```bash
-cd pipecat-open-webui/backend
-USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT=8000 \
-  PATH="$PWD/.venv/bin:$PATH" ./start.sh
-```
-
-Companion documents (this branch's own docs live in `voice-docs/`, kept separate from upstream `docs/`):
+**Companion documents** — all detail lives there, this page only points at it (this branch's own docs live
+in `voice-docs/`, kept separate from upstream `docs/`):
 
 | File | Content |
 |---|---|
@@ -156,6 +174,14 @@ Companion documents (this branch's own docs live in `voice-docs/`, kept separate
 | `voice-docs/CHANGELOG.md` | **Complete record** of this branch's changes relative to upstream |
 | `FAQ.md` | FAQ (including **Q14: what if speech is recognised as a foreign language**) |
 | `voice-docs/PLATFORM-SELECTION.md` | Host platform survey (Open WebUI / LibreChat / LobeChat comparison) |
+
+**Quick start** (source mode; see the "how to run this branch" section of that project's `README.md`):
+
+```bash
+cd pipecat-open-webui/backend
+USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT=8000 \
+  PATH="$PWD/.venv/bin:$PATH" ./start.sh
+```
 
 ---
 
@@ -178,6 +204,10 @@ Why it is kept:
 ---
 
 ## Three pitfalls worth knowing
+
+> Orientation only — one line each so you know the trap exists. The full answer lives in
+> [`FAQ.md`](FAQ.md) (Q6 / Q2 / Q5) and in the project that owns it; follow the links rather than
+> trusting a summary.
 
 **1. Latency numbers are not directly comparable.**
 
@@ -213,14 +243,14 @@ pipecat-voice-agents/
 │
 ├── research/
 │   └── pipecat-项目调研.md      # framework survey: what Pipecat can do (not a project)
-├── docs/                        # GitHub Pages site (classic mode) + generated assets
+├── docs/                        # GitHub Pages site (classic mode) — lpk3215.github.io/pipecat-voice-agents
 │   ├── repo-map.svg             #   generated diagram (English, single copy)
 │   ├── index.html / style.css / script.js / charts.js / project_card.html
 │   └── .nojekyll                #   disables Jekyll
 ├── scripts/
 │   └── visualization/
 │       └── generate_repo_map.mjs  # generates the diagram above (Node, built-ins only)
-├── project_overview/            # self-contained overview site (source of the docs/ copy)
+├── project_overview/            # local-view variant of the site (index.html uses ../ links; docs/ is the web variant)
 │   ├── index.html / style.css / script.js / charts.js / project_card.html
 │   └── assets/
 ├── project_overview.html        # local entry point (meta refresh), double-click to open
