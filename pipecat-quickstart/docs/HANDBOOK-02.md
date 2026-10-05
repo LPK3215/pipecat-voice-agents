@@ -430,6 +430,40 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 
 ## 10. 当前进度与待办
 
+### 阶段二结项（2026-10-05）
+
+**结论：第二阶段完成，按 `v0.1.0` 收口。** 能力、验证、文档三方面均已收口；下面「未完成」里剩的三项
+**都不是欠账**（两项需要外部输入或取舍，一项是可选升级），因此不再往上加东西。
+
+结项快照（命令可复跑，数字为当日实测）：
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 单测 | `cd server && uv run pytest` | **113 passed** |
+| Lint | `uv run ruff check .` + `uvx ruff check scripts/` | 全通过 |
+| 代码可导入 | `uv run python -c "import bot"` | OK |
+| 能力探针 | `scripts/` 下 **13 个脚本** | 每个能力都有对应探针（见下） |
+| 数据层 | `memory.db` / `knowledge.db` | turns 26 / facts 1 / 业务表 6 张；知识库 3 篇 / 102 块 |
+| 工具 | `build_tools()` | **12 个**，全部带异常兜底包装 |
+
+**每个能力都配一个可复跑的探针**（这才是第二阶段的实际交付物 —— 结论不靠"看起来对"）：
+
+| 能力 | 探针 |
+|---|---|
+| 全链路是否通 | `scripts/verify_stack.py`；真实音频路径 `scripts/audio_probe.py` |
+| 前后端启动 / WebRTC 握手 | `scripts/smoke.py` |
+| 工具调用（含成功率分布） | `scripts/verify_tools.py --repeat N` |
+| 上下文摘要是否真的触发 | `scripts/verify_summarize.py` |
+| 知识库检索质量 | `scripts/kb_eval.py` |
+| 分层联通性（跨层接口是否真实存在） | `scripts/verify_layers.py` |
+| ASR 选型对比 | `scripts/asr_bench.py` / `scripts/live_asr_bench.py` |
+| 文本通道 | `scripts/text_probe.py` |
+| 模型预热 | `scripts/prewarm.py` |
+| 数据接入（结构化 / 非结构化） | `scripts/collect_orders.py` / `scripts/ingest_docs.py` |
+
+**接手提示**：不要从"还剩什么没做"开始，而是从"你想让它干什么"开始 ——
+新业务走第 3 节（接数据）与第 2 节（加工具）；只是换数据源，见下面第 1 项。
+
 ### 已完成
 
 | 项 | 位置 | 实测 |
@@ -465,17 +499,18 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 | **定时采集示例** | `collect_orders.py --interval` + README 的 cron / systemd 配方 | ✅ 实测真实 API 跑两轮：`fetched 3` 两次，总数稳定在 23（**按 `order_id` upsert，滚动采集不重复**）；生产建议交给 cron/systemd，Python 循环只作演示 |
 | **检索质量评测与调优**（2026-10-05） | `scripts/kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500 + 词面重排 α=0.3，出厂配置对比旧默认（300/0 纯余弦）**hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**；原默认（300/50 纯余弦）是最差的一档。语料随文档增长，绝对值会漂移，只有同一次运行内可比 |
 
-### 未完成（按优先级）
+### 未完成（不阻塞结项；口径见上）
 
 > **口径更新（2026-10-05）**：原先挂着的两项「验证缺口」（工具选择的真实成功率、工具数量是否有影响）
 > **已跑完并关闭**（见 `TOOL_TESTS.md` 第 7 节）；「RAG 检索质量调优」也**已做完**——用仓库自己的
 > 文档建了评测集（`scripts/kb_eval.py`），并据此改了分块与重排（见上表）。
-> 下面两项才是真正剩下的：第 1 项**需要你介入**（给数据源），第 2 项是**可选替换**。
+> 下面三项都不是欠账：第 1 项**需要你给数据源**，第 2、3 项是**可选升级/替换**。
 
 | # | 待办 | 性质 | 阻塞 |
 |---|---|---|---|
 | 1 | 把 `fetch_from_source` / `--url` 换成**你自己的**源与字段映射 | 需要你的源 | 机制**已用真实公网源跑通**（2026-10-05 实测：抓 Pipecat 官方 README → 35 块入库 → 模型据此作答；抓 GitHub 发布 API → orders 表；见上表）；剩下只是把字段映射改成你的业务字段 |
-| 2 | 换官方 `FlowManager`（阶段式对话） | 可选替换 | 无（`flows.py` 目前只做固定调用链；完整的阶段式对话尚未用到） |
+| 2 | 长期记忆接**向量检索**（复用知识库的嵌入） | 可选升级 | 无。现为字面匹配 + 关键词提示 + 兜底返回"我记得的"；升级点已隔离在 `memory.search_facts()` 一个函数里。代价：召回多一次嵌入调用（预热后几十毫秒） |
+| 3 | 换官方 `FlowManager`（阶段式对话） | 可选替换 | 无（`flows.py` 目前只做固定调用链；完整的阶段式对话尚未用到） |
 
 **历史重测方案与前置检查见 `TOOL_TESTS.md` 第 6 节，执行结果见其第 7 节。**
 **检索调优的评测口径与结果见 `scripts/kb_eval.py`（可随时复跑）与 `TOOL_TESTS.md` 第 7.5 节。**
