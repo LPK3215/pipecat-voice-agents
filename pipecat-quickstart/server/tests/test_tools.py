@@ -190,6 +190,31 @@ def test_build_tools_binds_reminder_to_the_session():
     assert "set_reminder" in names
 
 
+# ---------------------------------------------------------------- long-term memory recall
+def test_recall_fact_does_not_claim_nothing_while_facts_exist(temp_db):
+    """Measured defect: a paraphrased query ("我住在哪") shares no characters with the stored
+    key ("城市"), so the lexical search found nothing and the tool answered "没有相关的记录"
+    while the fact was right there -- a user-visible wrong answer."""
+    temp_db.put_fact("城市", "杭州")
+    p = run(tools.recall_fact, {"query": "我住在哪"})
+    assert p.result["found"] is False  # nothing matched those words...
+    assert any(i["key"] == "城市" for i in p.result["items"])  # ...but we do remember it
+    assert "杭州" in p.result["spoken"]
+
+
+def test_recall_fact_still_reports_a_real_match(temp_db):
+    temp_db.put_fact("城市", "杭州")
+    p = run(tools.recall_fact, {"query": "城市"})
+    assert p.result["found"] is True
+    assert p.result["spoken"] == "城市是杭州"
+
+
+def test_recall_fact_says_nothing_when_the_store_is_empty(temp_db):
+    p = run(tools.recall_fact, {"query": "城市"})
+    assert p.result["found"] is False
+    assert p.result["spoken"] == "没有相关的记录"
+
+
 # ---------------------------------------------------------------- failure must not be silent
 def test_query_data_tolerates_a_bad_limit(temp_db):
     """Measured defect: ``limit="十条"`` raised ValueError inside the handler, so the tool

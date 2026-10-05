@@ -211,6 +211,11 @@ async def run_once(
         tool_calls.extend(fc.function_name for fc in function_calls)
 
     context = LLMContext(tools=build_tools("verify-tools"))
+    # Same context construction as bot.py: long-term memory is injected here, so questions like
+    # "我住在哪" behave the way they do in production. Without this the probe answered
+    # "no record of your address" while the fact was stored -- a probe artifact that looked
+    # exactly like a product bug.
+    memory.load_memory_into_context(context)
     context.add_message({"role": "user", "content": question})
 
     # The aggregators are required: after the tool result returns, the assistant aggregator

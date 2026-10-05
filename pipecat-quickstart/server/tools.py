@@ -177,18 +177,24 @@ async def recall_fact(params: FunctionCallParams) -> None:
     query = str((params.arguments or {}).get("query", "")).strip()
     hits = memory.search_facts(query) if query else memory.list_facts(limit=10)
 
-    await params.result_callback(
-        {
-            "found": bool(hits),
-            "items": hits,
-            "spoken": (
-                "；".join(f"{h['key']}是{h['value']}" for h in hits)
-                if hits
-                else "没有相关的记录"
-            ),
-        },
-        properties=_RESULT_PROPS,
-    )
+    result: dict = {"found": bool(hits), "items": hits}
+    if hits:
+        result["spoken"] = "；".join(f"{h['key']}是{h['value']}" for h in hits)
+    else:
+        # Long-term memory is searched **lexically** (substring + 2-character windows), so a
+        # paraphrased query misses: measured, ``recall_fact("我住在哪")`` found nothing while
+        # ``城市=杭州`` was stored. Answering "没有相关的记录" there is a user-visible wrong
+        # answer, so fall back to what we do remember and let the model judge.
+        remembered = memory.list_facts(limit=10)
+        result["items"] = remembered
+        result["spoken"] = (
+            f"没有直接匹配「{query}」的记录，但我记得这些："
+            + "；".join(f"{h['key']}是{h['value']}" for h in remembered)
+            if remembered
+            else "没有相关的记录"
+        )
+
+    await params.result_callback(result, properties=_RESULT_PROPS)
 
 
 RECALL_SCHEMA = FunctionSchema(
@@ -198,11 +204,13 @@ RECALL_SCHEMA = FunctionSchema(
         "当用户问「我说过什么」「你还记得吗」「我叫什么」"
         "或话题涉及过去约定过的偏好时调用。"
         "也可以用于查询用户之前交代过的项目背景、习惯等信息。"
+        "query 传**短关键词**（如「城市」「姓名」「偏好」），不要整句提问 —— "
+        "检索是字面匹配，整句会漏掉已记住的记录。"
     ),
     properties={
         "query": {
             "type": "string",
-            "description": "要回想的主题关键词；留空则列出全部记忆",
+            "description": "要回想的主题关键词（如「城市」「姓名」），不要整句；留空则列出全部记忆",
         }
     },
     required=[],

@@ -346,6 +346,7 @@ done
 | 11 | 工具 handler **抛异常**（如 `limit` 传成 `"十条"`） | 工具「跑了」但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同一类静默失败） | `build_tools()` 用 `safe_handler` **统一包装**所有 handler：记 traceback + 回 `ok=False`，机器人如实说"出错了" |
 | 12 | 知识库写入侧拿**调用时的原样路径**当文档标识 | 同一文件灌两次变两篇 → 检索返回重复正文块；`--delete` 必须拼写完全一致 | 标识统一取「相对仓库根的路径」；并加 `--prune` 清掉源文件已删的记录（否则会检索到已删除的内容） |
 | 13 | 基准脚本的**基线**不是「实际在跑的配置」，或注释说要扫的变量其实没扫 | 数字看着合理，却在和一个没人用的配置对比（如 `asr_bench` 曾拿 `language=None` 当基线）；声称已修的调参从未被测量 | 基线必须等于 `settings.py` 实际下发的参数；注释里写的变量要真出现在循环里；`verify_stack` 对已知 5 秒陷阱改为 WARN 而非沉默 |
+| 14 | 长期记忆召回是**字面匹配**，且**探针没做记忆注入** | ①用户问「我住在哪」与存储键「城市」无字面重叠 → 工具答「没有相关的记录」，用户听到**假否定**；②`verify_tools.py` 不像 `bot.py` 那样注入记忆 → 探针把上面的假否定放大成一条看起来像产品缺陷的"错答" | ①召回加兜底：字面没命中时返回"我记得的"并说明未直接匹配；工具描述要求传**短关键词**；②探针补上与 `bot.py` 相同的记忆注入，避免探针失真被误读成产品 bug |
 | 14 | 文本搜索用**全局**列名名单（`name`/`message`/`note`/`host`） | 对没有这些列名的表（如 `orders` 用的是 `customer`/`order_id`）`search` 被**静默忽略**，返回未过滤的行，却像"检索成功"一样被模型当真回答 | 每表一份 `TEXT_COLUMNS`；且无可用列时返回错误而不是沉默（并用测试锁住"每张可查表都有可搜列"） |
 | 15 | 把业务数据**写死在代码里**（假数据假装数据层） | 换真实数据要改代码，"数据层"名存实亡；示例工具的城市 / 设备清单也一样写在代码里 | 数据一律放**文件**（`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖），代码只加载 + 白名单校验；单测把"业务行不许出现在源码里"锁住 |
 | 16 | 多个脚本/进程分别读写**同一个 SQLite 文件**（默认 rollback journal、无忙等） | 实测遇到过一次 **btree 损坏**：读的时候报 `database disk image is malformed`，`integrity_check` 报 `btreeInitPage` 错误 —— 而写入时没有任何报错 | 连接统一开 **WAL + 5s 忙等**（`knowledge.py` / `memory.py` 的 `_conn`），并加 `ingest_docs.py --check` 做完整性检查与重建指引；源都可重新获取，重建只需一条命令 |
@@ -451,11 +452,12 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 | **工具异常不再静默** | `tools.safe_handler`（在 `build_tools()` 中统一包装 12 个 handler） | ✅ 修掉实测缺陷：`query_data` 的 `limit="十条"` 抛 ValueError → 永不回调；现记 traceback + 回 `ok=False` |
 | **知识库写入侧幂等与清理** | `scripts/ingest_docs.py`（稳定 `source` + `--prune`） | ✅ 跨目录跨写法灌同一文件仍只有 **1 篇**；源文件删除后 `--prune` 精确清掉，不再检索到已删内容 |
 | **ASR 基准口径修正与复核** | `scripts/asr_bench.py`（基线改为实际运行配置 + 扫齐 `语言 × 提示词` 四档） | ✅ 首次测出 `initial_prompt` 的真实量级：**CER 41.3% → 23.8%**；并测出显式 `zh` 只省延迟（424ms vs 671ms）不提精度 |
+| **长期记忆召回不再假否定** | `tools.recall_fact` 兜底 + 工具描述改为"传短关键词" + `scripts/verify_tools.py` 补记忆注入 | ✅ 实测对比：`recall_fact("我住在哪")` 从「没有相关的记录」变为「没有直接匹配，但我记得这些：城市是杭州」；真实 bot 路径问「我住在哪？」→ `recall_fact("城市")` → **「你住在杭州。」** |
 | **数据层对抗性验证与修复** | `tests/test_memory.py` + `memory.TEXT_COLUMNS` | ✅ 20 个注入样本全部拦下、库完好、敏感表不可达；同一探针顺带查出 `search` 对 `orders` 静默失效（返回未过滤的行）与 `updated_at` 原始时间戳进 `spoken`，均已修 |
 | **数据与代码分离（数据在数据层）** | `sample-data/*.json` + `DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` | ✅ 演示业务行与示例工具数据全部搬出代码：同代码换文件即换答案（实测指标 99.95→42.0、多出 `ALT-0001` 订单、杭州天气消失）；另有架构守卫单测防回退 |
 | **分层联通性（跨层接口是否真实）** | `scripts/verify_layers.py` + `tests/test_memory.py` | ✅ 9/9：空数据层必须答"查不到"（**证伪"写死在代码里"**）、外部 sqlite3 客户端写入立刻可见、替换数据访问层函数即改变工具结果、代码声明列与真实 schema 一致、换数据文件即换接口答案 |
 | **换库不用改代码** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE`） | ✅ 表/列白名单改为数据文件声明：实测外部建 `tickets` 表 + 文件里声明 → 列表/过滤/搜索/聚合全通；未声明的表明确报"未知的表"。空数据的 `sum/avg` 不再念出 `None`，`count` 的 0 如实回答 |
-| **单元测试** | `server/tests/` | ✅ **110 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明/抓取解析与字段映射/CLI 流程/数据库加固/**定时采集**） |
+| **单元测试** | `server/tests/` | ✅ **113 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/**长期记忆召回**/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明/抓取解析与字段映射/CLI 流程/数据库加固/定时采集） |
 | **工具调用成功率实测**（2026-10-05） | `scripts/verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
 | **数据接入链路端到端实测**（2026-10-05） | `scripts/collect_orders.py --csv` + `scripts/ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
 | **真实网络源抓取（非结构化 + 结构化）** | `scripts/ingest_docs.py --url` + `scripts/collect_orders.py --url` | ✅ 实测：抓 Pipecat 官方 README（41,447 字符）→ **35 块入库** → 模型据此答出传输方式清单与安装命令（内容只在该文档里）；抓 GitHub 发布 API → orders 表 20→23。抓取是单次请求，非爬虫 |

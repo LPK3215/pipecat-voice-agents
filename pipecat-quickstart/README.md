@@ -97,6 +97,32 @@ uv run bot.py             # 需要外网可访问时加：--host 0.0.0.0 --port 
 
 ---
 
+## 能力总览（要求的那些：在哪、怎么用、怎么验）
+
+| 能力 | 在哪 | 怎么用 / 触发 | 怎么验证 |
+|---|---|---|---|
+| **短期会话记忆** | 框架 `LLMContext` + `memory.turns` 表（`TurnRecorder` 落库） | 自动：每轮 user/assistant 原文都写库 | `verify_stack.py` 跑一轮后查 `turns`；`tests/test_observers.py` |
+| **长期记忆（写入）** | `memory.put_fact/get_fact/list_facts/delete_fact` + 工具 `remember_fact` | 用户说「记住…」→ 模型调用；也可直接写库 | `tests/test_memory.py`；真实 LLM：「记住我住杭州」 |
+| **长期记忆（会话注入）** | `memory.load_memory_into_context()`（`bot.py` 建上下文时调用） | 自动：会话开始就把事实注入提示词 | `tests/test_observers.py`；真实日志里可见 `- 城市: 杭州` |
+| **长期记忆（召回）** | 工具 `recall_fact` + `memory.search_facts()`（2 字滑窗字面匹配） | 用户问「你还记得…」；**query 传短关键词** | 真实 LLM：「我住在哪？」→ `recall_fact("城市")` → 「你住在杭州。」 |
+| **记忆管理** | `list_facts` / `delete_fact`；`recall_fact` 留空列出全部 | 列出、删除单条、全量回看 | `tests/test_memory.py` |
+| **知识库 / RAG** | `knowledge.py`（documents/chunks + 向量检索）、`embeddings.py`（本地 bge-small-zh，可切 API）、工具 `search_knowledge` | `ingest_docs.py <文件>` / `--dir` / `--url <网址>` 灌入 → 之后对话自动检索 | `kb_eval.py`（质量）、`ingest_docs.py --check`（完整性）、`tests/test_knowledge.py` |
+| **知识库管理** | `ingest_docs.py --list / --delete / --prune` | 列出、按 source 删除、清掉源文件已不存在的记录 | 实测：跨目录灌同一文件仍 **1 篇**；`--prune` 精确清理 |
+| **结构化检索（业务库）** | 工具 `query_data` + `memory.query_table`（白名单 + 参数化） | 问「有几个告警」「订单到哪了」 | `tests/test_memory.py`（含 20 个注入样本）；真实 LLM 复测「2 条」 |
+| **技能管理（注册 / 开关 / 编排 / 兜底）** | `tools.build_tools(session_id)`、`TOOLS_EXCLUDE`、`flows.py`、`safe_handler` | 加工具＝加一个 schema；临时摘工具＝改环境变量 | `tests/test_tools.py`（12 个 handler 全部带 `__wrapped__`）；`verify_tools.py --repeat` |
+| **会话 / 线程隔离** | `build_tools(session_id)`、`reminder_schema` / `device_schema`、每会话 `SESSION_ID` | 自动：每个会话独立 | `tests/test_tools.py`（A=2 时 B=1）；`verify_layers.py` |
+| **数据采集（外网 / 文件）** | `collect_orders.py --csv/--url/--interval`、`ingest_docs.py --url` | 手动，或 cron / systemd 定时 | 实测：抓公开文档/API → 入库 → 模型据此作答 |
+| **可观测 / 自检** | `pipeline_logging.py` + `scripts/` 下 13 个脚本 | 见「端到端自检」一节 | 每个能力都有对应探针 |
+
+**已知短板（是有意取舍，不是漏做）**：
+
+| 项 | 现状 | 影响 |
+|---|---|---|
+| 长期记忆召回是**字面匹配**（无向量） | 同义问法（「我住在哪」）本身召不回，靠 `recall_fact` 的**关键词提示** + 兜底返回"我记得的" | 记忆条目多、表述差异大时命中率会降；升级点已隔离在 `memory.search_facts()` 一个函数里 |
+| 会话内状态（提醒 / 设备）按进程存 | 单机单进程成立，重启即丢 | 要持久化就按 `turns`/`facts` 的模式写进 `memory.py` 的表 |
+| 检索评测的绝对值随语料漂移 | 语料是本仓库自己的文档 | 只有**同一次运行内**的相对比较有意义 |
+| ASR/TTS 走本地模型 | 首次运行需 `prewarm.py` 预热 | 冷启动首个请求慢（预热后每句百毫秒级） |
+
 ## 可选模型（3 个，改一个环境变量即可切换）
 
 改 `server/.env` 里的 `MODELSCOPE_MODEL` 即可，无需改代码。
@@ -723,10 +749,11 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 14 | 新增 `knowledge.py` + `embeddings.py`（RAG） | 框架没有知识库；嵌入默认走本地模型，不受单一服务商绑定（多数服务商无 `/v1/embeddings`） |
 | 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
 | 16 | 新增 `flows.py`；上下文摘要改用**框架自带**的 `LLMContextSummarizer` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；摘要由框架在 assistant 聚合器内实现，`enable_auto_context_summarization=True` 即接线完成 |
-| 17 | 新增 `tests/`（110 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、**SQL 注入对抗**、知识库、护栏、编排、摘要、观察者落库、工具状态隔离与异常兜底、抓取解析与字段映射、定时采集幂等 |
+| 17 | 新增 `tests/`（113 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、**SQL 注入对抗**、知识库、护栏、编排、摘要、观察者落库、工具状态隔离与异常兜底、抓取解析与字段映射、定时采集幂等 |
 | 18 | 工具改为**按会话**构建（`build_tools(session_id)`） | 与「会话 ID 不再放模块级」同源：`set_reminder` 的状态原本是模块级列表，多会话时 A 的提醒会计进 B 的计数，而且无上限增长 |
 | 19 | 所有工具 handler 统一兜底（`safe_handler`） | 实测缺陷：`query_data` 的 `limit="十条"` 在 handler 内抛 `ValueError`，没人接住 → 工具跑了但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同类的静默失败）。在 `build_tools()` 集中包装，新加工具不会漏 |
 | 20 | 知识库写入侧：稳定 `source` + `--prune` | 原来用「调用时的原样路径」当文档标识：`../README.md` 与 `README.md` 会被当成两篇 → 检索重复命中、`--delete` 必须拼写一致。改为相对仓库根，并支持清掉源文件已不存在的记录（否则会检索到已删除的内容） |
+| 21 | 长期记忆召回不再**假否定**；探针补记忆注入 | 长期记忆按**字面**检索，"我住在哪"与存储键"城市"无重叠 → 工具答「没有相关的记录」，用户听到假否定。改为：字面未命中时返回"我记得的"并说明未直接匹配；工具描述要求传短关键词。另发现 `verify_tools.py` 不像 `bot.py` 那样注入记忆 → 探针把该问题放大成貌似产品缺陷的错答，已补上同样的注入 |
 | 21 | 数据层对抗性验证；`search` 与时间戳修复 | 文档声称 SQL 层「白名单 + 结构化参数」，用 20 个注入样本实测确认成立（表名/列名/排序/聚合全被拦，敏感表不可达，库完好）。同一探针却查出：`search` 用**全局**列名名单，`orders` 没有那些列名 → 搜索被静默忽略、返回未过滤的行（`search="绝不存在zzz"` 也能返回 10 行）；`orders.updated_at` 的原始时间戳会进 `spoken` 被念出来。改为每表一份 `TEXT_COLUMNS`、无可用列时报错而非沉默，并格式化任意 `*_at` 字段 |
 | 22 | 业务数据搬出代码，进**数据文件** | 演示业务行原本是 `memory.py` 里的字面量（`bot.py` 直接调用），示例工具的城市天气 / 设备清单也一样写在 `sample_tools.py` 里 —— 这正是"假数据写死在代码里假装数据层"。改为 `sample-data/demo-business.json` / `sample-tools.json`，`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖，代码只做加载 + 白名单校验；设备状态同时改为按会话（与提醒一致）。加了一条架构守卫单测：业务行出现在源码里就红 |
 | 23 | 新增逐层联通性探针 `scripts/verify_layers.py` + 两条边界单测 | "先写数据再问工具、答得出来"**不构成证据**（写死的常量也能答）。改为**证伪**：清空数据层必须答"查不到"、外部 sqlite3 客户端写入必须立刻可见、替换数据访问层函数必须改变工具结果、代码声明的列必须与真实 schema 一致、换数据文件必须改变接口答案。8 项检查全过，并把「写死在代码里 vs 分层联通」的差异写进文档 |
