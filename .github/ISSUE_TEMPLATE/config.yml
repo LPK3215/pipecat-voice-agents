@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Which project should I pick?
+    url: https://github.com/LPK3215/pipecat-voice-agents/blob/main/README.md
+    about: The repository overview — what the three projects are, how they differ, and the pitfalls.
+  - name: Common questions (keys / licensing / recognition)
+    url: https://github.com/LPK3215/pipecat-voice-agents/blob/main/FAQ.md
+    about: Cross-project Q&A, including how many API keys each project needs.
