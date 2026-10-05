@@ -6,7 +6,7 @@ What is deliberately **absent** here, in one line each:
 
     tools / knowledge base / memory / orchestration / guards
 
-Those are what phase 2 built on top of a local model. In phase 3 they live in A, so the
+Those are what phase 2 built on top of a local model. In phase 3 they live in the platform, so the
 voice module must not have its own -- two brains in one pipeline is the single most
 predictable way to break this design.
 
@@ -39,7 +39,7 @@ from settings import Config, build_stt, build_tts, build_vad, load_config
 def _maybe_start_stub(cfg: Config):
     """Offline self-test: run the real pipeline against a stand-in brain.
 
-    Clearly labelled as a stand-in -- it is not the case study's A, it only lets you hear the
+    Clearly labelled as a stand-in -- it is not the real platform, it only lets you hear the
     whole module (VAD/STT/TTS/turn-taking) work before any platform exists.
     """
     if not cfg.stub_brain:
@@ -64,7 +64,7 @@ async def run_session(cfg: Config, transport, *, session_id: str) -> None:
 
     # The user side only: turn detection and the transcript are the module's business.
     # There is no assistant aggregator because there is no local LLM to aggregate for --
-    # A owns the conversation, and it hands the module finished sentences to speak.
+    # The platform owns the conversation; it hands the module finished sentences to speak.
     context = LLMContext()
     user_aggregator, _unused_assistant = LLMContextAggregatorPair(
         context, user_params=LLMUserAggregatorParams(vad_analyzer=vad)
@@ -92,9 +92,9 @@ async def run_session(cfg: Config, transport, *, session_id: str) -> None:
         )
         logger.info(
             f"[PIPELINE] in -> STT({cfg.voice.stt_engine}) -> turn -> "
-            f"brain(A={cfg.brain.base_url}) -> TTS({cfg.voice.tts_engine}) -> out"
+            f"brain(platform={cfg.brain.base_url}) -> TTS({cfg.voice.tts_engine}) -> out"
         )
-        logger.info("[PIPELINE] tools/knowledge/memory: none by design (they live in A)")
+        logger.info("[PIPELINE] tools/knowledge/memory: none by design (they live in the platform)")
 
         runner = WorkerRunner(name="voice-module", handle_sigint=True)
         await runner.add_workers(worker)

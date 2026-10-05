@@ -1,4 +1,4 @@
-"""Client for A -- the external agent platform that owns the thinking.
+"""Client for the platform -- the external agent system that owns the thinking.
 
 The whole point of phase 3: the brain is a **network service**, so this module only has
 to speak its protocol. Two calls matter:
@@ -22,7 +22,7 @@ from settings import BrainConfig
 
 
 class BrainError(RuntimeError):
-    """A failed to answer. Carries a line the assistant may say out loud."""
+    """The platform failed to answer. Carries a line the assistant may say out loud."""
 
     def __init__(self, message: str, *, spoken: str = "抱歉，我这边查东西出错了。"):
         super().__init__(message)
@@ -41,7 +41,7 @@ class BrainTurn:
 
 
 class BrainClient:
-    """Streaming client for A. Failure is always visible: it raises `BrainError`, never
+    """Streaming client for the platform. Failure is always visible: it raises `BrainError`, never
     returns an empty answer that looks like the user said nothing."""
 
     def __init__(self, cfg: BrainConfig, *, client: httpx.AsyncClient | None = None):
@@ -146,8 +146,8 @@ class BrainClient:
     # ---------------------------------------------------------------- stop
 
     async def stop(self, task_id: str) -> bool:
-        """Tell A to stop generating (the user barged in). Best effort by design: a failure
-        here must not break the call, so it returns False instead of raising."""
+        """Tell the platform to stop generating (the user barged in). Best effort by design:
+        a failure here must not break the call, so it returns False instead of raising."""
         assert self._client is not None
         try:
             resp = await self._client.post(

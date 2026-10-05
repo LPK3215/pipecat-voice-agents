@@ -43,7 +43,7 @@ def _num(name: str, default: float, cast=float):
 
 @dataclass(frozen=True)
 class BrainConfig:
-    """A: the external agent platform that owns the thinking."""
+    """The external agent platform: it owns the thinking."""
 
     base_url: str
     api_key: str
@@ -63,7 +63,7 @@ class BrainConfig:
 
 @dataclass(frozen=True)
 class VoiceConfig:
-    """B: the local speech parts. Local models, no keys."""
+    """The local speech parts: local models, no keys."""
 
     stt_engine: str
     whisper_model: str
@@ -75,7 +75,7 @@ class VoiceConfig:
 
 @dataclass(frozen=True)
 class FillerConfig:
-    """What the user hears while A is thinking (A is a network round-trip)."""
+    """What the user hears while the platform is thinking (it is a network round-trip)."""
 
     text: str
     delay_secs: float

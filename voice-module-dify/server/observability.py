@@ -3,7 +3,7 @@
 A voice module has three latency budgets that must stay separable:
 
     heard      : user stopped talking -> we have the transcript      (VAD + STT, local)
-    first word : we sent the request  -> first chunk back from A     (network + A's thinking)
+    first word : we sent the request  -> first chunk back from the platform (network + its thinking)
     speaking   : first chunk          -> first audio out            (TTS, local)
 
 If you cannot see these three apart, you will optimise the wrong one. Written from
@@ -39,7 +39,7 @@ class TurnTimeline:
         labels = [
             ("transcript", "heard"),
             ("brain_request", "request sent"),
-            ("brain_first_chunk", "A's first word"),
+            ("brain_first_chunk", "platform's first word"),
             ("first_sentence", "first full sentence"),
             ("tts_queued", "handed to TTS"),
         ]

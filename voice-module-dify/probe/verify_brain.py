@@ -4,7 +4,7 @@ Verifies the three things that would otherwise be discovered in production:
 
     1. streaming works and the first chunk arrives (the latency that decides "when does the
        bot start talking")
-    2. the conversation handle is carried across turns (otherwise A forgets everything)
+    2. the conversation handle is carried across turns (otherwise the platform forgets everything)
     3. a failure is reported, not swallowed (the phase-2 lesson: a silent tool is worse than
        an error)
 
@@ -67,7 +67,7 @@ async def check_conversation_carries(base_url: str, cfg) -> tuple[bool, str]:
 
 
 async def check_failure_is_loud(cfg) -> tuple[bool, str]:
-    """A dead brain must raise with something sayable -- never look like an empty answer."""
+    """An unreachable brain must raise with something sayable -- never look like an empty answer."""
     brain = dataclasses.replace(
         cfg.brain,
         base_url="http://127.0.0.1:1/v1",  # nothing listens here

@@ -1,4 +1,4 @@
-"""Build A by **running a file**, not by clicking a UI.
+"""Build the app by **running a file**, not by clicking a UI.
 
 An app on the platform is defined by a DSL document (`app.dsl.yml`), and the platform's
 console API can import it. So "搭好一个智能体应用" becomes:
@@ -149,7 +149,7 @@ def main() -> int:
     dsl_text = args.dsl.read_text(encoding="utf-8")
 
     print("=" * 72)
-    print(f"building A from a file: {args.dsl}")
+    print(f"building the app from a file: {args.dsl}")
     print("=" * 72)
     step = Step()
     with httpx.Client(timeout=60.0) as client:

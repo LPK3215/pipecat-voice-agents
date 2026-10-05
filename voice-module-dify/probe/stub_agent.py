@@ -1,6 +1,6 @@
 """A stand-in brain, for offline self-test only.
 
-This is **not** the case study's A (that has to be a real agent platform). It exists so the
+This is **not** the real platform (that has to be an actual agent system). It exists so the
 module's brain interface can be exercised with no platform running: same request shape, same
 SSE chunk shape, one delay knob.
 
@@ -17,7 +17,7 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-#: something only the brain knows -- the probe uses it to prove the answer came from A
+#: something only the brain knows -- the probe uses it to prove the answer came from the platform
 INTERNAL_CODE = "VX-42"
 
 
@@ -82,7 +82,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
-        time.sleep(self.first_chunk_delay)  # A's "thinking" time
+        time.sleep(self.first_chunk_delay)  # the platform's "thinking" time
         for index, piece in enumerate(answer):
             event = {
                 "event": "message",

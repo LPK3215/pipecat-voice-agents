@@ -1,16 +1,17 @@
-"""The adapter: the one place where B (ears and mouth) meets A (the brain).
+"""The adapter: where the voice module (ears and mouth) meets the platform (the brain).
 
 Duties, in order of how easy they are to get wrong:
 
-1. **Turn detection stays here.** A never hears audio. We wait for the framework's
-   "user finished talking" event, take the transcript, and only then ask A.
-2. **Speak on the first sentence, not the full answer.** A is a network round-trip; waiting
-   for it to finish would add its whole generation time to "how long until the bot talks".
-   So we accumulate A's chunks, and hand each finished sentence to TTS immediately.
-3. **Fill the silence.** If A is slow, the user must hear something ("嗯，我看一下。"), or a
-   working system feels broken.
+1. **Turn detection stays here.** The platform never hears audio. We wait for the framework's
+   "user finished talking" event, take the transcript, and only then ask the platform.
+2. **Speak on the first sentence, not the full answer.** The platform is a network
+   round-trip; waiting for it to finish would add its whole generation time to
+   "how long until the bot talks".
+   So we accumulate the platform's chunks, and hand each finished sentence to TTS immediately.
+3. **Fill the silence.** If the platform is slow the user must hear something
+   ("嗯，我看一下。"), or a working system feels broken.
 4. **Interrupt properly.** When the user barges in: stop talking locally, cancel the stream,
-   and tell A to stop generating.
+   and tell the platform to stop generating.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ class BrainProcessor(FrameProcessor):
         super().__init__(name=name)
         self._client = client
         self._filler = filler
-        #: A's conversation handle: keeping it makes A remember earlier turns.
+        #: The platform's conversation handle: keeping it makes it remember earlier turns.
         self.conversation_id: str | None = None
         self._task: asyncio.Task | None = None
         self._filler_task: asyncio.Task | None = None
@@ -56,14 +57,14 @@ class BrainProcessor(FrameProcessor):
     # ---------------------------------------------------------------- turn events
 
     async def on_user_turn_started(self, *_args) -> None:
-        """Barge-in: the user started talking while A was still answering."""
+        """Barge-in: the user started talking while the platform was still answering."""
         if self._speaking:
-            logger.info("[BRAIN] user interrupted -- stopping A and local speech")
+            logger.info("[BRAIN] user interrupted -- stopping the platform and local speech")
             await self._cancel_current()
             await self.push_frame(TTSSpeakFrame("", append_to_context=False))
 
     async def on_user_turn_stopped(self, _aggregator, _strategy, message=None, **_kwargs) -> None:
-        """The user finished a turn: ask A and start speaking its answer."""
+        """The user finished a turn: ask the platform and start speaking its answer."""
         text = ""
         if message is not None:
             text = getattr(message, "content", None) or getattr(message, "text", "") or ""
@@ -104,7 +105,7 @@ class BrainProcessor(FrameProcessor):
                     await self._speak(sentence, timeline, first=not spoke_anything)
                     spoke_anything = True
 
-            # flush whatever is left (A often ends without punctuation)
+            # flush whatever is left (the platform often ends without punctuation)
             for sentence in self._take_sentences(buffer, last=True):
                 buffer = buffer[len(sentence) :]
                 await self._speak(sentence, timeline, first=not spoke_anything)
@@ -146,7 +147,7 @@ class BrainProcessor(FrameProcessor):
     async def _speak_filler_later(self) -> None:
         try:
             await asyncio.sleep(self._filler.delay_secs)
-            logger.info(f"[BRAIN] A is slow -> filler: {self._filler.text}")
+            logger.info(f"[BRAIN] platform is slow -> filler: {self._filler.text}")
             await self.push_frame(
                 TTSSpeakFrame(self._filler.text, append_to_context=False)
             )
@@ -154,7 +155,7 @@ class BrainProcessor(FrameProcessor):
             return
 
     async def _cancel_current(self) -> None:
-        """Stop the in-flight answer, and tell A to stop generating too."""
+        """Stop the in-flight answer, and tell the platform to stop generating too."""
         if self._filler_task is not None:
             self._filler_task.cancel()
             self._filler_task = None
@@ -164,7 +165,7 @@ class BrainProcessor(FrameProcessor):
         task_id = self._client.last_turn.task_id
         if task_id:
             stopped = await self._client.stop(task_id)
-            logger.info(f"[BRAIN] told A to stop (task={task_id[:8]}...): {stopped}")
+            logger.info(f"[BRAIN] told the platform to stop (task={task_id[:8]}...): {stopped}")
 
     @staticmethod
     def _take_sentences(buffer: str, *, last: bool) -> list[str]:

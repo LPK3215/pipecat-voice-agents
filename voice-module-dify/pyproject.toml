@@ -9,7 +9,7 @@ dependencies = [
     "pipecat-ai[whisper,piper,silero,webrtc,runner,websocket]>=1.12.0",
     "python-dotenv>=1.0.0",
     "loguru>=0.7.0",
-    "httpx>=0.27.0",  # streaming client for the brain (A)
+    "httpx>=0.27.0",  # streaming client for the brain (the platform)
 ]
 
 [dependency-groups]

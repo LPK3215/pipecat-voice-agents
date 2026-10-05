@@ -1,6 +1,6 @@
 """Probe: the whole chain, without a browser -- and it leaves you an audio file to listen to.
 
-    synthesised speech -> websocket -> VAD + STT -> A (the real brain) -> TTS -> websocket -> WAV
+    synthesised speech -> websocket -> VAD/STT -> the platform -> TTS -> websocket -> WAV
 
 It answers the only question that matters for voice: **how long after the user stops talking
 does the bot start speaking?** and writes the returned audio to `logs/` so the answer can be
@@ -153,7 +153,7 @@ def main() -> int:
         print(f"  {PASS} the module spoke back: {int(marks['received_bytes'])} bytes of audio")
         print(f"        {answer_wav}")
         print("        (compare with logs/voice-module-*.log for the per-stage breakdown,")
-        print("         which separates: heard / A's first word / first sentence / handed to TTS)")
+        print("         which separates: heard / platform's first word / first sentence / TTS)")
     else:
         print(f"  {FAIL} nothing came back -- check the module log under logs/")
 
