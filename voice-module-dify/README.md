@@ -78,11 +78,20 @@ uv run python probe/verify_brain.py     # 验证"接脑袋"这条接口
 uv run python probe/verify_speech_legs.py   # 验证它真的能说、也能听
 ```
 
-想听声音（连网页）：
+> **第一次跑会下载语音模型**（Whisper + Piper，几百 MB），所以第一次慢、之后是秒级。
+> `.env.example` 里 `BRAIN_STUB` 默认是 **0**（接真平台）：这样别人不会在不知情的情况下
+> 对着一个替身调优；本地自测时自己改成 1 才用替身。
+
+想听声音（连网页）—— 两条命令，两个终端：
 ```bash
-uv run python server/ws_app.py --host 0.0.0.0 --port 8090   # 语音走 WebSocket
-# 用浏览器打开 agent/deploy/voice-client.html（或按 CASE-dify.md 的方式托管它）
+uv run python server/ws_app.py --host 0.0.0.0 --port 8090     # 语音模块（WebSocket）
+uv run python -m http.server 8081 --directory agent/deploy    # 提供页面（一定要经 http）
+# 然后浏览器访问 http://localhost:8081/voice-client.html
 ```
+
+> **为什么不能直接双击那个 html 文件**：页面要拿麦克风，浏览器对本地文件（`file://`）常常直接拒绝 ——
+> 经 `http://localhost` 或 https 打开才稳。页面会自动去连 8090 的模块；连不上时在网址后加
+> `?ws=ws://127.0.0.1:8090/`（或你的实际地址）手动指定即可。
 
 ## 接上你自己的平台
 

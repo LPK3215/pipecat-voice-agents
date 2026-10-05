@@ -45,6 +45,8 @@ uv sync
 cp .env.example .env          # 只有两行需要你填：BRAIN_BASE_URL / BRAIN_API_KEY
 
 # 平台侧的两个必要边车（本环境特有，见第 4 节）+ 语音模块
+# 注意：页面是「烤进边车镜像」的 —— 改完 agent/deploy/voice-client.html 要重新
+#      build + 重建 vm-dify-nginx，否则 :8080/voice/ 还是旧页面（见第 4 节第 1 条）
 bash case-run.sh
 ```
 

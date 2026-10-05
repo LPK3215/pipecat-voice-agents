@@ -137,7 +137,9 @@
 </main>
 
 <footer>
-  WebSocket：<code id="wsurl"></code> —— 二进制帧是音频，文本帧是事件（两者互不影响）。
+  WebSocket：<code id="wsurl"></code> —— 二进制帧是音频，文本帧是事件（两者互不影响）。<br>
+  连不上？在网址后面加 <code>?ws=ws://127.0.0.1:8090/</code> 手动指定模块地址；
+  页面必须经 <code>http://localhost</code> 或 https 打开（本地文件常拿不到麦克风）。
 </footer>
 
 <script>
