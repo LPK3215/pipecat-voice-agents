@@ -6,8 +6,8 @@
 > | **这是什么** | 能跑的实时语音对话 Agent，级联管线 `VAD → ASR → LLM → TTS` |
 > | **需要几个 key** | **1 个**（只有 LLM 要钱；语音识别与合成全在本地跑） |
 > | **状态** | ✅ **第二阶段已结项（`v0.1.0`，2026-10-05）** —— 能力 / 验证 / 文档三方面收口；结项快照与后续三项见 [HANDBOOK-02 §10](docs/HANDBOOK-02.md) |
-> | **仓库** | ➡️ <https://cnb.cool/lpk3215/pipecat-voice-agents> |
-> | **作者** | cnb.lpk |
+> | **仓库** | ➡️ <https://github.com/LPK3215/pipecat-voice-agents> |
+> | **作者** | LPK3215 |
 > | **总览** | ➡️ [`../README.md`](../README.md)（三个项目的关系） |
 > | **同仓库其他项目** | ➡️ [`../voice-module-dify/`](../voice-module-dify/)（语音模块，**主动调**平台） ｜ [`../pipecat-open-webui/`](../pipecat-open-webui/)（语音零件，**被**宿主调用） |
 > | **找调研/基准脚本？** | ➡️ [`reference/pipecat-modelscope/`](reference/pipecat-modelscope/) （📕 已冻结，别在上面开发） |

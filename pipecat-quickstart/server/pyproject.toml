@@ -5,7 +5,7 @@ description = "Voice AI bot built with Pipecat"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
-    { name = "cnb.lpk", email = "4tdEacxA3Uip3zcDiU1QiA+cnb.lpk@noreply.cnb.cool" },
+    { name = "LPK3215", email = "130586883+LPK3215@users.noreply.github.com" },
 ]
 dependencies = [
     # 下限必须是 1.12：本项目用到 PipelineWorker / LLMContextAggregatorPair /
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://cnb.cool/lpk3215/pipecat-voice-agents"
+Repository = "https://github.com/LPK3215/pipecat-voice-agents"
 
 [project.optional-dependencies]
 # 中文最优的本地 ASR（STT_ENGINE=sensevoice，默认值）。

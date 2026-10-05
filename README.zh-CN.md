@@ -268,7 +268,7 @@ pipecat-voice-agents/
 
 ## 仓库
 
-- 仓库：<https://cnb.cool/lpk3215/pipecat-voice-agents>
-- 作者：cnb.lpk
+- 仓库：<https://github.com/LPK3215/pipecat-voice-agents>
+- 作者：LPK3215
 - 项目全景观览页：本地双击打开 [`project_overview.html`](project_overview.html)，
   或浏览 `docs/` 下的 GitHub Pages 构建（经典模式，从 `/docs` 服务）。

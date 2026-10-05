@@ -2,8 +2,8 @@
 
 ## pipecat-open-webui（本分支）
 
-- **cnb.lpk**
-  - 仓库：<https://cnb.cool/lpk3215/pipecat-voice-agents>
+- **LPK3215**
+  - 仓库：<https://github.com/LPK3215/pipecat-voice-agents>
   - 贡献：分支定位、语音能力实验、`voice-docs/`、`docs/`、本分支文档（`README` 顶部说明、`CONTRIBUTING.md`、`FAQ.md`）
 
 ## 上游：Open WebUI

@@ -5,7 +5,7 @@ description = "Phase 3: the voice module (ears and mouth) that plugs into an exi
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
-    { name = "cnb.lpk", email = "4tdEacxA3Uip3zcDiU1QiA+cnb.lpk@noreply.cnb.cool" },
+    { name = "LPK3215", email = "130586883+LPK3215@users.noreply.github.com" },
 ]
 dependencies = [
     # Framework only. This project deliberately does NOT depend on pipecat-quickstart:
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://cnb.cool/lpk3215/pipecat-voice-agents"
+Repository = "https://github.com/LPK3215/pipecat-voice-agents"
 
 [dependency-groups]
 dev = [

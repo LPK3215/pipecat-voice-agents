@@ -8,7 +8,7 @@
 > - **许可**：**双协议** —— ① 上游代码沿用 **Open WebUI License**（保留品牌，见 [`LICENSE`](./LICENSE)）；② **本分支新增的独立文件采用 MIT**（见 [`LICENSE-SUPPLEMENT.md`](./LICENSE-SUPPLEMENT.md)）
 > - **本分支新增**：[`voice-docs/INTEGRATION.md`](./voice-docs/INTEGRATION.md)（**语音接入说明：改了什么 / 调了哪些接口**）、[`voice-docs/VOICE-MODES.md`](./voice-docs/VOICE-MODES.md)（**语音形态怎么选**）、[`voice-docs/VOICE-UX.md`](./voice-docs/VOICE-UX.md)（**语音交互体验怎么复现**）、[`voice-docs/`](./voice-docs)（定位 / 平台选型 / 变更记录）、[`CONTRIBUTING.md`](./CONTRIBUTING.md)、[`FAQ.md`](./FAQ.md)、[`AUTHORS`](./AUTHORS)
 > - **上游项目**：<https://github.com/open-webui/open-webui> ｜ 文档：<https://docs.openwebui.com/>
-> - **本分支作者 / 仓库**：cnb.lpk ｜ <https://cnb.cool/lpk3215/pipecat-voice-agents>（见 [`AUTHORS`](./AUTHORS)）
+> - **本分支作者 / 仓库**：LPK3215 ｜ <https://github.com/LPK3215/pipecat-voice-agents>（见 [`AUTHORS`](./AUTHORS)）
 > - **同仓库的其他项目**：[`../pipecat-quickstart/`](../pipecat-quickstart/)（完整语音 Agent）、[`../voice-module-dify/`](../voice-module-dify/)（语音模块，**主动调**平台）。本项目与后者**方向相反**：这里是**被宿主系统调用**的零件。总览见 [`../README.md`](../README.md)
 >
 > 本分支视角的架构：![pipecat-open-webui architecture](./docs/pipecat-open-webui-architecture.svg)

@@ -227,4 +227,4 @@ voice-module-dify/
 
 本项目采用 **MIT License**，全文见 [`LICENSE`](LICENSE)。
 
-> **作者**：cnb.lpk ｜ **仓库**：<https://cnb.cool/lpk3215/pipecat-voice-agents>
+> **作者**：LPK3215 ｜ **仓库**：<https://github.com/LPK3215/pipecat-voice-agents>
