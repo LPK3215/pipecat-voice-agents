@@ -12,7 +12,7 @@ import json
 import httpx
 import pytest
 from agent_client import BrainClient, BrainError, normalize_events
-from brain import BrainProcessor
+from brain import BrainProcessor, filler_options
 from pipecat.frames.frames import (
     InputAudioRawFrame,
     OutputAudioRawFrame,
@@ -25,8 +25,8 @@ from settings import load_config
 
 
 # ---------------------------------------------------------------- sentence splitting
-def take(text: str, *, last: bool = False) -> list[str]:
-    return BrainProcessor._take_sentences(text, last=last)
+def take(text: str, *, last: bool = False, min_chars: int = 0) -> list[str]:
+    return BrainProcessor._take_sentences(text, last=last, min_chars=min_chars)
 
 
 def test_splits_on_chinese_punctuation():
@@ -49,6 +49,24 @@ def test_caps_a_runaway_sentence():
 def test_empty_input_produces_nothing():
     assert take("", last=True) == []
     assert take("   ", last=True) == []
+
+
+def test_min_chars_accumulates_instead_of_speaking_fragments():
+    """The "less choppy / later first word" knob (SPEAK_MIN_CHARS).
+
+    Measured problem it addresses: handing TTS one short sentence at a time makes the speech
+    sound clipped. 0 must stay the old behaviour, or turning the knob on would change nothing
+    and turning it off would change everything.
+    """
+    assert take("短句。后面的内容还没到") == ["短句。"]              # default: speak immediately
+    assert take("短句。后面的内容还没到", min_chars=8) == []        # wait, accumulate
+    assert take("短句。后面的内容还没到", min_chars=8, last=True) == ["短句。后面的内容还没到"]
+
+
+def test_filler_rotates_so_it_does_not_say_the_same_line_every_turn():
+    assert filler_options("嗯，我看一下。|我看看啊。") == ["嗯，我看一下。", "我看看啊。"]
+    assert filler_options("只有一句") == ["只有一句"]
+    assert filler_options("") == []
 
 
 # ---------------------------------------------------------------- PCM contract
@@ -206,6 +224,18 @@ def test_stub_flag_accepts_the_usual_truthy_spellings(monkeypatch, raw):
 def test_stub_flag_stays_off_for_falsey_spellings(monkeypatch, raw):
     monkeypatch.setenv("BRAIN_STUB", raw)
     assert load_config().stub_brain is False
+
+
+def test_stt_prompt_is_configurable_and_reaches_the_service(monkeypatch):
+    """The cheapest accuracy knob: your own vocabulary in Whisper's initial prompt.
+
+    Measured: listing the words this system hears fixed "保修期" (heard as "保修气势" with a
+    generic prompt) at no measurable latency cost. It must be settable without touching code.
+    """
+    monkeypatch.setenv("STT_PROMPT", "以下是普通话的句子。常见词：保修期。")
+    assert load_config().voice.stt_prompt.endswith("保修期。")
+    monkeypatch.delenv("STT_PROMPT", raising=False)
+    assert load_config().voice.stt_prompt == "以下是普通话的句子。"
 
 
 def test_chat_and_stop_urls_are_derived_from_the_base():

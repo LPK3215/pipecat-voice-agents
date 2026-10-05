@@ -20,6 +20,7 @@ Duties, in order of how easy they are to get wrong:
 from __future__ import annotations
 
 import asyncio
+import random
 import re
 
 from agent_client import BrainClient, BrainError
@@ -34,14 +35,33 @@ _SENTENCE_END = re.compile(r"[。！？!?；;\n]|\.\s")
 _MAX_BUFFER = 60
 
 
+def filler_options(text: str) -> list[str]:
+    """`FILLER_TEXT` may hold several lines separated by "|"; one is picked at random.
+
+    Rotating them matters: saying the same sentence every single turn is itself a tell that
+    you are talking to a machine.
+    """
+    return [part.strip() for part in text.split("|") if part.strip()]
+
+
 class BrainProcessor(FrameProcessor):
     """Sits between the user aggregator and TTS. Frames pass through untouched; the talking
     happens in the turn handlers wired up by `app.py`."""
 
-    def __init__(self, client: BrainClient, filler: FillerConfig, *, name: str = "brain"):
+    def __init__(
+        self,
+        client: BrainClient,
+        filler: FillerConfig,
+        *,
+        name: str = "brain",
+        speak_min_chars: int = 0,
+    ):
         super().__init__(name=name)
         self._client = client
         self._filler = filler
+        #: 0 = speak on the first sentence (latency first). Higher = accumulate first, which
+        #: gives each synthesis call more context (smoother) but delays the first word.
+        self._speak_min_chars = speak_min_chars
         #: The platform's conversation handle: keeping it makes it remember earlier turns.
         self.conversation_id: str | None = None
         self._task: asyncio.Task | None = None
@@ -128,7 +148,9 @@ class BrainProcessor(FrameProcessor):
                         self._filler_task.cancel()
                         self._filler_task = None
                 buffer += delta
-                for sentence in self._take_sentences(buffer, last=False):
+                for sentence in self._take_sentences(
+                    buffer, last=False, min_chars=self._speak_min_chars
+                ):
                     buffer = buffer[len(sentence) :]
                     await self._speak(sentence, timeline, first=not spoke_anything)
                     spoke_anything = True
@@ -184,11 +206,11 @@ class BrainProcessor(FrameProcessor):
     async def _speak_filler_later(self) -> None:
         try:
             await asyncio.sleep(self._filler.delay_secs)
-            logger.info(f"[BRAIN] platform is slow -> filler: {self._filler.text}")
-            await self.emit_event({"kind": "say", "text": self._filler.text, "filler": True})
-            await self.push_frame(
-                TTSSpeakFrame(self._filler.text, append_to_context=False)
-            )
+            options = filler_options(self._filler.text)
+            text = random.choice(options) if options else self._filler.text
+            logger.info(f"[BRAIN] platform is slow -> filler: {text}")
+            await self.emit_event({"kind": "say", "text": text, "filler": True})
+            await self.push_frame(TTSSpeakFrame(text, append_to_context=False))
         except asyncio.CancelledError:
             return
 
@@ -206,13 +228,19 @@ class BrainProcessor(FrameProcessor):
             logger.info(f"[BRAIN] told the platform to stop (task={task_id[:8]}...): {stopped}")
 
     @staticmethod
-    def _take_sentences(buffer: str, *, last: bool) -> list[str]:
-        """Split off complete sentences; on the final flush, take whatever is left."""
+    def _take_sentences(buffer: str, *, last: bool, min_chars: int = 0) -> list[str]:
+        """Split off complete sentences; on the final flush, take whatever is left.
+
+        `min_chars` is the "don't hand TTS a fragment" knob: when set, a sentence shorter than
+        that keeps accumulating (it joins the next one), so each synthesis call has more context
+        and the speech sounds less choppy -- at the cost of a later first word. The default (0)
+        reproduces the original behaviour exactly: speak on the very first sentence.
+        """
         out: list[str] = []
         rest = buffer
         while True:
             match = _SENTENCE_END.search(rest)
-            if match and match.end() > 0:
+            if match and match.end() > 0 and len(rest[: match.end()]) >= min_chars:
                 out.append(rest[: match.end()])
                 rest = rest[match.end() :]
                 continue

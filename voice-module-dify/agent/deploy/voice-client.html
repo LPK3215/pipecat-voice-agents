@@ -205,6 +205,10 @@
 
   let ws = null, ctx = null, mic = null, node = null, silent = null;
   let nextPlay = 0, myTurn = null;
+  //: Audio already scheduled ahead of the clock. Without keeping these, "stop talking" only
+  //: stops *future* frames -- what is already queued keeps playing, which is exactly what a
+  //: barge-in is supposed to prevent (measured, and listed as a known gap until now).
+  let sources = [];
 
   // ---------------------------------------------------------------- status
   const STATES = {
@@ -283,6 +287,15 @@
     src.connect(ctx.destination);
     src.start(nextPlay);
     nextPlay += buf.duration;
+    sources.push(src);
+    src.onended = () => { sources = sources.filter((s) => s !== src); };
+  }
+
+  // Drop everything that is still queued or playing right now (barge-in, or a manual stop).
+  function stopAudio() {
+    for (const src of sources) { try { src.stop(); } catch (e) {} }
+    sources = [];
+    nextPlay = 0;
   }
 
   // ---------------------------------------------------------------- the event channel
@@ -311,7 +324,11 @@
     }
     if (kind === 'workflow') { addLog('workflow', '工作流' + (note_.state === 'started' ? '开始' : '结束')); return; }
     if (kind === 'file') { addLog('file', note_.text); return; }
-    if (kind === 'interrupt') { addLog('interrupt', '你插话了 —— 正在停'); return; }
+    if (kind === 'interrupt') {
+      stopAudio();  // the module stopped generating; drop what the browser already queued
+      addLog('interrupt', '你插话了 —— 正在停');
+      return;
+    }
     if (kind === 'error') { addLog('error', note_.text); return; }
     if (kind === 'timing') { addLog('timing', note_.text); return; }
     addLog(kind, note_.text || '');  // a kind the module added later: still show it
@@ -374,8 +391,9 @@
     try { mic && mic.getTracks().forEach((t) => t.stop()); } catch (e) {}
     try { ws && ws.readyState === 1 && ws.close(); } catch (e) {}
     try { ctx && ctx.close(); } catch (e) {}
+    stopAudio();
     ws = null; ctx = null; mic = null; node = null; silent = null;
-    nextPlay = 0; myTurn = null;
+    myTurn = null;
     startBtn.disabled = false;
     stopBtn.disabled = true;
     setState('idle');

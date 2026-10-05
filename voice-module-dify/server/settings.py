@@ -68,9 +68,19 @@ class VoiceConfig:
     stt_engine: str
     whisper_model: str
     stt_language: str
+    #: Whisper's `initial_prompt`. Making it *your* vocabulary is the cheapest accuracy win
+    #: available: measured here, adding business words fixed "保修期" (which a generic prompt
+    #: heard as "保修气势") with no measurable latency cost -- while switching to a bigger model
+    #: (`small`) was 2.7x slower and no more accurate.
+    stt_prompt: str
     tts_engine: str
     piper_voice: str
     vad_stop_secs: float
+    #: "Don't hand TTS a fragment": with a value set, short sentences keep accumulating before
+    #: they are spoken. Smoother prosody (each synthesis call gets more to work with), at the
+    #: cost of a later first word. 0 = speak on the very first sentence (the default: latency
+    #: first). See `brain._take_sentences`.
+    speak_min_chars: int
 
 
 @dataclass(frozen=True)
@@ -104,9 +114,11 @@ def load_config() -> Config:
             stt_engine=_env("STT_ENGINE", "whisper"),
             whisper_model=_env("WHISPER_MODEL", "base"),
             stt_language=_env("STT_LANGUAGE", "zh"),
+            stt_prompt=_env("STT_PROMPT", "以下是普通话的句子。"),
             tts_engine=_env("TTS_ENGINE", "piper"),
             piper_voice=_env("PIPER_VOICE_ID", "zh_CN-huayan-medium"),
             vad_stop_secs=_num("VAD_STOP_SECS", 0.6),
+            speak_min_chars=int(_num("SPEAK_MIN_CHARS", 0)),
         ),
         filler=FillerConfig(
             text=_env("FILLER_TEXT", "嗯，我看一下。"),
@@ -124,18 +136,20 @@ def load_config() -> Config:
 
 
 def build_stt(cfg: Config):
-    """Speech -> text. Whisper locally; explicit Chinese + a Mandarin prompt.
+    """Speech -> text. Whisper locally; explicit Chinese + the configured prompt.
 
-    Why the prompt: whisper `base` otherwise emits Traditional characters, which reads
-    wrong for a Mandarin assistant. Why explicit language: it does not change accuracy,
-    it only saves ~250ms per utterance (phase-1 measurement).
+    Why the prompt: whisper `base` otherwise emits Traditional characters (reads wrong for a
+    Mandarin assistant), and -- measured here -- adding **your own vocabulary** to it fixes the
+    words that actually matter: "保修期" was heard as "保修气势" until the prompt listed it.
+    Why explicit language: it does not change accuracy, it only saves ~250ms per utterance
+    (phase-1 measurement).
     """
     from pipecat.services.whisper.stt import WhisperSTTService
 
     settings = WhisperSTTService.Settings(
         model=cfg.voice.whisper_model,
         language=cfg.voice.stt_language,
-        initial_prompt="以下是普通话的句子。",
+        initial_prompt=cfg.voice.stt_prompt,
     )
     return WhisperSTTService(settings=settings)
 
