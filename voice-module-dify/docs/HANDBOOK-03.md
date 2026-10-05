@@ -134,7 +134,7 @@ cd voice-module-dify
 uv sync
 cp .env.example .env
 
-# 离线自测（不需要平台）：替身脑袋 + 真实管线
+# 离线自测（不连真平台，用一个替身平台顶着）：替身脑袋 + 真实管线
 #   .env 里 BRAIN_STUB=1
 uv run python server/app.py            # 浏览器开 http://localhost:7860
 uv run python probe/verify_brain.py    # 脑袋接口
