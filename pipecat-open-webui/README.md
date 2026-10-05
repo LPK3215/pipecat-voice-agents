@@ -1,7 +1,7 @@
 # Open WebUI 👋
 
 > [!IMPORTANT]
-> **本仓库是 [Open WebUI](https://github.com/open-webui/open-webui) 的二次开发分支（fork），代号 `voice-bridge`。**
+> **本仓库是 [Open WebUI](https://github.com/open-webui/open-webui) 的二次开发分支（fork），代号 `pipecat-open-webui`。**
 >
 > - **目的**：实验「把实时语音能力作为一个零件，插入现成的 agent 系统」（测试性质，非生产）
 > - **基线**：Open WebUI `v0.11.4`
@@ -10,7 +10,7 @@
 > - **上游项目**：<https://github.com/open-webui/open-webui> ｜ 文档：<https://docs.openwebui.com/>
 > - **本分支作者 / 仓库**：cnb.lpk ｜ <https://cnb.cool/lpk3215/pipecat-ai-test>（见 [`AUTHORS`](./AUTHORS)）
 >
-> 本分支视角的架构：![voice-bridge architecture](./docs/voice-bridge-architecture.svg)
+> 本分支视角的架构：![pipecat-open-webui architecture](./docs/pipecat-open-webui-architecture.svg)
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)

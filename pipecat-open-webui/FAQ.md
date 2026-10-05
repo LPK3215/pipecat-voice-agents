@@ -1,6 +1,6 @@
 # FAQ
 
-> 本文件记录 `voice-bridge`（Open WebUI 二次开发分支）在实际运行中**踩过的坑与解决办法**。
+> 本文件记录 `pipecat-open-webui`（Open WebUI 二次开发分支）在实际运行中**踩过的坑与解决办法**。
 > 上游通用问题请优先查 [Open WebUI 官方文档](https://docs.openwebui.com/)。
 
 ## 启动 / 运行
@@ -73,7 +73,7 @@ Open WebUI License 第 4 条禁止移除/隐藏品牌，**除非**满足其一�
 ### Q9: 为什么 `package.json` 里的 `name` 还是 `open-webui`？
 
 那是**上游的构建标识**，改了会破坏与上游的对应关系，也可能触碰品牌条款。
-本分支的**身份**体现在**仓库/目录名（`voice-bridge`）与 `voice-docs/`**，而不是改上游元数据。
+本分支的**身份**体现在**仓库/目录名（`pipecat-open-webui`）与 `voice-docs/`**，而不是改上游元数据。
 
 ## 配置与模型
 
@@ -107,7 +107,7 @@ PORT=8000 PATH="$PWD/.venv/bin:$PATH" ./start.sh
 | 共绩算力 | ❌ 余额不足（HTTP 402） |
 | 魔搭 ModelScope | ⚠️ key 为空，必然报错 |
 
-当前 `voice-bridge/.env` 已接入商汤（`OPENAI_API_BASE_URL` / `OPENAI_API_KEY`）。
+当前 `pipecat-open-webui/.env` 已接入商汤（`OPENAI_API_BASE_URL` / `OPENAI_API_KEY`）。
 
 ## 访问（CNB 云环境）
 

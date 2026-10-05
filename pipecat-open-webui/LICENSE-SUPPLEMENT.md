@@ -1,4 +1,4 @@
-# 许可证补充说明（voice-bridge）
+# 许可证补充说明（pipecat-open-webui）
 
 本仓库是 **[Open WebUI](https://github.com/open-webui/open-webui)** 的二次开发分支（衍生作品）。
 仓库内**不同部分适用不同许可证**，特此说明——这是合法且常见的「双协议」结构。

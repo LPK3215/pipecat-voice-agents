@@ -1,6 +1,6 @@
-# Contributing to voice-bridge
+# Contributing to pipecat-open-webui
 
-> `voice-bridge` 是 **[Open WebUI](https://github.com/open-webui/open-webui)** 的二次开发分支（fork），
+> `pipecat-open-webui` 是 **[Open WebUI](https://github.com/open-webui/open-webui)** 的二次开发分支（fork），
 > 用于实验「把实时语音能力作为一个零件，插入现成的 agent 系统」。**测试性质，非生产项目。**
 
 ## 先读这个：本仓库与上游的关系

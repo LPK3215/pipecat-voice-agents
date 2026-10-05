@@ -1,4 +1,4 @@
-# 本分支变更记录（voice-bridge）
+# 本分支变更记录（pipecat-open-webui）
 
 > **只记录本分支相对上游 Open WebUI 的改动。**
 > 上游自身的变更历史见根目录 [`CHANGELOG.md`](../CHANGELOG.md)（**保持不动，不清空、不改写**）。
@@ -7,12 +7,12 @@
 
 ### 新增
 
-- 从 **Open WebUI `v0.11.4`** fork 出 `voice-bridge` 分支
+- 从 **Open WebUI `v0.11.4`** fork 出 `pipecat-open-webui` 分支
 - `voice-docs/`：本分支文档
   - `PLATFORM-SELECTION.md`：宿主平台选型调研（Open WebUI / LibreChat / LobeChat 对比，结论 Open WebUI）
   - `ARCHITECTURE.md`：语音模块的接口契约（草稿）
   - `VOICE-README.md`：原独立语音模块的定位说明
-- `docs/voice-bridge-architecture.svg`：本分支架构图（由 `scripts/visualization/generate_voice_architecture.mjs` 生成）
+- `docs/pipecat-open-webui-architecture.svg`：本分支架构图（由 `scripts/visualization/generate_voice_architecture.mjs` 生成）
 - `CONTRIBUTING.md` / `FAQ.md` / `AUTHORS`
 - `LICENSE-SUPPLEMENT.md`：**双协议**说明 —— 上游代码沿用 Open WebUI License，**本分支新增的独立文件采用 MIT**
 
@@ -23,6 +23,7 @@
 
 ### 变更
 
+- **项目更名**：`voice-bridge` → **`pipecat-open-webui`**（Open WebUI + Pipecat 组合命名；与 `pipecat-quickstart` 一脉相承）
 - 启动方式改为**瘦身模式**：`requirements-slim.txt` + **`USE_SLIM_DOCKER=true`**（适配纯 CPU 云服务器）
 - 前端构建需 `NODE_OPTIONS=--max-old-space-size=10240`（否则 OOM）
 - 监听端口：默认 `8080` → 本环境改用 **`8000`**（8080/3000 被环境占用）
