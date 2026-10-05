@@ -119,6 +119,14 @@ def main() -> int:
         f"spoken={empty.get('spoken')!r}",
     )
 
+    # 1a-bis: "no data" must never become a fake success or a nonsense value read aloud.
+    agg = call(tools.query_data, {"table": "orders", "aggregate": "sum:amount"})
+    check(
+        "empty data layer -> aggregate says 'nothing found', never reads out 'None'",
+        agg.get("found") is False and "None" not in str(agg.get("spoken")),
+        f"spoken={agg.get('spoken')!r}",
+    )
+
     # 1b: an external writer is visible immediately -> the tool really reads the data layer.
     external_write("EXT-1", "外部写入")
     hit = call(tools.query_data, {"table": "orders", "filters": {"order_id": "EXT-1"}})

@@ -262,6 +262,10 @@ async def query_data(params: FunctionCallParams) -> None:
 
     if "error" in result:
         result["spoken"] = f"查询没成功：{result['error']}"
+    elif result.get("found") is False:
+        # The data-access layer flags a NULL aggregate (sum/avg/max/min over no rows) as "found
+        # nothing"; announcing "the result is None" out loud would be nonsense.
+        result["spoken"] = "没有查到符合条件的记录"
     elif "result" in result:
         result["spoken"] = f"结果是 {result['result']}"
     elif not result.get("rows"):

@@ -289,6 +289,15 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 | 知识库文档 | 任意 .md/.txt → `ingest_docs.py` → `server/data/knowledge.db` | **不用** |
 | 示例工具数据（城市天气 / 设备清单） | `sample-data/sample-tools.json`（`SAMPLE_TOOLS_DATA` 可覆盖） | **不用** |
 | 库文件本身 | `server/data/memory.db`、`server/data/knowledge.db`（`MEMORY_DB` / `KNOWLEDGE_DB`） | **不用** |
+| **可查的表 / 列（你自己的库结构）** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE` 可覆盖） | **不用** —— 在文件里声明你的表即可 |
+
+**把数据删掉会怎样**（不会假报成功）：删掉 `demo-business.json` → 启动时不灌演示数据（只写一行日志）；
+查询答「没有查到符合条件的记录」，`count` 答「结果是 0」（这是真话），`sum` / `avg` 也答「没有查到」
+—— 不会冒出 `None` 这类怪话；请求一个没在自己库里声明的表，明确答「查询没成功：未知的表 XXX」。
+
+**换成你自己的库会怎样**（不用改代码）：实测 —— 用外部 sqlite3 建出 `tickets` 表，只在
+`business-schema.json` 里声明它，`query_data` 立刻能列表 / 条件过滤 / 文本搜索 / `count` / `avg`；
+没声明的表则明确报「未知的表」。
 
 代码只做三件事：加载、校验（表名与列名必须在白名单内）、查询。所以换成你真实的数据来源时，
 `server/*.py` 一行都不用动；接了真实采集后删掉 `demo-business.json`，加载器自动变成空操作。
@@ -657,6 +666,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 21 | 数据层对抗性验证；`search` 与时间戳修复 | 文档声称 SQL 层「白名单 + 结构化参数」，用 20 个注入样本实测确认成立（表名/列名/排序/聚合全被拦，敏感表不可达，库完好）。同一探针却查出：`search` 用**全局**列名名单，`orders` 没有那些列名 → 搜索被静默忽略、返回未过滤的行（`search="绝不存在zzz"` 也能返回 10 行）；`orders.updated_at` 的原始时间戳会进 `spoken` 被念出来。改为每表一份 `TEXT_COLUMNS`、无可用列时报错而非沉默，并格式化任意 `*_at` 字段 |
 | 22 | 业务数据搬出代码，进**数据文件** | 演示业务行原本是 `memory.py` 里的字面量（`bot.py` 直接调用），示例工具的城市天气 / 设备清单也一样写在 `sample_tools.py` 里 —— 这正是"假数据写死在代码里假装数据层"。改为 `sample-data/demo-business.json` / `sample-tools.json`，`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖，代码只做加载 + 白名单校验；设备状态同时改为按会话（与提醒一致）。加了一条架构守卫单测：业务行出现在源码里就红 |
 | 23 | 新增逐层联通性探针 `verify_layers.py` + 两条边界单测 | "先写数据再问工具、答得出来"**不构成证据**（写死的常量也能答）。改为**证伪**：清空数据层必须答"查不到"、外部 sqlite3 客户端写入必须立刻可见、替换数据访问层函数必须改变工具结果、代码声明的列必须与真实 schema 一致、换数据文件必须改变接口答案。8 项检查全过，并把「写死在代码里 vs 分层联通」的差异写进文档 |
+| 24 | 可查的表/列改为**数据文件**声明；空数据不再念出 `None` | ①白名单原本写死在 `memory.py`，换成你自己的库还得改代码 —— 改为 `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE` 可覆盖），实测外部建的 `tickets` 表只要在文件里声明就能列表/过滤/搜索/聚合，没声明的表明确报"未知的表"；②数据为空时 `sum/avg` 会答"结果是 None"（把 Python 的 None 念出来），改为数据访问层标记"无数据"、功能层答"没有查到符合条件的记录"，`count` 的 0 仍如实回答 |
 
 ### 为什么必须改 VAD（第 4 点）
 
@@ -754,6 +764,7 @@ pipecat-quickstart/
 │   └── logs/                # 运行时日志（*.log 已被 .gitignore 忽略）
 ├── sample-data/             # 数据层样例（都是**文件**，不是代码）：orders.csv（18 笔订单）+ product-faq.md（测试 RAG 用）
 │                            #   + demo-business.json（指标/主机/告警/订单，启动时加载）+ sample-tools.json（城市天气/设备）
+│                            #   + business-schema.json（可查的表/列声明：换库不用改代码）
 ├── prewarm.py               # 预热本地模型（首次运行前跑一次）
 ├── ingest_docs.py           # 把文档灌入知识库（RAG 写入侧）
 ├── collect_orders.py        # 业务数据采集示例（采集与查询分离）

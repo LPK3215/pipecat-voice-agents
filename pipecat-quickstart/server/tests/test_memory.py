@@ -134,6 +134,51 @@ def test_answers_come_from_the_data_layer_not_from_constants(temp_db):
     assert hit["rows"][0]["customer"] == "外部写入"
 
 
+def test_empty_data_layer_never_answers_with_none(temp_db):
+    """With no rows, an aggregate must report "nothing found" -- not hand the model the string
+    "None" to read aloud (measured before the fix: ``spoken='结果是 None'``)."""
+    for aggregate in ("sum:amount", "avg:amount", "max:amount", "min:amount"):
+        result = temp_db.query_table("orders", aggregate=aggregate)
+        assert result["found"] is False
+        assert result["result"] is None
+    # count is different: 0 rows is a truthful answer, not a missing value.
+    count = temp_db.query_table("orders", aggregate="count")
+    assert count["result"] == 0 and "found" not in count
+
+
+def test_a_schema_file_makes_new_tables_queryable_without_code_changes(temp_db, tmp_path):
+    """The point of keeping the interface in a data file: pointing the bot at another database
+    means declaring its tables in the file, not editing the code."""
+    import json
+
+    # A table that the code knows nothing about, created by an external client.
+    conn = sqlite3.connect(temp_db.DB_PATH)
+    conn.execute("CREATE TABLE tickets (id INTEGER PRIMARY KEY, subject TEXT, owner TEXT)")
+    conn.execute("INSERT INTO tickets (subject, owner) VALUES ('打印机坏了', '张三')")
+    conn.commit()
+    conn.close()
+
+    alt = tmp_path / "business-schema.json"
+    alt.write_text(
+        json.dumps(
+            {
+                "tables": {"tickets": ["id", "subject", "owner"]},
+                "text": {"tickets": ["subject", "owner"]},
+                "numeric": {"tickets": ["id"]},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        temp_db.load_schema(alt)
+        hit = temp_db.query_table("tickets", search="打印机")
+        assert hit["count"] == 1 and hit["rows"][0]["owner"] == "张三"
+        assert temp_db.query_table("tickets", aggregate="count")["result"] == 1
+    finally:
+        temp_db.load_schema(temp_db.SCHEMA_FILE)  # restore the shipped interface
+
+
 def test_declared_columns_exist_in_the_real_schema(temp_db):
     """Code layer's declared interface (the whitelists) vs the data layer's real schema.
 

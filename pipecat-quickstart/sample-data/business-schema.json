@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "The queryable interface for query_data: which tables and columns may be read.",
+    "It lives in a DATA file on purpose -- pointing the bot at your own database must be a data",
+    "change, not a code change. Override the path with BUSINESS_SCHEMA_FILE; when the file is",
+    "missing, the built-in defaults in server/memory.py apply (so a fresh clone still works).",
+    "",
+    "tables : table -> every queryable column. Each table and column must exist in the database.",
+    "text   : table -> columns that `search` scans with LIKE. 'search' is ignored (and now errors)",
+    "         for a table that has none, which is why every table below lists at least one.",
+    "numeric: table -> columns that avg / max / min / sum may aggregate.",
+    "",
+    "Tables not listed here are unreachable by the model: conversation history (turns), long-term",
+    "memory (facts), and the knowledge base stay private."
+  ],
+  "tables": {
+    "metrics": ["name", "value", "unit", "note", "created_at"],
+    "hosts": ["name", "ip", "region", "latency_ms", "cpu_pct", "status", "created_at"],
+    "alerts": ["id", "host", "level", "message", "status", "created_at"],
+    "orders": ["id", "order_id", "customer", "status", "amount", "updated_at"]
+  },
+  "text": {
+    "metrics": ["name", "note", "unit"],
+    "hosts": ["name", "ip", "region"],
+    "alerts": ["host", "message"],
+    "orders": ["order_id", "customer"]
+  },
+  "numeric": {
+    "metrics": ["value"],
+    "hosts": ["latency_ms", "cpu_pct"],
+    "alerts": ["id"],
+    "orders": ["amount"]
+  }
+}

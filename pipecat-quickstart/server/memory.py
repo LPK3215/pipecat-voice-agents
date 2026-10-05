@@ -406,35 +406,76 @@ def load_memory_into_context(context, limit: int = 10) -> int:
 # parameterized statement is built. Table and column names must be within the whitelist,
 # so nothing outside it is reachable.
 
-# Whitelist: table name -> queryable columns
-TABLE_COLUMNS: dict[str, list[str]] = {
-    "metrics": ["name", "value", "unit", "note", "created_at"],
-    "hosts": ["name", "ip", "region", "latency_ms", "cpu_pct", "status", "created_at"],
-    "alerts": ["id", "host", "level", "message", "status", "created_at"],
-    "orders": ["id", "order_id", "customer", "status", "amount", "updated_at"],
+# Built-in defaults for the queryable interface. A deployment with its own schema overrides them
+# with a **data file** (``BUSINESS_SCHEMA_FILE``) instead of editing this module: which tables are
+# readable is configuration, and configuration is data. Format: sample-data/business-schema.json
+_BUILTIN_INTERFACE: dict[str, dict[str, list[str]]] = {
+    "tables": {
+        "metrics": ["name", "value", "unit", "note", "created_at"],
+        "hosts": ["name", "ip", "region", "latency_ms", "cpu_pct", "status", "created_at"],
+        "alerts": ["id", "host", "level", "message", "status", "created_at"],
+        "orders": ["id", "order_id", "customer", "status", "amount", "updated_at"],
+    },
+    # Columns that ``search`` scans with LIKE. Why per table: this used to be one global name
+    # list ("name", "message", "note", "host"), and ``orders`` has none of those (it has
+    # order_id / customer) -- so ``search`` added no WHERE clause and returned **unfiltered rows
+    # as if they had matched** (measured: ``search="绝不存在zzz"`` still returned 10 rows).
+    "text": {
+        "metrics": ["name", "note", "unit"],
+        "hosts": ["name", "ip", "region"],
+        "alerts": ["host", "message"],
+        "orders": ["order_id", "customer"],
+    },
+    # Columns that avg / max / min / sum may aggregate.
+    "numeric": {
+        "metrics": ["value"],
+        "hosts": ["latency_ms", "cpu_pct"],
+        "alerts": ["id"],
+        "orders": ["amount"],
+    },
 }
 
-# Columns that ``search`` scans with LIKE, per table.
-#
-# Why per table: this used to be one global name list ("name", "message", "note", "host").
-# The ``orders`` table has none of those (it has order_id / customer), so ``search`` added
-# no WHERE clause at all and the query returned **unfiltered rows as if they had matched** --
-# measured: ``search="绝不存在zzz"`` still returned 10 rows. An adversarial probe (a search
-# string shaped like an injection) is what surfaced it.
-TEXT_COLUMNS: dict[str, list[str]] = {
-    "metrics": ["name", "note", "unit"],
-    "hosts": ["name", "ip", "region"],
-    "alerts": ["host", "message"],
-    "orders": ["order_id", "customer"],
-}
+SCHEMA_FILE = Path(
+    os.getenv(
+        "BUSINESS_SCHEMA_FILE",
+        str(Path(__file__).resolve().parent.parent / "sample-data" / "business-schema.json"),
+    )
+)
 
-# Numeric columns that support aggregation
-NUMERIC_COLUMNS: dict[str, list[str]] = {
-    "metrics": ["value"],
-    "hosts": ["latency_ms", "cpu_pct"],
-    "alerts": ["id"],
-    "orders": ["amount"],
-}
+TABLE_COLUMNS: dict[str, list[str]] = dict(_BUILTIN_INTERFACE["tables"])
+TEXT_COLUMNS: dict[str, list[str]] = dict(_BUILTIN_INTERFACE["text"])
+NUMERIC_COLUMNS: dict[str, list[str]] = dict(_BUILTIN_INTERFACE["numeric"])
+
+
+def load_schema(path: Path | None = None) -> dict:
+    """Apply the queryable interface from a data file (defaults to ``BUSINESS_SCHEMA_FILE``).
+
+    This is what makes "point it at my own database" a **data** change: declaring your tables in
+    the file is enough, no edit to this module. A missing file keeps the built-in defaults, so a
+    fresh clone works with no configuration at all.
+
+    Only tables listed here are reachable: everything else (conversation history, long-term
+    memory, knowledge base) stays private.
+    """
+    global TABLE_COLUMNS, TEXT_COLUMNS, NUMERIC_COLUMNS
+    source = path or SCHEMA_FILE
+    if not source.exists():
+        logger.info(f"[MEMORY] no schema file at {source}; using the built-in interface")
+    else:
+        data = json.loads(source.read_text(encoding="utf-8"))
+        tables = data.get("tables") or {}
+        if not tables:
+            raise ValueError(f"schema file {source} declares no tables")
+        TABLE_COLUMNS = {table: list(cols) for table, cols in tables.items()}
+        TEXT_COLUMNS = {k: list(v) for k, v in (data.get("text") or {}).items()}
+        NUMERIC_COLUMNS = {k: list(v) for k, v in (data.get("numeric") or {}).items()}
+        logger.info(
+            f"[MEMORY] queryable interface: {len(TABLE_COLUMNS)} tables from {source.name}"
+        )
+    return {"tables": TABLE_COLUMNS, "text": TEXT_COLUMNS, "numeric": NUMERIC_COLUMNS}
+
+
+load_schema()
 
 _AGG_FUNCS = ("count", "avg", "max", "min", "sum")
 
@@ -517,7 +558,14 @@ def query_table(
                 f"SELECT {expr} AS result FROM {table} {where}",  # noqa: S608 - table/column whitelisted
                 params,
             ).fetchone()
-        return {"table": table, "aggregate": aggregate, "result": row["result"]}
+        value = row["result"]
+        out = {"table": table, "aggregate": aggregate, "result": value}
+        if value is None:
+            # A NULL aggregate means there were no rows to aggregate (sum / avg / max / min).
+            # Without this flag the tool would answer "the result is None" out loud -- nonsense.
+            # ``count`` can never be NULL, so a real 0 stays a real answer.
+            out["found"] = False
+        return out
 
     if order_by and order_by not in cols:
         return {"error": f"表 {table} 不能按 {order_by!r} 排序", "available_columns": cols}
