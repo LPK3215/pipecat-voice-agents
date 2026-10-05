@@ -522,7 +522,7 @@ uv run ../asr_bench.py --models base small sensevoice
 
 | ASR 引擎 | 字错率 | 完全正确 | 单句耗时 |
 |---|---|---|---|
-| Whisper `base`（原方案） | 23.8% | 1/6 | 607 ms |
+| Whisper `base`（原方案，已配普通话 `initial_prompt`） | 23.8% | 1/6 | 607 ms |
 | Whisper `small` | 13.6% | 2/6 | 874 ms |
 | **SenseVoice（当前默认）** | **10.2%** | **3/6** | **158 ms** |
 
@@ -574,7 +574,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 6 | 新增 `pipeline_logging.py` 与观测器 | 全量日志，跑一次即可定位问题 |
 | 7 | 新增 `settings.py` | 默认值与本地服务构造（`build_stt`/`build_tts`）与 `verify_stack.py` 共用，避免「测的」和「跑的」配置漂移 |
 | 8 | 缺 `MODELSCOPE_API_KEY` 时 **fail-fast** | 早期只打一行 ERROR 就照常启动：浏览器能连上、握手也成功，但一开口必然没反应，看起来像网络故障。现在直接终止并给出填 key 的步骤 |
-| 9 | Whisper 加 `initial_prompt="以下是普通话的句子。"` | base 模型会把中文转成繁体（「请」→「請」），实测已修 |
+| 9 | Whisper 加 `initial_prompt="以下是普通话的句子。"` | base 模型会把中文转成繁体（「请」→「請」）。实测已修，且量级不小：**CER 41.3% → 23.8%**（`asr_bench.py`，不加提示词的那两档逐句都是繁体） |
 | 10 | 开场白角色 `developer` → `user` | **修掉了一个静默失败**（详见下节）：魔搭接口不认 `developer`，且它留在上下文里会让**后续每一轮都失败** |
 | 11 | 新增 `tools.py`（function calling） | 后端能力的扩展点；前端无需改动，pipecat 以 `llm-function-call*` 消息推送，Prebuilt 前端自动渲染 |
 | 12 | 新增故障上报（`ErrorObserver` → RTVI `error`） | 服务失败时前端原本毫无提示（连得上、握得手、但没反应）。现在错误同时写 `[ERROR]` 日志并推到前端 |

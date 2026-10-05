@@ -335,6 +335,17 @@ async def main() -> int:
     print(f"  TTS audio   : {sink.audio_bytes} bytes")
     print("=" * 74)
 
+    # Known trap (HANDBOOK.md section 9, item 11): when the turn analyzer returns INCOMPLETE,
+    # the framework falls back to its 5s user_turn_stop_timeout and every stage looks ~5s
+    # slower. That is not a hard failure -- network latency varies -- so it warns instead of
+    # failing the verdict, but it must not stay invisible.
+    gap = (tl.marks["bot_speaking"] - base) if base and tl.marks.get("bot_speaking") else None
+    if gap and gap > 4.0:
+        print(
+            f"  [WARN] speech end -> bot speaks is {gap:.1f}s (> 4s); "
+            "check the turn-stop-timeout trap (HANDBOOK.md section 9, item 11)"
+        )
+
     ok = (
         bool(tl.transcript.strip())
         and tl.marks.get("tts_audio") is not None

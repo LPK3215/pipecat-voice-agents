@@ -155,6 +155,7 @@ def run_config(model: str, language: str | None, prompt: str | None, audios) -> 
         "label": label,
         "model": model,
         "language": language,
+        "prompt": prompt,
         "avg_cer": avg_cer,
         "exact": exact,
         "total": len(results),
@@ -222,12 +223,15 @@ def main() -> int:
             except Exception as exc:  # noqa: BLE001
                 print(f"  [skip] sensevoice: {exc}")
             continue
-        # Two key variables: whether Chinese is specified explicitly, and whether a prompt is given.
-        for lang, prompt in ((None, CURRENT_PROMPT), ("zh", CURRENT_PROMPT)):
-            try:
-                runs.append(run_config(model, lang, prompt, audios))
-            except Exception as exc:  # noqa: BLE001
-                print(f"  [skip] {model} lang={lang}: {exc}")
+        # Two variables, four combinations: explicit Chinese vs auto-detect, each with and
+        # without the initial prompt. The prompt is worth measuring on its own: without it
+        # Whisper base returns Traditional characters, which the CER counts as errors.
+        for lang in (None, "zh"):
+            for prompt in (None, CURRENT_PROMPT):
+                try:
+                    runs.append(run_config(model, lang, prompt, audios))
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  [skip] {model} lang={lang} prompt={bool(prompt)}: {exc}")
 
     if not runs:
         print("no configuration completed.")
@@ -247,14 +251,23 @@ def main() -> int:
     print("=" * 74)
 
     best = min(runs, key=lambda x: x["avg_cer"])
-    cur = next((r for r in runs if r["language"] is None and r["model"] == "base"), None)
+    # The baseline must be the config the bot actually runs -- settings.build_stt passes
+    # language="zh" and the initial prompt. Comparing against an arbitrary config (this used
+    # to pick language=None, which nobody runs) makes "switching saves X points" meaningless.
+    cur = next(
+        (r for r in runs if r["model"] == "base" and r["language"] == "zh" and r["prompt"]),
+        None,
+    )
+    if cur:
+        print(f"\ncurrent (whisper base + zh + prompt, what bot.py runs): CER {cur['avg_cer'] * 100:.1f}%")
     if cur and best["label"] != cur["label"]:
         drop = cur["avg_cer"] - best["avg_cer"]
-        print(f"\nbest: {best['label']} (CER {best['avg_cer'] * 100:.1f}%)")
-        print(
-            f"current: {cur['label']} (CER {cur['avg_cer'] * 100:.1f}%)"
-            f" -> switching to the best config lowers it by {drop * 100:.1f} points"
-        )
+        print(f"best: {best['label']} (CER {best['avg_cer'] * 100:.1f}%)")
+        if drop > 0.005:
+            print(f"-> switching to the best config lowers CER by {drop * 100:.1f} points")
+        else:
+            # No point printing "lowers it by 0.0 points": the difference is within noise.
+            print("-> the current config is already at the best CER (tied within noise)")
 
     # ---- per-sentence detail (best config) ----
     print(f"\nper-sentence detail ({best['label']}):")

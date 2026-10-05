@@ -182,7 +182,7 @@ server/
 
 | 引擎 | 字错率 | 单句耗时 | 特点 |
 |---|---|---|---|
-| Whisper `base` | 23.8% | 607ms | 通用但中文弱，**倾向输出繁体** |
+| Whisper `base` | 23.8% | 607ms | 通用但中文弱，**倾向输出繁体**：**必须**配 `initial_prompt`（实测 41.3% → 23.8%） |
 | Whisper `small` | 13.6% | 874ms | 更准但更慢，典型的准确/延迟取舍 |
 | **SenseVoice（默认）** | **10.2%** | **158ms** | 非自回归，专为中文等多语种设计 |
 
@@ -431,7 +431,10 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
    中文对话会输出英文译文。中文场景必须换成多语种模型（`base`/`small`/...）。
 
 3. **Whisper 未指定 `language` 时会自动猜语种**，既更慢也更易错（实测 607ms→370ms）。
-   另外 `base` 倾向输出繁体，需给一句普通话 `initial_prompt` 拉回简体。
+   另外 `base` 倾向输出繁体，需给一句普通话 `initial_prompt` 拉回简体
+   （实测 CER 41.3% → 23.8%，逐句可见 `這個月的校獸額` 这类繁体输出）。
+   显式指定 `language="zh"` **不改变准确率**，但每句快约 250ms（实测 424ms vs 671ms）
+   —— 这才是 bot 默认 `zh` 的理由，不要误以为它提升精度。
 
 4. **function calling 的 `run_llm=True` 必须显式传。**
    `FunctionCallResultProperties.run_llm` 默认是 `None`（假值），不传就**不会触发
