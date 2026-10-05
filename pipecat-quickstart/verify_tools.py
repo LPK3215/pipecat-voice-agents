@@ -209,7 +209,7 @@ async def run_once(
     async def _on_function_calls(_service, function_calls):
         tool_calls.extend(fc.function_name for fc in function_calls)
 
-    context = LLMContext(tools=build_tools())
+    context = LLMContext(tools=build_tools("verify-tools"))
     context.add_message({"role": "user", "content": question})
 
     # The aggregators are required: after the tool result returns, the assistant aggregator

@@ -101,6 +101,37 @@ def test_control_device():
     assert p.result["ok"] is True and p.result["state"] == "关闭"
 
 
+# ---------------------------------------------------------------- per-session tool state
+def test_reminder_state_is_per_session():
+    """``set_reminder`` is the only stateful tool. With a shared store one conversation's
+    reminders inflate another's count -- the same root cause as the module-level
+    SESSION_ID bot.py used to have, so it gets its own test."""
+    a = sample_tools.reminder_schema("session-a").handler
+    b = sample_tools.reminder_schema("session-b").handler
+
+    run(a, {"content": "开会", "when": "明天早上八点"})
+    second = run(a, {"content": "买牛奶"})
+    assert second.result["total_reminders"] == 2
+
+    other = run(b, {"content": "交报告", "when": "周五"})
+    assert other.result["total_reminders"] == 1  # not 3
+    assert sample_tools.count_reminders("session-a") == 2  # untouched
+
+
+def test_reminder_store_is_bounded():
+    """The demo store keeps the newest entries instead of growing without limit."""
+    handler = sample_tools.reminder_schema("session-cap").handler
+    for i in range(sample_tools.MAX_REMINDERS_PER_SESSION + 5):
+        run(handler, {"content": f"第{i}条"})
+    assert sample_tools.count_reminders("session-cap") == sample_tools.MAX_REMINDERS_PER_SESSION
+
+
+def test_build_tools_binds_reminder_to_the_session():
+    """The tool is still exposed; only its state became per-session."""
+    names = [t.name for t in tools.build_tools("session-x").standard_tools]
+    assert "set_reminder" in names
+
+
 # ---------------------------------------------------------------- memory tools
 def test_remember_and_recall(temp_db):
     r = run(tools.remember_fact, {"key": "姓名", "value": "张三"})

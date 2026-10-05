@@ -578,6 +578,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
 | 16 | 新增 `flows.py`；上下文摘要改用**框架自带**的 `LLMContextSummarizer` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；摘要由框架在 assistant 聚合器内实现，`enable_auto_context_summarization=True` 即接线完成 |
 | 17 | 新增 `tests/`（86 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要、**观察者落库** |
+| 18 | 工具改为**按会话**构建（`build_tools(session_id)`） | 与「会话 ID 不再放模块级」同源：`set_reminder` 的状态原本是模块级列表，多会话时 A 的提醒会计进 B 的计数，而且无上限增长 |
 
 ### 为什么必须改 VAD（第 4 点）
 

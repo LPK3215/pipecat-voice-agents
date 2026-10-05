@@ -105,7 +105,9 @@ DISABLE_THINKING = thinking_disabled()
 # No frontend changes needed: pipecat reports calls and results as
 # llm-function-call* messages to the prebuilt frontend.
 ENABLE_TOOLS = tools_enabled()
-TOOLS = build_tools() if ENABLE_TOOLS else None
+# NOTE: the tool set is built per session inside run_bot, not here. Most tools are
+# stateless, but set_reminder carries per-session state; building all schemas once at
+# import time would turn that state into process-global state (see sample_tools.py).
 
 # STT / TTS engine selection and construction live in settings.build_stt / build_tts,
 # shared with verify_stack.py so the two sides cannot drift.
@@ -149,6 +151,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     # recorder always has a stable value to write under.
     session_id = getattr(runner_args, "session_id", None) or memory.new_session_id()
 
+    # Built here, not at import: set_reminder is stateful and must be bound to this session.
+    tools = build_tools(session_id) if ENABLE_TOOLS else None
+
     # The pipecat runner calls logger.remove() on startup, so sinks must be
     # re-attached once the session starts, otherwise this session is never logged.
     setup_logging(RUN_LOG, LATEST_LOG)
@@ -183,7 +188,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             "LLM provider": LLM_CFG["provider"],
             "LLM model": LLM_CFG["model"],
             "Disable thinking": DISABLE_THINKING,
-            "Tools": (", ".join(t.name for t in TOOLS.standard_tools) if TOOLS else "disabled"),
+            "Tools": (", ".join(t.name for t in tools.standard_tools) if tools else "disabled"),
             "Error to frontend": "on (ErrorObserver -> RTVI error)",
             "LLM key": _mask(LLM_CFG["api_key"]),
             "STT (configured)": stt_desc(stt_engine()),
@@ -227,9 +232,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     )
 
     # ---------- Context and turn management ----------
-    # FunctionSchemas inside TOOLS carry their own handler, and the LLM service
-    # registers them automatically, so llm.register_function is not needed.
-    context = LLMContext(tools=TOOLS) if TOOLS is not None else LLMContext()
+    # FunctionSchemas carry their own handler and the LLM service registers them
+    # automatically, so llm.register_function is not needed.
+    context = LLMContext(tools=tools) if tools is not None else LLMContext()
     # Inject long-term memory into the context -- the model only "remembers" what it sees.
     memory.load_memory_into_context(context)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(

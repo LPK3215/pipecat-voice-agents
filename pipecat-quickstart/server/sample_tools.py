@@ -331,58 +331,83 @@ NOTIFY_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- reminder (real storage)
+# ---------------------------------------------------------------- reminder (per-session storage)
+#
+# set_reminder is the only sample tool that carries state, so its schema is built **per
+# session** instead of being one module-level list shared by every conversation. A shared
+# store would let one conversation's reminders show up in another conversation's count --
+# the same root cause as the module-level SESSION_ID that bot.py used to have.
+#
+# The store is still in memory (lost on restart); real usage should write to a memory.py
+# table with a session column.
+
+MAX_REMINDERS_PER_SESSION = 50
+
+_REMINDERS: dict[str, list[dict]] = {}
 
 
-_REMINDERS: list[dict] = []
+def count_reminders(session_id: str) -> int:
+    """Reminders recorded for one session (used in the tool result and by tests)."""
+    return len(_REMINDERS.get(session_id, []))
 
 
-async def set_reminder(params: FunctionCallParams) -> None:
-    """Set a reminder. Stored in memory (lost on restart; real usage should write to a memory.py table)."""
-    args = params.arguments or {}
-    content = str(args.get("content", "")).strip()
-    when = str(args.get("when", "")).strip()
+def reminder_schema(session_id: str) -> FunctionSchema:
+    """Build the ``set_reminder`` schema bound to a single session."""
 
-    if not content:
+    async def set_reminder(params: FunctionCallParams) -> None:
+        """Set a reminder for this session. In memory only, so it is lost on restart."""
+        args = params.arguments or {}
+        content = str(args.get("content", "")).strip()
+        when = str(args.get("when", "")).strip()
+
+        if not content:
+            await params.result_callback(
+                {"ok": False, "spoken": "提醒内容不能为空"}, properties=_RESULT_PROPS
+            )
+            return
+
+        items = _REMINDERS.setdefault(session_id, [])
+        items.append({"content": content, "when": when, "created": time.time()})
+        # Bound the demo store: keep the newest entries, drop the oldest.
+        if len(items) > MAX_REMINDERS_PER_SESSION:
+            del items[:-MAX_REMINDERS_PER_SESSION]
+
         await params.result_callback(
-            {"ok": False, "spoken": "提醒内容不能为空"}, properties=_RESULT_PROPS
+            {
+                "ok": True,
+                "spoken": f"好的，{when}提醒你{content}" if when else f"好的，记住了要提醒你{content}",
+                "total_reminders": len(items),
+            },
+            properties=_RESULT_PROPS,
         )
-        return
 
-    item = {"content": content, "when": when, "created": time.time()}
-    _REMINDERS.append(item)
-    await params.result_callback(
-        {
-            "ok": True,
-            "spoken": f"好的，{when}提醒你{content}" if when else f"好的，记住了要提醒你{content}",
-            "total_reminders": len(_REMINDERS),
+    return FunctionSchema(
+        name="set_reminder",
+        description=(
+            "设置一条提醒事项。"
+            "当用户说「提醒我…」「别忘了…」「X 点叫我…」时调用。"
+            "when 填用户说的时间描述原话（如「明天早上八点」），不要自己换算成时间戳。"
+        ),
+        properties={
+            "content": {"type": "string", "description": "要提醒的事情"},
+            "when": {"type": "string", "description": "时间，用户怎么说就怎么填"},
         },
-        properties=_RESULT_PROPS,
+        required=["content"],
+        handler=set_reminder,
     )
 
 
-REMINDER_SCHEMA = FunctionSchema(
-    name="set_reminder",
-    description=(
-        "设置一条提醒事项。"
-        "当用户说「提醒我…」「别忘了…」「X 点叫我…」时调用。"
-        "when 填用户说的时间描述原话（如「明天早上八点」），不要自己换算成时间戳。"
-    ),
-    properties={
-        "content": {"type": "string", "description": "要提醒的事情"},
-        "when": {"type": "string", "description": "时间，用户怎么说就怎么填"},
-    },
-    required=["content"],
-    handler=set_reminder,
-)
-
-
-# Entry point registered by tools.py: adding a tool means adding one line to this list.
+# Entry point registered by tools.py: adding a stateless tool means adding one line here.
 SAMPLE_SCHEMAS: list[FunctionSchema] = [
     WEATHER_SCHEMA,
     CALC_SCHEMA,
     CONVERT_SCHEMA,
     DEVICE_SCHEMA,
     NOTIFY_SCHEMA,
-    REMINDER_SCHEMA,
 ]
+
+
+def sample_schemas(session_id: str) -> list[FunctionSchema]:
+    """All sample tools for one session: the shared stateless set plus this session's
+    ``set_reminder`` (the only stateful one -- see ``reminder_schema``)."""
+    return [*SAMPLE_SCHEMAS, reminder_schema(session_id)]

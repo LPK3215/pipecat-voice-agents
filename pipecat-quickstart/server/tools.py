@@ -16,6 +16,9 @@ Adding a new tool:
        with ``await params.result_callback(result, properties=...)``.
     2. Define the matching ``FunctionSchema`` and point its handler at it.
     3. Add it to the list in ``build_tools()``.
+    4. Stateful tools only: bind the state to the session. ``build_tools(session_id)``
+       takes the id for exactly this reason -- state created once at import time is
+       shared by every conversation (see ``sample_tools.reminder_schema``).
     When a ``FunctionSchema`` carries a handler, the LLM service registers it
     automatically -- no manual ``llm.register_function``.
 
@@ -422,8 +425,12 @@ LOCAL_WEATHER_SCHEMA = FunctionSchema(
 )
 
 
-def build_tools() -> ToolsSchema:
+def build_tools(session_id: str = "default") -> ToolsSchema:
     """Return the set of tools exposed to the LLM for this session.
+
+    ``session_id`` is handed to the one stateful sample tool (``set_reminder``), so its
+    store stays per conversation. bot.py builds the tools inside ``run_bot`` for this
+    reason -- building them once at import time would make that state process-global.
 
     As tools multiply, the **boundaries between their descriptions** matter more than the
     tools themselves: overlapping descriptions (say, "time" and "schedule" both vague)
@@ -448,7 +455,7 @@ def build_tools() -> ToolsSchema:
         # explicitly orchestrated composite tool (multi-step, ordered by code)
         LOCAL_WEATHER_SCHEMA,
         # a set of assorted sample tools (see sample_tools.py)
-        *sample_tools.SAMPLE_SCHEMAS,
+        *sample_tools.sample_schemas(session_id),
     ]
 
     excluded = {s.strip() for s in os.getenv("TOOLS_EXCLUDE", "").split(",") if s.strip()}
