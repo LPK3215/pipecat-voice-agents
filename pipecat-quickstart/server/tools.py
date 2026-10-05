@@ -28,6 +28,14 @@ NOTE: ``run_llm=True`` must be passed explicitly (see ``_RESULT_PROPS``):
     log shows a result, but the bot never answers until it times out. The failure is
     **silent**: no error, no exception, only "no answer ever arrives".
 
+NOTE: handlers are wrapped by ``safe_handler`` in ``build_tools()``:
+    A handler that raises is the other half of the same trap -- the tool "ran", no result
+    ever reaches the model, and the bot never answers (measured: ``query_data`` with
+    ``limit="十条"``). The wrapper logs the traceback and reports ``ok=False`` back so the
+    bot can answer honestly. Do not rely on it for **expected** failures (bad arguments,
+    nothing found): report those yourself with ``ok=False`` and a ``spoken`` line, and
+    keep the wrapper for the unexpected.
+
 NOTE: the ``description=`` fields and ``spoken`` values below are intentionally Chinese:
 they are prompts for a Chinese-speaking agent and are read aloud to the user. Do not
 translate them.
@@ -35,6 +43,7 @@ translate them.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -234,13 +243,20 @@ async def query_data(params: FunctionCallParams) -> None:
         except json.JSONDecodeError:
             filters = {}
 
+    # Numbers may arrive as strings. query_table clamps limit to 1..50, but int() would
+    # raise first -- and a raising handler is a silent hang for the caller (see safe_handler).
+    try:
+        limit = int(args.get("limit") or 10)
+    except (TypeError, ValueError):
+        limit = 10
+
     result = memory.query_table(
         table=str(args.get("table", "")).strip(),
         filters=filters if isinstance(filters, dict) else {},
         search=str(args.get("search") or ""),
         order_by=str(args.get("order_by") or ""),
         desc=bool(args.get("desc", True)),
-        limit=int(args.get("limit") or 10),
+        limit=limit,
         aggregate=str(args.get("aggregate") or ""),
     )
 
@@ -425,6 +441,48 @@ LOCAL_WEATHER_SCHEMA = FunctionSchema(
 )
 
 
+def safe_handler(handler):
+    """Wrap a tool handler so a failure is **reported**, never silent.
+
+    Measured defect: ``query_data`` with ``limit="十条"`` raised ``ValueError`` inside the
+    handler. Nothing catches that, so the tool "ran" while no result ever reached the
+    model -- the bot simply never answers. Same silent-failure class as the missing
+    ``run_llm=True`` described above, which is why ``build_tools()`` wraps **every**
+    handler instead of trusting each author to remember a try/except.
+    """
+
+    @functools.wraps(handler)
+    async def wrapper(params: FunctionCallParams) -> None:
+        try:
+            await handler(params)
+        except Exception as exc:  # noqa: BLE001 - a tool must never kill the turn
+            logger.exception(f"[TOOLS] handler '{handler.__name__}' raised {type(exc).__name__}")
+            await params.result_callback(
+                {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "spoken": "抱歉，这个操作出错了，请换个说法再试一次",
+                },
+                properties=_RESULT_PROPS,
+            )
+
+    return wrapper
+
+
+def _with_safe_handlers(schemas: list[FunctionSchema]) -> list[FunctionSchema]:
+    """Rebuild each schema with its handler wrapped (FunctionSchema has no copy helper)."""
+    return [
+        FunctionSchema(
+            name=s.name,
+            description=s.description,
+            properties=s.properties,
+            required=s.required,
+            handler=safe_handler(s.handler) if s.handler else None,
+        )
+        for s in schemas
+    ]
+
+
 def build_tools(session_id: str = "default") -> ToolsSchema:
     """Return the set of tools exposed to the LLM for this session.
 
@@ -467,4 +525,4 @@ def build_tools(session_id: str = "default") -> ToolsSchema:
         )
         schemas = kept
 
-    return ToolsSchema(standard_tools=schemas)
+    return ToolsSchema(standard_tools=_with_safe_handlers(schemas))

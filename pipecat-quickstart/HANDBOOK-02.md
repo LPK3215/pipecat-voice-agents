@@ -343,6 +343,7 @@ done
 | 8 | 把环境故障读成模型问题 | 换错方向，白折腾 | 先跑阳性对照；区分四种失败 |
 | 9 | 工具内部重复打日志 | 同一件事记两遍，噪音 | 权威记录交给 `FunctionCallObserver` |
 | 10 | 有状态工具用**模块级/全局变量**存状态 | 多会话时串数据（A 的提醒算进 B 的计数），且会无上限增长 | 状态**按会话绑定**：`build_tools(session_id)`，见 `sample_tools.reminder_schema` |
+| 11 | 工具 handler **抛异常**（如 `limit` 传成 `"十条"`） | 工具「跑了」但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同一类静默失败） | `build_tools()` 用 `safe_handler` **统一包装**所有 handler：记 traceback + 回 `ok=False`，机器人如实说"出错了" |
 
 ---
 
@@ -442,7 +443,8 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 | **探针四类结论** | `audio_probe.py` | ✅ 打通 / 调用失败 / 无识别 / 不出声 分开报 |
 | **业务表 + 采集示例** | `memory.py` 的 `orders` 表 + `collect_orders.py` | ✅ 采集与查询分离链路打通 |
 | **工具状态按会话隔离** | `build_tools(session_id)` + `sample_tools.reminder_schema` | ✅ 修掉模块级 `_REMINDERS`（跨会话串计数 + 无上限增长）；`bot.py` 改为在 `run_bot` 内构建工具 |
-| **单元测试** | `server/tests/` | ✅ **86 用例**（配置/工具/SQL/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离） |
+| **工具异常不再静默** | `tools.safe_handler`（在 `build_tools()` 中统一包装 12 个 handler） | ✅ 修掉实测缺陷：`query_data` 的 `limit="十条"` 抛 ValueError → 永不回调；现记 traceback + 回 `ok=False` |
+| **单元测试** | `server/tests/` | ✅ **89 用例**（配置/工具/SQL/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底） |
 | **工具调用成功率实测**（2026-10-05） | `verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
 | **数据接入链路端到端实测**（2026-10-05） | `collect_orders.py --csv` + `ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
 | **检索质量评测与调优**（2026-10-05） | `kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500、加入词面重排后 **hit@1 40%→60%、hit@3 53%→87%、MRR 0.49→0.73**；原默认（300/50 纯余弦）恰好是最差的一档 |

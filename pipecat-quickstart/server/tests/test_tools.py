@@ -132,6 +132,37 @@ def test_build_tools_binds_reminder_to_the_session():
     assert "set_reminder" in names
 
 
+# ---------------------------------------------------------------- failure must not be silent
+def test_query_data_tolerates_a_bad_limit(temp_db):
+    """Measured defect: ``limit="十条"`` raised ValueError inside the handler, so the tool
+    "ran" while no result ever came back -- the bot never answered at all."""
+    temp_db.seed_demo_business()
+    p = run(tools.query_data, {"table": "alerts", "limit": "十条"})
+    assert p.result.get("error") is None  # fell back to the default limit
+    assert p.result["rows"]  # ...and the query still returned rows
+
+
+def test_safe_handler_reports_instead_of_raising():
+    """The wrapper is the safety net for the *unexpected*: without it the model gets no
+    result at all and the bot stays silent."""
+
+    async def boom(_params):
+        raise RuntimeError("api down")
+
+    p = FakeParams({})
+    asyncio.run(tools.safe_handler(boom)(p))
+    assert p.result["ok"] is False
+    assert "api down" in p.result["error"]
+    assert p.result["spoken"]  # so the model can answer honestly
+
+
+def test_build_tools_wraps_every_handler():
+    """Applied centrally in build_tools(), so a newly added tool cannot forget it."""
+    schemas = tools.build_tools("session-x").standard_tools
+    assert len(schemas) >= 12
+    assert all(hasattr(s.handler, "__wrapped__") for s in schemas)
+
+
 # ---------------------------------------------------------------- memory tools
 def test_remember_and_recall(temp_db):
     r = run(tools.remember_fact, {"key": "姓名", "value": "张三"})
