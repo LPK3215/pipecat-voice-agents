@@ -33,6 +33,7 @@ import argparse
 import csv
 import json
 import sys
+import time
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -108,11 +109,62 @@ def fetch_from_source(csv_path: Path | None = None, url: str | None = None) -> l
     return [r for r in rows if r["order_id"]]
 
 
+def collect_once(csv_path: Path | None, url: str | None) -> tuple[int, int]:
+    """One collection round: fetch -> upsert -> report. Returns ``(fetched, total rows in DB)``."""
+    items = fetch_from_source(csv_path, url=url)
+    for it in items:
+        memory.upsert_order(
+            order_id=it["order_id"],
+            customer=it["customer"],
+            status=it["status"],
+            amount=it["amount"],
+        )
+    total = memory.query_table("orders", aggregate="count")["result"]
+    return len(items), total
+
+
+def run_scheduled(
+    url: str | None,
+    csv_path: Path | None,
+    interval_s: float,
+    rounds: int,
+    sleep=time.sleep,  # noqa: ANN001 - injectable so the loop is unit-testable
+) -> int:
+    """Repeat the collection every ``interval_s`` seconds (``rounds=0`` = until interrupted).
+
+    This loop is a **convenience for demos**, not the production answer: in production let the OS
+    schedule it (cron / systemd timer -- see README), because a Python loop dies with its process,
+    has no supervision, and drifts. What makes repetition safe here is that upserts are keyed on
+    ``order_id``, so running it every minute never duplicates rows.
+    """
+    done = 0
+    try:
+        while True:
+            fetched, total = collect_once(csv_path, url)
+            done += 1
+            stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{stamp}] round {done}: fetched {fetched}; {total} rows now in the local DB")
+            if rounds and done >= rounds:
+                return done
+            sleep(interval_s)
+    except KeyboardInterrupt:
+        print(f"\ninterrupted; stopped after {done} round(s)")
+        return done
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="ingest order data into the local DB")
     ap.add_argument("--csv", type=Path, default=None, help="CSV file (built-in demo data if omitted)")
     ap.add_argument("--url", default=None, metavar="URL", help="public JSON API to fetch records from")
     ap.add_argument("--list", action="store_true", help="list current orders and exit")
+    ap.add_argument(
+        "--interval",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="repeat every N seconds (0 = run once; cron/systemd recipes are in README)",
+    )
+    ap.add_argument("--rounds", type=int, default=0, help="stop after N rounds (0 = until interrupted)")
     args = ap.parse_args()
 
     memory.init_db()
@@ -124,16 +176,12 @@ def main() -> int:
             print(f"  {r.get('order_id')} | {r.get('customer')} | {r.get('status')} | {r.get('amount')}")
         return 0
 
-    items = fetch_from_source(args.csv, url=args.url)
-    for it in items:
-        memory.upsert_order(
-            order_id=it["order_id"],
-            customer=it["customer"],
-            status=it["status"],
-            amount=it["amount"],
-        )
-    total = memory.query_table("orders", aggregate="count")["result"]
-    print(f"ingestion done: {len(items)} this run; {total} now in the local DB")
+    if args.interval and args.interval > 0:
+        run_scheduled(args.url, args.csv, args.interval, args.rounds)
+        return 0
+
+    fetched, total = collect_once(args.csv, args.url)
+    print(f"ingestion done: {fetched} this run; {total} now in the local DB")
     print("hint: the query_data tool can now query the orders table (table=orders).")
     return 0
 

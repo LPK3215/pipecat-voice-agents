@@ -455,11 +455,12 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 | **数据与代码分离（数据在数据层）** | `sample-data/*.json` + `DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` | ✅ 演示业务行与示例工具数据全部搬出代码：同代码换文件即换答案（实测指标 99.95→42.0、多出 `ALT-0001` 订单、杭州天气消失）；另有架构守卫单测防回退 |
 | **分层联通性（跨层接口是否真实）** | `scripts/verify_layers.py` + `tests/test_memory.py` | ✅ 9/9：空数据层必须答"查不到"（**证伪"写死在代码里"**）、外部 sqlite3 客户端写入立刻可见、替换数据访问层函数即改变工具结果、代码声明列与真实 schema 一致、换数据文件即换接口答案 |
 | **换库不用改代码** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE`） | ✅ 表/列白名单改为数据文件声明：实测外部建 `tickets` 表 + 文件里声明 → 列表/过滤/搜索/聚合全通；未声明的表明确报"未知的表"。空数据的 `sum/avg` 不再念出 `None`，`count` 的 0 如实回答 |
-| **单元测试** | `server/tests/` | ✅ **109 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明/**抓取解析与字段映射/CLI 流程/数据库加固**） |
+| **单元测试** | `server/tests/` | ✅ **110 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明/抓取解析与字段映射/CLI 流程/数据库加固/**定时采集**） |
 | **工具调用成功率实测**（2026-10-05） | `scripts/verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
 | **数据接入链路端到端实测**（2026-10-05） | `scripts/collect_orders.py --csv` + `scripts/ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
 | **真实网络源抓取（非结构化 + 结构化）** | `scripts/ingest_docs.py --url` + `scripts/collect_orders.py --url` | ✅ 实测：抓 Pipecat 官方 README（41,447 字符）→ **35 块入库** → 模型据此答出传输方式清单与安装命令（内容只在该文档里）；抓 GitHub 发布 API → orders 表 20→23。抓取是单次请求，非爬虫 |
 | **SQLite 抗损坏加固** | `knowledge.py` / `memory.py` 的 `_conn`（WAL + 5s 忙等）+ `ingest_docs.py --check` | ✅ 起因是一次**实测 btree 损坏**（`database disk image is malformed`）；现连接统一 WAL，`--check` 报完整性并给出重建步骤 |
+| **定时采集示例** | `collect_orders.py --interval` + README 的 cron / systemd 配方 | ✅ 实测真实 API 跑两轮：`fetched 3` 两次，总数稳定在 23（**按 `order_id` upsert，滚动采集不重复**）；生产建议交给 cron/systemd，Python 循环只作演示 |
 | **检索质量评测与调优**（2026-10-05） | `scripts/kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500 + 词面重排 α=0.3，出厂配置对比旧默认（300/0 纯余弦）**hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**；原默认（300/50 纯余弦）是最差的一档。语料随文档增长，绝对值会漂移，只有同一次运行内可比 |
 
 ### 未完成（按优先级）

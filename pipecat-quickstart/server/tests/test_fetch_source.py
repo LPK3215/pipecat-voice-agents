@@ -144,6 +144,32 @@ def test_map_api_item_maps_fields_explicitly(collect_module):
     assert collect_module.map_api_item(prerelease)["status"] == "预发布"
 
 
+# ---------------------------------------------------------------- scheduled collection
+def test_run_scheduled_collects_each_round_without_duplicating(
+    collect_module, monkeypatch, temp_db
+):
+    """The loop is a convenience wrapper; two properties must hold anyway:
+
+    - each round does a fetch (no "cached" shortcut that would silently stop updating), and
+    - repeating it never duplicates rows (upserts are keyed on ``order_id``), which is what makes
+      "collect every minute" safe.
+    """
+    calls: list[str | None] = []
+
+    def fake_fetch(csv_path=None, url=None):
+        calls.append(url)
+        return [{"order_id": "X-1", "customer": "甲", "status": "待发货", "amount": 1.0}]
+
+    monkeypatch.setattr(collect_module, "fetch_from_source", fake_fetch)
+    done = collect_module.run_scheduled(
+        "https://example.com/api", None, 0.0, rounds=2, sleep=lambda _seconds: None
+    )
+
+    assert done == 2
+    assert calls == ["https://example.com/api"] * 2
+    assert temp_db.query_table("orders", aggregate="count")["result"] == 1
+
+
 # ---------------------------------------------------------------- db hardening
 def test_knowledge_db_is_wal_and_sound(tmp_path, monkeypatch):
     """Locked in after a real corruption event: WAL + a busy timeout on every connection, and a
