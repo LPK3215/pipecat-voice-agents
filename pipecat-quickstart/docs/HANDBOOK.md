@@ -2,6 +2,11 @@
 
 **第一阶段：把链路跑通、把每个插槽搞清楚**
 
+> **状态**：✅ 第一阶段已完成（本手册随实现同步维护）。
+> **分工**：**本文只写第一阶段** —— 怎么把「语音进 / 语音出」搭起来、四个插槽怎么换。
+> 第二阶段（写自己的业务）另成一册：[`HANDBOOK-02.md`](HANDBOOK-02.md)。
+> 两份文档**按阶段分开维护、互不混杂**：本文不涉及工具与业务数据，那份也不重复管线搭建。
+
 > 定位：这是一份**从零复现文档**。目标是不看仓库代码，照着本文也能把
 > 「语音进 / 语音出」的底层搭起来，并知道每个环节能换什么、怎么换、代价是什么。
 >
@@ -80,12 +85,12 @@
 # 1) 建项目、装依赖（Python 3.12）
 mkdir -p my-voice-agent/server && cd my-voice-agent/server
 uv init --python 3.12
-uv add "pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.4.0"
+uv add "pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.12.0"   # 1.12 起才有 flows / LLMContextSummarizer 等本仓库用到的能力
 ```
 
 ```toml
 # server/pyproject.toml 关键一行
-dependencies = ["pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.4.0"]
+dependencies = ["pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.12.0"]
 ```
 
 ```bash
@@ -155,8 +160,8 @@ server/
 ├── guards.py           # 可信性护栏：谎报执行检测 + 强制纠正
 └── tests/              # pytest 单元测试（秒级、不联网）
 
-../ scripts/ingest_docs.py      # 知识库写入侧（灌文档）
-../ scripts/collect_orders.py   # 业务数据采集示例（采集与查询分离）
+../scripts/ingest_docs.py       # 知识库写入侧（灌文档）
+../scripts/collect_orders.py    # 业务数据采集示例（采集与查询分离）
 ```
 
 **设计约定**：`settings.py` 是唯一默认值来源，且 `build_stt/build_tts` 也放在这里，

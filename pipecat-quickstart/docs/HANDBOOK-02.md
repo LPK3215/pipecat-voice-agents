@@ -1,5 +1,9 @@
 # 第二阶段：在框架上写自己的业务
 
+> **状态**：✅ **第二阶段已结项**（`v0.1.0`，2026-10-05）—— 结项快照、逐能力探针与后续三项见[第 10 节](#10-当前进度与待办)。
+> **分工**：**本文只写第二阶段**（工具 / 数据 / 编排 / 测试）。第一阶段（管线怎么搭、四个插槽怎么换）
+> 在 [`HANDBOOK.md`](HANDBOOK.md)；两份文档**按阶段分开维护、互不混杂**。
+
 > **第一阶段**（`HANDBOOK.md`）：把语音链路跑通，搞清楚四个模型插槽怎么换。
 > **第二阶段**（本文）：把「能聊天的语音助手」变成「能干活的东西」。
 >
@@ -346,10 +350,10 @@ done
 | 11 | 工具 handler **抛异常**（如 `limit` 传成 `"十条"`） | 工具「跑了」但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同一类静默失败） | `build_tools()` 用 `safe_handler` **统一包装**所有 handler：记 traceback + 回 `ok=False`，机器人如实说"出错了" |
 | 12 | 知识库写入侧拿**调用时的原样路径**当文档标识 | 同一文件灌两次变两篇 → 检索返回重复正文块；`--delete` 必须拼写完全一致 | 标识统一取「相对仓库根的路径」；并加 `--prune` 清掉源文件已删的记录（否则会检索到已删除的内容） |
 | 13 | 基准脚本的**基线**不是「实际在跑的配置」，或注释说要扫的变量其实没扫 | 数字看着合理，却在和一个没人用的配置对比（如 `asr_bench` 曾拿 `language=None` 当基线）；声称已修的调参从未被测量 | 基线必须等于 `settings.py` 实际下发的参数；注释里写的变量要真出现在循环里；`verify_stack` 对已知 5 秒陷阱改为 WARN 而非沉默 |
-| 14 | 长期记忆召回是**字面匹配**，且**探针没做记忆注入** | ①用户问「我住在哪」与存储键「城市」无字面重叠 → 工具答「没有相关的记录」，用户听到**假否定**；②`verify_tools.py` 不像 `bot.py` 那样注入记忆 → 探针把上面的假否定放大成一条看起来像产品缺陷的"错答" | ①召回加兜底：字面没命中时返回"我记得的"并说明未直接匹配；工具描述要求传**短关键词**；②探针补上与 `bot.py` 相同的记忆注入，避免探针失真被误读成产品 bug |
+| 14 | 长期记忆召回是**字面匹配**，且**探针没做记忆注入** | ①用户问「我住在哪」与存储键「城市」无字面重叠 → 工具答「没有相关的记录」，用户听到**假否定**；②`scripts/verify_tools.py` 不像 `bot.py` 那样注入记忆 → 探针把上面的假否定放大成一条看起来像产品缺陷的"错答" | ①召回加兜底：字面没命中时返回"我记得的"并说明未直接匹配；工具描述要求传**短关键词**；②探针补上与 `bot.py` 相同的记忆注入，避免探针失真被误读成产品 bug |
 | 14 | 文本搜索用**全局**列名名单（`name`/`message`/`note`/`host`） | 对没有这些列名的表（如 `orders` 用的是 `customer`/`order_id`）`search` 被**静默忽略**，返回未过滤的行，却像"检索成功"一样被模型当真回答 | 每表一份 `TEXT_COLUMNS`；且无可用列时返回错误而不是沉默（并用测试锁住"每张可查表都有可搜列"） |
 | 15 | 把业务数据**写死在代码里**（假数据假装数据层） | 换真实数据要改代码，"数据层"名存实亡；示例工具的城市 / 设备清单也一样写在代码里 | 数据一律放**文件**（`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖），代码只加载 + 白名单校验；单测把"业务行不许出现在源码里"锁住 |
-| 16 | 多个脚本/进程分别读写**同一个 SQLite 文件**（默认 rollback journal、无忙等） | 实测遇到过一次 **btree 损坏**：读的时候报 `database disk image is malformed`，`integrity_check` 报 `btreeInitPage` 错误 —— 而写入时没有任何报错 | 连接统一开 **WAL + 5s 忙等**（`knowledge.py` / `memory.py` 的 `_conn`），并加 `ingest_docs.py --check` 做完整性检查与重建指引；源都可重新获取，重建只需一条命令 |
+| 16 | 多个脚本/进程分别读写**同一个 SQLite 文件**（默认 rollback journal、无忙等） | 实测遇到过一次 **btree 损坏**：读的时候报 `database disk image is malformed`，`integrity_check` 报 `btreeInitPage` 错误 —— 而写入时没有任何报错 | 连接统一开 **WAL + 5s 忙等**（`knowledge.py` / `memory.py` 的 `_conn`），并加 `scripts/ingest_docs.py --check` 做完整性检查与重建指引；源都可重新获取，重建只需一条命令 |
 
 ---
 
@@ -495,8 +499,8 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 | **工具调用成功率实测**（2026-10-05） | `scripts/verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
 | **数据接入链路端到端实测**（2026-10-05） | `scripts/collect_orders.py --csv` + `scripts/ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
 | **真实网络源抓取（非结构化 + 结构化）** | `scripts/ingest_docs.py --url` + `scripts/collect_orders.py --url` | ✅ 实测：抓 Pipecat 官方 README（41,447 字符）→ **35 块入库** → 模型据此答出传输方式清单与安装命令（内容只在该文档里）；抓 GitHub 发布 API → orders 表 20→23。抓取是单次请求，非爬虫 |
-| **SQLite 抗损坏加固** | `knowledge.py` / `memory.py` 的 `_conn`（WAL + 5s 忙等）+ `ingest_docs.py --check` | ✅ 起因是一次**实测 btree 损坏**（`database disk image is malformed`）；现连接统一 WAL，`--check` 报完整性并给出重建步骤 |
-| **定时采集示例** | `collect_orders.py --interval` + README 的 cron / systemd 配方 | ✅ 实测真实 API 跑两轮：`fetched 3` 两次，总数稳定在 23（**按 `order_id` upsert，滚动采集不重复**）；生产建议交给 cron/systemd，Python 循环只作演示 |
+| **SQLite 抗损坏加固** | `knowledge.py` / `memory.py` 的 `_conn`（WAL + 5s 忙等）+ `scripts/ingest_docs.py --check` | ✅ 起因是一次**实测 btree 损坏**（`database disk image is malformed`）；现连接统一 WAL，`--check` 报完整性并给出重建步骤 |
+| **定时采集示例** | `scripts/collect_orders.py --interval` + README 的 cron / systemd 配方 | ✅ 实测真实 API 跑两轮：`fetched 3` 两次，总数稳定在 23（**按 `order_id` upsert，滚动采集不重复**）；生产建议交给 cron/systemd，Python 循环只作演示 |
 | **检索质量评测与调优**（2026-10-05） | `scripts/kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500 + 词面重排 α=0.3，出厂配置对比旧默认（300/0 纯余弦）**hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**；原默认（300/50 纯余弦）是最差的一档。语料随文档增长，绝对值会漂移，只有同一次运行内可比 |
 
 ### 未完成（不阻塞结项；口径见上）
