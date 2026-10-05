@@ -16,7 +16,8 @@
 - `CONTRIBUTING.md` / `FAQ.md` / `AUTHORS`
 - `LICENSE-SUPPLEMENT.md`：**双协议**说明 —— 上游代码沿用 Open WebUI License，**本分支新增的独立文件采用 MIT**
 - `voice-docs/INTEGRATION.md`：**语音模块接入说明**（给后来者：做了什么动作 / 改了哪些文件 / 调用了哪些接口 / 升级方向）
-- `voice-docs/VOICE-MODES.md`：**语音形态选择与实现指南**（简单 I/O vs 实时对话：怎么选、实时对话的 5 个机制、在新宿主上怎么落地）
+- `voice-docs/VOICE-MODES.md`：**语音形态选择与实现指南**（三档：A 简单 I/O / B 连续对话 / C 精细实时；怎么选、C 档的 5 个机制、从 B 升 C 要补哪四层）
+- 更正：**③ 已能"连续对话"**（CallOverlay 自动循环 + 点击打断，属 B 档）；先前"③ 不能做实时对话"的表述不准确，已在 `VOICE-MODES.md` 更正
 
 ### 移除（相对上游）
 
