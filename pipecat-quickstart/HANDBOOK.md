@@ -85,10 +85,12 @@ dependencies = ["pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.4.0"]
 ```
 
 ```bash
-# 2) 可选：升级为中文更强的 ASR
-#    ⚠️ 必须指定 CPU 源。用默认源会拉 CUDA 版 torch（数 GB）；CPU 版约 0.7GB
-uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-uv pip install funasr
+# 2) 可选：升级为中文更强的 ASR（SenseVoice，即默认 STT_ENGINE）
+#    本项目已把它声明为可选 extra，且 CPU 源已在 pyproject 里配好：
+uv sync --extra sensevoice
+#    若手工安装，务必显式指定 CPU 源，否则会拉 CUDA 版 torch（数 GB）：
+#    uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+#    uv pip install funasr
 
 # 3) 配置（只有 API KEY 必填）
 cp .env.example .env
@@ -109,7 +111,7 @@ uv run ../audio_probe.py           # 真实音频进 / 真实音频出（覆盖 
 ```
 server/
 ├── bot.py              # 管线装配：把 VAD/STT/LLM/TTS 串起来（核心，最先读这个）
-├── settings.py         # 所有默认值的唯一来源（自检与运行共用，保证「测的就是跑的」）
+├── settings.py         # 默认值 + 本地服务构造（build_stt/build_tts）的唯一来源（自检与运行共用，保证「测的就是跑的」）
 ├── tools.py            # function calling 工具 —— 业务能力的扩展点（第二阶段的入口）
 ├── pipeline_logging.py # 分段耗时日志
 └── .env                # 唯一必填：MODELSCOPE_API_KEY
@@ -124,7 +126,8 @@ server/
 └── verify_tools.py     # 工具调用自检（只测后端）
 ```
 
-**设计约定**：`settings.py` 是唯一默认值来源，自检脚本直接复用同一批默认值。
+**设计约定**：`settings.py` 是唯一默认值来源，且 `build_stt/build_tts` 也放在这里，
+自检脚本直接复用同一批默认值与同一套构造逻辑。
 若各写一份，任何一侧改动都会让自检结果失真 —— 而这种漂移**不报错**，
 只会让人对着错误的延迟数字做决策。
 
@@ -200,7 +203,12 @@ server/
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `MODELSCOPE_API_KEY` | **必填** | 唯一必须自己填的 |
+| `LLM_PROVIDER` | `modelscope` | LLM 服务商：`modelscope`（魔搭）/ `sensenova`（商汤日日新，`https://token.sensenova.cn/v1`）/ `suanli`（共绩算力，`https://api.suanli.cn/v1`） |
+| `MODELSCOPE_API_KEY` | **必填** | `LLM_PROVIDER=modelscope` 时的密钥 |
+| `SENSENOVA_API_KEY` | — | `LLM_PROVIDER=sensenova` 时的密钥（形如 `sk-...`） |
+| `SENSENOVA_MODEL` | `sensenova-6.8-flash-lite` | 商汤模型 ID（可选 `deepseek-v4-flash` / `glm-5.2` / `kimi-k3` 等） |
+| `SUANLI_API_KEY` | — | `LLM_PROVIDER=suanli` 时的密钥 |
+| `SUANLI_MODEL` | `qwen/qwen3.8-27b` | 共绩模型 ID（形如「厂商/模型」，以控制台为准） |
 | `MODELSCOPE_BASE_URL` | `https://api-inference.modelscope.cn/v1` | OpenAI 兼容端点 |
 | `MODELSCOPE_MODEL` | `nex-agi/Nex-N2.5-mini` | 上表三选一 |
 | `LLM_DISABLE_THINKING` | `1` | 关思考，首 token 2.5s→0.8s |
@@ -219,6 +227,7 @@ server/
 
 | 场景 | 工具 |
 |---|---|
+| 改了配置/逻辑，先跑快速回归 | `uv run pytest`（单元测试，秒级、不联网） |
 | 改了配置，想快速确认没跑偏 | `smoke.py`（自动拉起 + 关闭） |
 | 想量化改某个旋钮的效果 | `verify_stack.py --model X` / `--stop-secs 0.2` |
 | 改 ASR 配置，秒级看效果 | `asr_bench.py`（离线，直接喂 WAV） |
@@ -387,8 +396,8 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
 5. **VAD `stop_secs=0.2` 会把一句中文按逗号切成两段**，LLM 只收到半句。
 
 6. **funasr 依赖 torch**，直接装会拖进 CUDA 版（几 GB）。
-   必须用 CPU 源：`uv pip install torch --index-url https://download.pytorch.org/whl/cpu`。
-   装前先 `uv pip install --dry-run` 预演，确认不会覆盖已有 torch。
+   本项目已用 `uv sync --extra sensevoice` + `pyproject.toml` 里的 CPU 源解决；
+   手工装时务必用 CPU 源：`uv pip install torch --index-url https://download.pytorch.org/whl/cpu`。
 
 7. **探针端口不一致会静默拿不到结果** —— 连到没有服务的默认端口，
    现象是「跑完了但什么都没测到」。服务地址须与 bot 实际监听端口一致。

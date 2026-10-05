@@ -31,7 +31,6 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import LLMRunFrame
 from pipecat.observers.error_observer import ErrorObserver
 from pipecat.observers.loggers.metrics_log_observer import MetricsLogObserver
-from pipecat.transcriptions.language import Language
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -42,8 +41,6 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.piper.tts import PiperTTSService
-from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
@@ -69,38 +66,32 @@ load_dotenv(override=True)
 # 默认值一律取自 settings.py：verify_stack.py 也读同一份，
 # 因此「自检测到的配置」就是「bot 真正跑的配置」，不会两侧漂移。
 # ==========================================================================
+import memory  # noqa: E402 - 均需先 load_dotenv
 from settings import (  # noqa: E402
-    AVAILABLE_MODELS,
-    DEFAULT_KOKORO_VOICE,
-    DEFAULT_MODEL,
     DEFAULT_OPENING_MESSAGE,
-    DEFAULT_PIPER_VOICE,
-    DEFAULT_STT_LANGUAGE,
     DEFAULT_SYSTEM_INSTRUCTION,
     DEFAULT_VAD_STOP_SECS,
-    DEFAULT_WHISPER_MODEL,
-    MODELSCOPE_BASE_URL_DEFAULT,
-    SENSEVOICE_TTFS_P99,
     VAD_STOP_SECS_OFFICIAL_DEFAULT,
-    WHISPER_INITIAL_PROMPT,
-    WHISPER_TTFS_P99,
     build_llm_extra,
+    build_stt,
+    build_tts,
+    llm_config,
+    stt_desc,
     stt_engine,
     thinking_disabled,
     tools_enabled,
+    tts_desc,
     tts_engine,
 )
+from tools import build_tools  # noqa: E402 - 同理
 
-from tools import build_tools  # noqa: E402 - 与 settings 同理，需先 load_dotenv
+# LLM 服务商（默认 modelscope，设 LLM_PROVIDER=suanli 切到共绩）——
+# base_url / key / model 都从这里解析，切换只改环境变量，代码不动。
+LLM_CFG = llm_config()
 
-import memory  # noqa: E402 - 同上
-
-MODELSCOPE_BASE_URL = os.getenv("MODELSCOPE_BASE_URL", MODELSCOPE_BASE_URL_DEFAULT)
-
-# 可选模型：三个均已实测「关闭思考后」首 token < 1 秒，默认取最快的
-MODELSCOPE_MODEL = os.getenv("MODELSCOPE_MODEL") or DEFAULT_MODEL
-
-# 关闭「思考」模式：Qwen / DeepSeek 默认先推理再回答，实测首 token 2.5s → 0.8s。
+# 关闭「思考」模式：推理模型默认先推理再回答，实测首 token 会涨到 2~3 秒。
+# 各家「关思考」的写法不同，具体注入什么由服务商的 thinking_body 决定
+# （魔搭 enable_thinking / 商汤 thinking={"type":"disabled"} / 共绩暂不注入）。
 DISABLE_THINKING = thinking_disabled()
 
 # 是否开放工具调用（function calling）给 LLM。
@@ -108,18 +99,8 @@ DISABLE_THINKING = thinking_disabled()
 ENABLE_TOOLS = tools_enabled()
 TOOLS = build_tools() if ENABLE_TOOLS else None
 
-# 语音识别引擎。两者都本地免费，但中文表现差距很大：
-# sensevoice 字错率 10.2% / 158ms，whisper(base) 23.8% / 607ms（asr_bench.py 实测）
-STT_ENGINE = stt_engine()
-STT_LANGUAGE = os.getenv("STT_LANGUAGE", DEFAULT_STT_LANGUAGE)
-
-# 语音合成引擎。音色与延迟是取舍关系，故默认取延迟更低的 Piper
-TTS_ENGINE = tts_engine()
-
-# 官方默认 Systran/faster-distil-whisper-medium.en 是【纯英文】模型，中文须用多语种
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", DEFAULT_WHISPER_MODEL)
-PIPER_VOICE_ID = os.getenv("PIPER_VOICE_ID", DEFAULT_PIPER_VOICE)
-KOKORO_VOICE_ID = os.getenv("KOKORO_VOICE_ID", DEFAULT_KOKORO_VOICE)
+# STT / TTS 的引擎选择与构造逻辑在 settings.build_stt / build_tts ——
+# 与 verify_stack.py 共用同一份，避免「测的」和「跑的」两侧漂移。
 
 # VAD「说完」阈值。官方默认 0.2s 会把一句中文按逗号停顿切成两段
 VAD_STOP_SECS = float(os.getenv("VAD_STOP_SECS", str(DEFAULT_VAD_STOP_SECS)))
@@ -149,73 +130,6 @@ def _pipecat_version() -> str:
     return getattr(pipecat, "__version__", "?")
 
 
-def build_stt():
-    """按 STT_ENGINE 构造语音识别服务 —— 两个引擎都本地运行、无需 key。
-
-    SenseVoice 在中文上**同时更快更准**（asr_bench.py 实测：字错率 10.2% / 158ms，
-    对比 Whisper base 的 23.8% / 607ms），因此作为默认；Whisper 保留为通用回退。
-    funasr 依赖缺失时自动退回 Whisper —— 少一个可选依赖不该让服务起不来。
-    """
-    try:
-        lang = Language(STT_LANGUAGE)
-    except ValueError:
-        lang = Language.ZH
-
-    if STT_ENGINE == "sensevoice":
-        try:
-            from pipecat.services.funasr.stt import FunASRSTTService
-        except ImportError as exc:
-            logger.warning(f"[BOOT] SenseVoice 不可用（{exc}），退回 Whisper")
-        else:
-            return FunASRSTTService(
-                settings=FunASRSTTService.Settings(
-                    model="iic/SenseVoiceSmall",
-                    language=lang,
-                    use_itn=True,  # 把「三点」规范化为「3点」
-                ),
-                ttfs_p99_latency=SENSEVOICE_TTFS_P99,
-            )
-
-    return WhisperSTTService(
-        settings=WhisperSTTService.Settings(
-            model=WHISPER_MODEL,
-            # 显式指定中文：自动猜语种既更慢也更易错（实测 607ms → 370ms）
-            language=lang,
-            # Whisper base 会把中文转成繁体（「介绍」亦易误识为「接收」），
-            # 给一句普通话提示把它拉回简体。
-            initial_prompt=WHISPER_INITIAL_PROMPT,
-        ),
-        # 本机实测 Whisper「说完→最终文本」约 1.0s，p99 取 1.0s。
-        # 显式填入可消除 "ttfs_p99_latency not set" 告警。
-        ttfs_p99_latency=WHISPER_TTFS_P99,
-    )
-
-
-def build_tts():
-    """按 TTS_ENGINE 构造语音合成服务 —— 两者都本地运行、无需 key。
-
-    与 ASR 不同，这里**没有又快又好的选项**，是实打实的取舍。
-    同一句中文跑完整链路实测（audio_probe.py，基准 = 用户说完）：
-      piper :「TTS 开始合成」→ 出声 220ms，端到端 1881ms
-      kokoro:「TTS 开始合成」→ 出声 1993ms，端到端 3681ms（**慢 1800ms**）
-    语音助手对「多久开口」极敏感，多等近 2 秒会明显觉得迟钝，因此默认 piper。
-    想要更自然的音色就设 TTS_ENGINE=kokoro —— 但请先接受这个延迟代价。
-    """
-    if TTS_ENGINE == "kokoro":
-        try:
-            from pipecat.services.kokoro.tts import KokoroTTSService
-        except ImportError as exc:
-            logger.warning(f"[BOOT] Kokoro 不可用（{exc}），退回 Piper")
-        else:
-            return KokoroTTSService(
-                settings=KokoroTTSService.Settings(
-                    voice=KOKORO_VOICE_ID, language=Language.ZH
-                )
-            )
-
-    return PiperTTSService(settings=PiperTTSService.Settings(voice=PIPER_VOICE_ID))
-
-
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
     """Run the voice bot for this session."""
     session_id = getattr(runner_args, "session_id", None) or "unknown"
@@ -225,27 +139,40 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     setup_logging(RUN_LOG, LATEST_LOG)
     logger.info(f"[BOOT] ───────── 新会话 {session_id} ─────────")
 
+    recommended = LLM_CFG["recommended"]
+    if recommended and LLM_CFG["model"] not in recommended:
+        logger.warning(
+            f"[BOOT] 模型 {LLM_CFG['model']} 不在实测推荐的 {len(recommended)} 个之内，"
+            f"延迟可能不理想。推荐: {recommended}"
+        )
+    # ---------- 缺 key 必须 fail-fast ----------
+    # 早期版本只打一行 ERROR 然后照常启动：浏览器能连上、握手也成功，
+    # 但用户一开口必然没有回应，看起来像网络故障，极难排查。
+    # 这里直接终止会话并给出可操作的指引。
+    # 放在构造 STT/TTS 之前，避免缺 key 时仍去下载/加载本地模型。
+    if not LLM_CFG["api_key"] and not os.getenv("ALLOW_MISSING_KEY"):
+        raise RuntimeError(
+            f"缺少 {LLM_CFG['api_key_env']}：LLM 调用必然失败。\n"
+            f"  1) 打开 server/.env 填入 {LLM_CFG['api_key_env']}"
+            f"（当前服务商 LLM_PROVIDER={LLM_CFG['provider']}，请确认与密钥匹配）\n"
+            "  2) 重新启动：uv run bot.py\n"
+            "  只想调试前端/传输层时，可设 ALLOW_MISSING_KEY=1 跳过本检查。"
+        )
+
     log_boot_banner(
         {
             "会话 ID": session_id,
             "Pipecat 版本": _pipecat_version(),
-            "LLM 模型": MODELSCOPE_MODEL,
+            "LLM 服务商": LLM_CFG["provider"],
+            "LLM 模型": LLM_CFG["model"],
             "关闭思考模式": DISABLE_THINKING,
             "工具调用": (
                 ", ".join(t.name for t in TOOLS.standard_tools) if TOOLS else "未启用"
             ),
             "故障推送前端": "已开启（ErrorObserver → RTVI error）",
-            "LLM Key": _mask(os.getenv("MODELSCOPE_API_KEY")),
-            "STT": (
-                "SenseVoice 本地·无需 key（中文最优）"
-                if STT_ENGINE == "sensevoice"
-                else f"Whisper({WHISPER_MODEL}) 本地·无需 key"
-            ),
-            "TTS": (
-                f"Piper({PIPER_VOICE_ID}) 本地·无需 key（首块 76ms）"
-                if TTS_ENGINE == "piper"
-                else f"Kokoro({KOKORO_VOICE_ID}) 本地·无需 key（音色好，+630ms）"
-            ),
+            "LLM Key": _mask(LLM_CFG["api_key"]),
+            "STT（配置）": stt_desc(stt_engine()),
+            "TTS（配置）": tts_desc(tts_engine()),
             "VAD 说完阈值": f"{VAD_STOP_SECS}s（官方推荐 {VAD_STOP_SECS_DEFAULT}s）",
             "系统提示词": SYSTEM_INSTRUCTION,
             "开场白": OPENING_MESSAGE,
@@ -253,44 +180,32 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         }
     )
 
-    if MODELSCOPE_MODEL not in AVAILABLE_MODELS:
-        logger.warning(
-            f"[BOOT] 模型 {MODELSCOPE_MODEL} 不在实测推荐的 3 个之内，延迟可能不理想。"
-            f"推荐: {AVAILABLE_MODELS}"
-        )
-    # ---------- 缺 key 必须 fail-fast ----------
-    # 早期版本只打一行 ERROR 然后照常启动：浏览器能连上、握手也成功，
-    # 但用户一开口必然没有回应，看起来像网络故障，极难排查。
-    # 这里直接终止会话并给出可操作的指引。
-    if not os.getenv("MODELSCOPE_API_KEY") and not os.getenv("ALLOW_MISSING_KEY"):
-        raise RuntimeError(
-            "缺少 MODELSCOPE_API_KEY：LLM 调用必然失败。\n"
-            "  1) 打开 server/.env 填入 MODELSCOPE_API_KEY（令牌在 "
-            "https://modelscope.cn → 个人中心 → 访问令牌 获取）\n"
-            "  2) 重新启动：uv run bot.py\n"
-            "  只想调试前端/传输层时，可设 ALLOW_MISSING_KEY=1 跳过本检查。"
-        )
+    # ---------- Speech-to-Text / Text-to-Speech（本地，无 key） ----------
+    # 放在横幅之后构造：构造会触发本地模型加载（首次还要联网下载，可能数十秒），
+    # 不能让它挡住「本次配置」的可见性 —— 否则冷启动下载失败时连配置都看不到。
+    # 实际生效的引擎单独记一行：配置了 sensevoice/kokoro 但依赖缺失时会降级。
+    stt, stt_actual = build_stt()
+    tts, tts_actual = build_tts()
+    logger.info(f"[BOOT] STT 实际生效: {stt_actual}")
+    logger.info(f"[BOOT] TTS 实际生效: {tts_actual}")
 
-    # ---------- Speech-to-Text（本地，无 key） ----------
-    stt = build_stt()
-
-    # ---------- Text-to-Speech（本地，无 key） ----------
-    tts = build_tts()
-
-    # ---------- LLM（魔搭 ModelScope，OpenAI 兼容） ----------
+    # ---------- LLM（OpenAI 兼容：默认魔搭，可切共绩） ----------
     llm_kwargs: dict = {
-        "model": MODELSCOPE_MODEL,
+        "model": LLM_CFG["model"],
         "system_instruction": SYSTEM_INSTRUCTION,
     }
-    if DISABLE_THINKING:
-        # pipecat 会把 OpenAILLMSettings.extra 里的键**直接作为 kwargs**
-        # 传给 client.chat.completions.create(...)，因此非标准参数必须用
-        # OpenAI SDK 的 extra_body 包一层，才能进入请求体 JSON。
-        llm_kwargs["extra"] = build_llm_extra()
+    # pipecat 会把 OpenAILLMSettings.extra 里的键**直接作为 kwargs**
+    # 传给 client.chat.completions.create(...)，因此非标准参数必须用
+    # OpenAI SDK 的 extra_body 包一层，才能进入请求体 JSON。
+    # 关思考的写法各服务商不同，交给 thinking_body。
+    thinking_body = LLM_CFG["thinking_body"] if DISABLE_THINKING else None
+    extra = build_llm_extra(thinking_body=thinking_body)
+    if extra:
+        llm_kwargs["extra"] = extra
 
     llm = OpenAILLMService(
-        api_key=os.getenv("MODELSCOPE_API_KEY"),
-        base_url=MODELSCOPE_BASE_URL,
+        api_key=LLM_CFG["api_key"],
+        base_url=LLM_CFG["base_url"],
         settings=OpenAILLMService.Settings(**llm_kwargs),
     )
 
@@ -317,9 +232,6 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             tts,
             transport.output(),
             assistant_aggregator,
-            # 放最后：用户侧与助手侧的文本帧都会一路传播到这里，
-            # 一个 processor 就能把两边都落库
-            memory.TurnRecorder(SESSION_ID),
         ]
     )
 
@@ -333,12 +245,16 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         # ConversationLogger：对话时间线 + 每轮分段延迟
         # MetricsLogObserver：各服务 TTFB / TTFAT / TTFA
         # ErrorObserver：在错误源头捕获，写 [ERROR] 日志并推送给前端
+        # TurnRecorder：把每轮对话落库。必须是观察者，不能是管线处理器 ——
+        #   用户/助手两侧的文本帧都会被各自的聚合器消费，不向下游转发
+        #   （详见 memory.TurnRecorder 的说明）
         observers=[
             ConversationLogger(),
             MetricsLogObserver(),
             error_observer,
             # 工具调用按框架推荐方式记录（自带的 FunctionCallObserver）
             install_function_call_logging(),
+            memory.TurnRecorder(SESSION_ID),
         ],
     )
     install_error_reporting(worker, error_observer)

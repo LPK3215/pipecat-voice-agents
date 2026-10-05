@@ -56,10 +56,9 @@ from pipecat.workers.runner import WorkerRunner  # noqa: E402
 
 from pipeline_logging import setup_logging  # noqa: E402
 from settings import (  # noqa: E402
-    DEFAULT_MODEL,
     DEFAULT_SYSTEM_INSTRUCTION,
-    MODELSCOPE_BASE_URL_DEFAULT,
     build_llm_extra,
+    llm_config,
     thinking_disabled,
 )
 from tools import build_tools  # noqa: E402
@@ -127,7 +126,7 @@ async def main() -> int:
     ap.add_argument(
         "--dump-context", action="store_true", help="打印上下文消息，用于排查无文本输出"
     )
-    ap.add_argument("--model", default=None, help="覆盖 MODELSCOPE_MODEL")
+    ap.add_argument("--model", default=None, help="覆盖当前服务商的模型名")
     ap.add_argument("--think", action="store_true", help="开启思考模式（覆盖 .env 的关闭设置）")
     ap.add_argument(
         "--run-frame",
@@ -141,17 +140,19 @@ async def main() -> int:
     )
     args = ap.parse_args()
 
-    model = args.model or os.getenv("MODELSCOPE_MODEL") or DEFAULT_MODEL
-    base_url = os.getenv("MODELSCOPE_BASE_URL", MODELSCOPE_BASE_URL_DEFAULT)
-    if not os.getenv("MODELSCOPE_API_KEY"):
-        print("缺少 MODELSCOPE_API_KEY（应写在 server/.env）")
+    llm_cfg = llm_config()
+    model = args.model or llm_cfg["model"]
+    base_url = llm_cfg["base_url"]
+    if not llm_cfg["api_key"]:
+        print(f"缺少 {llm_cfg['api_key_env']}（应写在 server/.env）")
         return 1
 
     run_log, latest_log = setup_logging(prefix="verify-tools")
 
     print("=" * 74)
     print("function calling 自检（与 server/bot.py 同配置）")
-    print(f"  LLM   = {model}")
+    print(f"  LLM   = {llm_cfg['provider']} | {model}")
+    # 关思考的写法各服务商不同，交给 thinking_body（--think 可强制保留思考）
     disable_thinking = False if args.think else thinking_disabled()
     print(f"  关闭思考 = {disable_thinking}")
     print(f"  提问  = {args.question!r}")
@@ -159,10 +160,13 @@ async def main() -> int:
     print("=" * 74)
 
     llm_kwargs: dict = {"model": model, "system_instruction": DEFAULT_SYSTEM_INSTRUCTION}
-    if disable_thinking:
-        llm_kwargs["extra"] = build_llm_extra()
+    extra = build_llm_extra(
+        thinking_body=(llm_cfg["thinking_body"] if disable_thinking else None)
+    )
+    if extra:
+        llm_kwargs["extra"] = extra
     llm = OpenAILLMService(
-        api_key=os.getenv("MODELSCOPE_API_KEY"),
+        api_key=llm_cfg["api_key"],
         base_url=base_url,
         settings=OpenAILLMService.Settings(**llm_kwargs),
     )

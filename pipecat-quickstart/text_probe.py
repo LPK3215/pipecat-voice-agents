@@ -97,7 +97,7 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
     print(f"  POST /api/offer -> HTTP {status}")
     if status != 200:
         await pc.close()
-        return seen
+        return seen, samples
 
     # 必须把 answer SDP 装回去，否则连接不会真正建立、数据通道永远打不开
     try:
@@ -113,14 +113,22 @@ async def run_session(question: str, wait_seconds: float, pc_id: str) -> Counter
     except TimeoutError:
         print("  数据通道未打开")
         await pc.close()
-        return seen
+        return seen, samples
 
     # 1) 声明前端就绪；2) 发文本提问（与前端 sendText() 完全一致）
     # aiortc 的 channel.send() 是同步方法，不是协程。
     # id 必填 —— 少了它后端会整条消息校验失败（Prebuilt 前端会带上）。
+    # version 也必填：缺了后端会回 error-response「Client version unknown」（兼容性提示）。
+    from pipecat.processors.frameworks.rtvi.models import PROTOCOL_VERSION
+
     channel.send(
         json.dumps(
-            {"label": LABEL, "type": "client-ready", "id": f"{pc_id}-ready", "data": {}}
+            {
+                "label": LABEL,
+                "type": "client-ready",
+                "id": f"{pc_id}-ready",
+                "data": {"version": PROTOCOL_VERSION},
+            }
         )
     )
     await asyncio.sleep(1.0)

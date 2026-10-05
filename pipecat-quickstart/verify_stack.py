@@ -54,23 +54,18 @@ from pipecat.processors.aggregators.llm_response_universal import (  # noqa: E40
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
 from pipecat.services.openai.llm import OpenAILLMService  # noqa: E402
-from pipecat.services.piper.tts import PiperTTSService  # noqa: E402
-from pipecat.services.whisper.stt import WhisperSTTService  # noqa: E402
-from pipecat.transcriptions.language import Language  # noqa: E402
 from pipecat.workers.runner import WorkerRunner  # noqa: E402
 
 from pipeline_logging import ConversationLogger, setup_logging  # noqa: E402
 from settings import (  # noqa: E402
-    DEFAULT_MODEL,
     DEFAULT_PIPER_VOICE,
     DEFAULT_SYSTEM_INSTRUCTION,
     DEFAULT_VAD_STOP_SECS,
-    DEFAULT_WHISPER_MODEL,
-    MODELSCOPE_BASE_URL_DEFAULT,
     VERIFY_USER_TEXT,
-    WHISPER_INITIAL_PROMPT,
-    WHISPER_TTFS_P99,
     build_llm_extra,
+    build_stt,
+    build_tts,
+    llm_config,
     thinking_disabled,
 )
 
@@ -213,35 +208,43 @@ def make_wav(voice: str, path: Path) -> None:
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default=None, help="覆盖 MODELSCOPE_MODEL")
-    ap.add_argument("--whisper", default=None, help="覆盖 WHISPER_MODEL")
+    ap.add_argument("--model", default=None, help="覆盖当前服务商的模型名")
+    ap.add_argument("--whisper", default=None, help="强制用 Whisper 引擎并覆盖模型名")
+    ap.add_argument("--stt-engine", default=None, help="覆盖 STT_ENGINE（sensevoice/whisper）")
     ap.add_argument("--voice", default=None, help="覆盖 PIPER_VOICE_ID")
     ap.add_argument("--stop-secs", type=float, default=None, help="覆盖 VAD_STOP_SECS")
     args = ap.parse_args()
 
     # 默认值一律取自 settings.py —— 与 server/bot.py 同源，保证「测的就是跑的」
-    model = args.model or os.getenv("MODELSCOPE_MODEL") or DEFAULT_MODEL
-    base_url = os.getenv("MODELSCOPE_BASE_URL", MODELSCOPE_BASE_URL_DEFAULT)
-    whisper_model = args.whisper or os.getenv("WHISPER_MODEL") or DEFAULT_WHISPER_MODEL
+    llm_cfg = llm_config()
+    model = args.model or llm_cfg["model"]
+    base_url = llm_cfg["base_url"]
     voice = args.voice or os.getenv("PIPER_VOICE_ID") or DEFAULT_PIPER_VOICE
+    # --whisper 隐含「强制改用 whisper 引擎」；否则沿用 .env 里配置的引擎
+    stt_engine_arg = args.stt_engine or ("whisper" if args.whisper else None)
     stop_secs = (
         args.stop_secs
         if args.stop_secs is not None
         else float(os.getenv("VAD_STOP_SECS", str(DEFAULT_VAD_STOP_SECS)))
     )
+    # 关思考的写法各服务商不同，交给 thinking_body（见 settings.LLM_PROVIDERS）
     disable_thinking = thinking_disabled()
     system_instruction = os.getenv("SYSTEM_INSTRUCTION") or DEFAULT_SYSTEM_INSTRUCTION
 
-    if not os.getenv("MODELSCOPE_API_KEY"):
-        print("缺少 MODELSCOPE_API_KEY（应写在 server/.env）")
+    if not llm_cfg["api_key"]:
+        print(f"缺少 {llm_cfg['api_key_env']}（应写在 server/.env）")
         return 1
+
+    # 与 bot.py 用同一套构造逻辑，因此这里测的就是 bot 真正跑的引擎
+    stt, stt_desc = build_stt(engine=stt_engine_arg, whisper_model=args.whisper)
+    tts, tts_desc = build_tts(piper_voice=args.voice)
 
     print("=" * 74)
     print("官方栈端到端自检（与 server/bot.py 同配置）")
-    print(f"  STT = Whisper({whisper_model})            纯本地，无 key")
-    print(f"  LLM = {model}")
+    print(f"  STT = {stt_desc}")
+    print(f"  LLM = {llm_cfg['provider']} | {model}")
     print(f"          关闭思考={disable_thinking}")
-    print(f"  TTS = Piper({voice})   纯本地，无 key")
+    print(f"  TTS = {tts_desc}")
     print(f"  VAD stop_secs = {stop_secs}")
     print("=" * 74)
 
@@ -254,22 +257,16 @@ async def main() -> int:
     logger.info(f"[VERIFY] 测试音频: {wav} | 时长 {len(pcm) / (TARGET_SR * 2):.2f}s")
 
     source = WavSource(pcm, tl)
-    stt = WhisperSTTService(
-        settings=WhisperSTTService.Settings(
-            model=whisper_model,
-            language=Language.ZH,
-            initial_prompt=WHISPER_INITIAL_PROMPT,
-        ),
-        ttfs_p99_latency=WHISPER_TTFS_P99,
-    )
-    tts = PiperTTSService(settings=PiperTTSService.Settings(voice=voice))
 
     llm_kwargs: dict = {"model": model, "system_instruction": system_instruction}
-    if disable_thinking:
-        # 非标准参数必须用 extra_body 包一层（pipecat 会把 extra 的键直接当 kwargs 传）
-        llm_kwargs["extra"] = build_llm_extra()
+    # 非标准参数必须用 extra_body 包一层（pipecat 会把 extra 的键直接当 kwargs 传）
+    extra = build_llm_extra(
+        thinking_body=(llm_cfg["thinking_body"] if disable_thinking else None)
+    )
+    if extra:
+        llm_kwargs["extra"] = extra
     llm = OpenAILLMService(
-        api_key=os.getenv("MODELSCOPE_API_KEY"),
+        api_key=llm_cfg["api_key"],
         base_url=base_url,
         settings=OpenAILLMService.Settings(**llm_kwargs),
     )

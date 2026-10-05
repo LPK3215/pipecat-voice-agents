@@ -196,7 +196,7 @@ def build_tools() -> ToolsSchema:
 
 | 表 | 放什么 | 谁写 |
 |---|---|---|
-| `turns` | 会话历史（框架的短期记忆持久化） | `TurnRecorder`（挂在管线末端） |
+| `turns` | 会话历史（框架的短期记忆持久化） | `TurnRecorder`（**观察者**，挂在 `observers=`；两侧文本帧都会被各自聚合器消费，管线处理器收不到） |
 | `facts` | 长期记忆（跨会话） | `remember_fact` 工具 |
 | `metrics` / `hosts` / `alerts` | 业务数据 | 采集脚本（当前是示例数据） |
 

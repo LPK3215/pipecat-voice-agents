@@ -196,8 +196,18 @@ async def run_session(wait_seconds: float, pc_id: str) -> tuple[dict, dict]:
     )
     await asyncio.wait_for(opened.wait(), timeout=30)
 
+    # version 必填：缺了后端会回 error-response「Client version unknown」。
+    from pipecat.processors.frameworks.rtvi.models import PROTOCOL_VERSION
+
     channel.send(
-        json.dumps({"label": LABEL, "type": "client-ready", "id": f"{pc_id}-r", "data": {}})
+        json.dumps(
+            {
+                "label": LABEL,
+                "type": "client-ready",
+                "id": f"{pc_id}-r",
+                "data": {"version": PROTOCOL_VERSION},
+            }
+        )
     )
 
     # 等开场白说完再提问，否则会互相打断、测不准

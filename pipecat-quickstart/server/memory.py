@@ -33,10 +33,12 @@ from pathlib import Path
 from loguru import logger
 from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMMessagesAppendFrame,
     LLMTextFrame,
     TranscriptionFrame,
 )
-from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.observers.base_observer import BaseObserver
 
 # 数据库文件路径。默认放在 server/data/ 下，与代码分离
 DB_PATH = Path(
@@ -209,6 +211,10 @@ def search_facts(query: str, limit: int = 5) -> list[dict]:
     else:
         terms += q.split()
     terms = [t for t in dict.fromkeys(terms) if len(t) >= 2][:8]
+    if not terms:
+        # 单字查询（如「杭」）经上面的切分/过滤后会变成空集，
+        # 若继续拼 SQL 会得到 "WHERE  ORDER BY ..."，直接语法错误。
+        return []
 
     where = " OR ".join(["key LIKE ? OR value LIKE ?"] * len(terms))
     params: list = []
@@ -257,35 +263,55 @@ def query_metrics(name: str | None = None, limit: int = 5) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-class TurnRecorder(FrameProcessor):
+class TurnRecorder(BaseObserver):
     """把每轮对话写进 ``turns`` 表。
 
     为什么需要它：框架的 ``LLMContext`` 只在内存里，进程重启即失忆。
-    挂到管线末端即可同时看到用户侧（STT 产出的 TranscriptionFrame）
-    与助手侧（LLM 产出的 LLMTextFrame）—— 控制帧与文本帧都会一路向下游传播。
+
+    为什么是**观察者（BaseObserver）而不是管线处理器**：
+        用户侧文本（``TranscriptionFrame``）会被 ``LLMUserAggregator`` 消费、
+        助手侧文本（``LLMTextFrame``）会被 ``LLMAssistantAggregator`` 消费 ——
+        pipecat 源码里这两个分支都**不向下游 push**（用户聚合器的注释原文即
+        "consumed here and not pushed downstream"）。因此任何单一的处理器位置
+        都收不全两侧文本。早期版本把它当处理器挂在管线末端，结果 ``turns``
+        表**从未被写入**。观察者能看到每一帧的**首次推送**，与所处位置无关，
+        才是可靠的落库方式。
 
     助手侧要在 ``LLMFullResponseEndFrame`` 才落库：一次回答是流式产生的，
-    逐帧存会把一句话拆成几十条。
+    逐帧存会把一句话拆成几十条。``LLMFullResponseStartFrame`` 时清空缓冲，
+    避免上一轮被打断的残句污染下一轮。
+
+    用户侧有**两条输入通路**，都要记：
+        语音输入 → ``TranscriptionFrame``（STT 产出）
+        文本输入 → ``LLMMessagesAppendFrame``（RTVI ``send-text`` 产出，**不是** TranscriptionFrame）
+    只记前者的话，用键盘提问的会话在 ``turns`` 里会缺用户那一半。
     """
 
     def __init__(self, session_id: str, **kwargs) -> None:
+        # 只在首跳观察：同一帧每跳都会被通知，不去重会重复落库
+        kwargs.setdefault("observe_every_push", False)
         super().__init__(**kwargs)
         self._session_id = session_id
         self._pending: list[str] = []
 
-    async def process_frame(self, frame, direction):
-        await super().process_frame(frame, direction)
+    async def on_push_frame(self, data) -> None:
+        frame = data.frame
 
         if isinstance(frame, TranscriptionFrame):
             save_turn(self._session_id, "user", frame.text)
+        elif isinstance(frame, LLMMessagesAppendFrame):
+            # 文本通道（RTVI send-text）走这里；只取 user 角色
+            for msg in getattr(frame, "messages", None) or []:
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    save_turn(self._session_id, "user", str(msg.get("content", "")))
+        elif isinstance(frame, LLMFullResponseStartFrame):
+            self._pending = []
         elif isinstance(frame, LLMTextFrame):
             self._pending.append(frame.text)
         elif isinstance(frame, LLMFullResponseEndFrame):
             if self._pending:
                 save_turn(self._session_id, "assistant", "".join(self._pending))
                 self._pending.clear()
-
-        await self.push_frame(frame, direction)
 
 
 def load_memory_into_context(context, limit: int = 10) -> int:

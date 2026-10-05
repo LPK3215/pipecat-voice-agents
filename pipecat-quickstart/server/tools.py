@@ -284,6 +284,68 @@ DATA_SCHEMA = FunctionSchema(
 )
 
 
+# ---------------------------------------------------------------------------
+# 知识库检索（RAG，非结构化文档语义检索）
+#
+# 与 query_data 的分工：这是「模糊语义」检索文档，query_data 是「精确条件」查表。
+# 两者描述里都写清边界，避免模型选错（描述重叠是选错的主因）。
+# ---------------------------------------------------------------------------
+
+
+async def search_knowledge(params: FunctionCallParams) -> None:
+    """在本地知识库中做语义检索，回答需要依据文档的问题。"""
+    args = params.arguments or {}
+    query = str(args.get("query", "")).strip()
+    if not query:
+        await params.result_callback(
+            {"found": False, "spoken": "请告诉我要查什么"}, properties=_RESULT_PROPS
+        )
+        return
+
+    try:
+        k = int(args.get("k") or 3)
+    except (TypeError, ValueError):
+        k = 3
+
+    import knowledge  # 懒加载：不查知识库就不加载嵌入模型
+
+    hits = knowledge.search(query, k=k)
+    if not hits:
+        await params.result_callback(
+            {"found": False, "query": query, "spoken": "知识库里没有找到相关内容"},
+            properties=_RESULT_PROPS,
+        )
+        return
+
+    # spoken：把片段截短给模型照读，避免它把长文档整段念出来
+    await params.result_callback(
+        {
+            "found": True,
+            "query": query,
+            "items": hits,
+            "spoken": "；".join(h["text"][:80] for h in hits),
+        },
+        properties=_RESULT_PROPS,
+    )
+
+
+KNOWLEDGE_SCHEMA = FunctionSchema(
+    name="search_knowledge",
+    description=(
+        "在本地知识库（文档资料）中做**语义检索**，回答需要依据文档的问题。"
+        "当用户问及产品手册、操作步骤、政策条款、常见问题等**文档内容**时调用。\n"
+        "这是模糊语义检索，不是精确条件查询；"
+        "要查结构化数据（订单、指标、告警、主机）请用 query_data。"
+    ),
+    properties={
+        "query": {"type": "string", "description": "要检索的问题或关键词"},
+        "k": {"type": "integer", "description": "返回条数，默认 3，最多 10"},
+    },
+    required=["query"],
+    handler=search_knowledge,
+)
+
+
 def build_tools() -> ToolsSchema:
     """返回本次会话开放给 LLM 的工具集合。
 
@@ -303,6 +365,8 @@ def build_tools() -> ToolsSchema:
         RECALL_SCHEMA,
         # 结构化数据
         DATA_SCHEMA,
+        # 非结构化文档（知识库 / RAG）
+        KNOWLEDGE_SCHEMA,
         # 一批类型各异的示例工具（见 sample_tools.py）
         *sample_tools.SAMPLE_SCHEMAS,
     ]

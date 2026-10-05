@@ -7,13 +7,39 @@ dependencies = [
     "pipecat-ai[openai,piper,runner,silero,webrtc,whisper]>=1.4.0",
 ]
 
+[project.optional-dependencies]
+# 中文最优的本地 ASR（STT_ENGINE=sensevoice，默认值）。
+# ⚠️ torch / torchaudio 必须用 CPU 源（默认源会拉 CUDA 版，数 GB），
+#    已在下方 [tool.uv.sources] 固定到 pytorch-cpu，安装用：
+#        uv sync --extra sensevoice
+#    未安装时 bot 会自动降级为 Whisper（中文准确率下降），日志有告警。
+sensevoice = [
+    "funasr>=1.0.0",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+]
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.404,<2",
+    "pytest>=8.0",
     "ruff>=0.12.11,<1",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
 
 [tool.ruff]
 line-length = 100
 [tool.ruff.lint]
 select = ["I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

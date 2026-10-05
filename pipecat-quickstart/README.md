@@ -40,11 +40,16 @@
 | 前端 | 官方内置客户端 `/client/` | 否 |
 | 传输 | SmallWebRTC（浏览器直连） | 否 |
 | **STT** | **SenseVoice（本地，默认）/ Whisper（可切换）** | **否** |
-| **LLM** | **魔搭 ModelScope（3 选 1）** | **是（唯一）** |
+| **LLM** | **魔搭 ModelScope（默认）/ 共绩算力（可切换）** | **是（唯一）** |
 | **TTS** | **Piper（本地，默认）/ Kokoro（可切换）** | **否** |
 
 > **整个项目只需要填一个 `MODELSCOPE_API_KEY`。**
 > STT / TTS 全部在本地运行，不产生任何云服务调用与费用。
+>
+> ⚠️ 默认 STT 引擎 **SenseVoice 需要额外依赖**（CPU 版 torch + funasr），用
+> `uv sync --extra sensevoice` 一键安装（已配好 CPU 源，不会拖 CUDA 版）。
+> 未安装时会**自动降级为 Whisper**（实测字错率 23.8% → SenseVoice **8.2%**）。降级会写告警，
+> 且横幅 `[BOOT] STT（配置）` 之后紧跟一行 `[BOOT] STT 实际生效` —— 两者不一致即为降级。
 
 **可选开关**（都在 `server/.env`，默认值已是最优）：
 
@@ -72,8 +77,15 @@ pipecat init pipecat-quickstart -b web -t smallwebrtc -m cascade \
 
 ```bash
 cd server
-uv sync
-cp .env.example .env      # 只需填 MODELSCOPE_API_KEY，其余已预设好
+# 想让默认的中文 STT（SenseVoice）真正生效，带 extra 安装（CPU 版 torch + funasr）：
+uv sync --extra sensevoice
+
+cp .env.example .env      # 按 LLM_PROVIDER 填对应密钥，其余已预设好
+
+# 首次建议先预热本地模型（Whisper/SenseVoice + Piper 音色）——
+# 否则会在「第一个会话建立时」才下载，期间用户第一句话无响应
+uv run ../prewarm.py
+
 uv run bot.py             # 需要外网可访问时加：--host 0.0.0.0 --port 7860
 ```
 
@@ -112,6 +124,41 @@ settings=OpenAILLMService.Settings(
 ```
 
 > 语音场景不需要长篇推理，关掉后三个模型都进入 1 秒内，效果显著。
+
+---
+
+## 切换 LLM 服务商（魔搭 / 商汤 / 共绩）
+
+三个服务商都是 OpenAI 兼容接口，代码用的是同一个 `OpenAILLMService`，
+切换**只改环境变量**，业务代码一行不动。默认仍是 **ModelScope**（保持原行为）。
+
+在 `server/.env` 里设 `LLM_PROVIDER`：
+
+| 值 | 服务商 | base_url | 密钥变量 | 模型变量 |
+|---|---|---|---|---|
+| `modelscope`（默认） | 魔搭 | `https://api-inference.modelscope.cn/v1` | `MODELSCOPE_API_KEY` | `MODELSCOPE_MODEL` |
+| `sensenova` | 商汤日日新 | `https://token.sensenova.cn/v1` | `SENSENOVA_API_KEY` | `SENSENOVA_MODEL` |
+| `suanli` | 共绩算力 MaaS | `https://api.suanli.cn/v1` | `SUANLI_API_KEY` | `SUANLI_MODEL` |
+
+```bash
+# 切到商汤
+LLM_PROVIDER=sensenova
+SENSENOVA_API_KEY=sk-...
+SENSENOVA_MODEL=sensenova-6.8-flash-lite
+```
+
+要点：
+
+- **「关思考」参数各家写法不同**，已按服务商内置
+  （见 `settings.LLM_PROVIDERS[..]["thinking_body"]`）：魔搭 `enable_thinking=false`、
+  商汤 `thinking={"type":"disabled"}`、共绩暂不注入。**商汤实测 `enable_thinking` 无效**，
+  必须用 `thinking.type=disabled`，否则首 token 全耗在推理上（语音场景很致命）。
+- **共绩的 `model` ID 形如「厂商/模型」**（如 `qwen/qwen3.8-27b`），
+  以控制台/模型广场为准；名字写错会报错。
+- 注意区分：共绩的**大模型云服务**是 `api.suanli.cn`，
+  而它的**算力 Open API** 是 `openapi.suanli.cn`（另一套鉴权，与本项目无关）。
+- 启动横幅 `[BOOT]` 会打印实际生效的「LLM 服务商 / 模型」，可据此确认切换是否生效。
+- `verify_stack.py` / `verify_tools.py` 跟随同一套解析，可用 `--model` 临时覆盖模型名。
 
 ---
 
@@ -359,7 +406,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 4 | VAD `stop_secs` 0.2 → 0.6 | **关键**：官方默认会把一句中文按逗号停顿切成两段（详见下节） |
 | 5 | 提示词中文化 | 官方英文 prompt 会被中文音色读得很难听 |
 | 6 | 新增 `pipeline_logging.py` 与观测器 | 全量日志，跑一次即可定位问题 |
-| 7 | 新增 `settings.py` | 默认值与 `verify_stack.py` 共用，避免「测的」和「跑的」配置漂移 |
+| 7 | 新增 `settings.py` | 默认值与本地服务构造（`build_stt`/`build_tts`）与 `verify_stack.py` 共用，避免「测的」和「跑的」配置漂移 |
 | 8 | 缺 `MODELSCOPE_API_KEY` 时 **fail-fast** | 早期只打一行 ERROR 就照常启动：浏览器能连上、握手也成功，但一开口必然没反应，看起来像网络故障。现在直接终止并给出填 key 的步骤 |
 | 9 | Whisper 加 `initial_prompt="以下是普通话的句子。"` | base 模型会把中文转成繁体（「请」→「請」），实测已修 |
 | 10 | 开场白角色 `developer` → `user` | **修掉了一个静默失败**（详见下节）：魔搭接口不认 `developer`，且它留在上下文里会让**后续每一轮都失败** |
@@ -446,16 +493,21 @@ uv run bot.py --host 0.0.0.0 --port 7860
 pipecat-quickstart/
 ├── server/
 │   ├── bot.py               # 主程序（官方模板 + 上述改动）
-│   ├── settings.py          # 默认配置的唯一来源（bot 与自检共用，防漂移）
-│   ├── tools.py             # LLM 可调用的工具（新增能力只改这里）
+│   ├── settings.py          # 默认值 + 本地服务构造的唯一来源（bot 与自检共用，防漂移）
+│   ├── tools.py             # LLM 可调用的工具注册中心（新增能力改这里）
+│   ├── sample_tools.py      # 示例工具集（天气/计算/换算/设备/通知/提醒）
+│   ├── memory.py            # 本地持久化：会话历史 + 长期记忆 + 业务表 + 落库观察者
 │   ├── pipeline_logging.py  # 日志、对话时间线、故障上报（[ERROR] → 前端）
-│   ├── pyproject.toml       # 依赖（官方生成）
-│   ├── .env.example         # 唯一需要填 MODELSCOPE_API_KEY
+│   ├── tests/               # pytest 单元测试（配置解析 / 工具 handler / SQL 白名单）
+│   ├── pyproject.toml       # 依赖（含 sensevoice 可选 extra）
+│   ├── .env.example         # 密钥与服务商模板（按 LLM_PROVIDER 填）
 │   ├── .env                 # 真实密钥（已被 .gitignore 忽略）
 │   └── logs/                # 运行时日志（*.log 已被 .gitignore 忽略）
+├── prewarm.py               # 预热本地模型（首次运行前跑一次）
 ├── verify_stack.py          # 端到端自检（完整链路，较慢）
 ├── verify_tools.py          # 工具调用自检（只测后端）
 ├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
+├── live_asr_bench.py        # 真实链路 ASR 基准（经 Opus 编解码）
 ├── text_probe.py            # 文本通道探针（真实 bot.py + 真实 WebRTC）
 ├── audio_probe.py           # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
 ├── smoke.py                 # 无浏览器冒烟测试（前端 + 握手 + 装配）
@@ -463,7 +515,8 @@ pipecat-quickstart/
 ```
 
 > **为什么有 `settings.py`**：`bot.py` 与 `verify_stack.py` 需要同一批默认值
-> （模型、VAD 阈值、提示词……）。若各写一份，改了一侧而没改另一侧，
+> （模型、VAD 阈值、提示词……）**以及同一套 STT/TTS 构造逻辑**（`build_stt`/`build_tts`）。
+> 若各写一份，改了一侧而没改另一侧，
 > 自检结果就会失真——而这种漂移**不会报错**，只会让人对着错误数字做决策。
 
 ---

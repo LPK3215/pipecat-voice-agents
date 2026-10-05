@@ -122,7 +122,7 @@ def scan_logs() -> list[str]:
         return [f"未找到日志 {log}"]
     text = log.read_text(encoding="utf-8", errors="replace")
     patterns = [
-        r"缺少\s*MODELSCOPE_API_KEY",
+        r"缺少\s*\w*API_KEY",
         r"can no longer do its job",
         r"Traceback \(most recent call last\)",
         r"ERROR\s+\|.*?(api[_ ]?key|API key|Unauthorized|401)",
