@@ -20,6 +20,7 @@
 - 更正：**③ 已能"连续对话"**（CallOverlay 自动循环 + 点击打断，属 B 档）；先前"③ 不能做实时对话"的表述不准确，已在 `VOICE-MODES.md` 更正
 - `voice-docs/VOICE-UX.md`：**语音交互体验与复现**（自动发送 / 自动朗读 / 录音不遮挡输入框；3 处改动 + 哪些是内置的）
 - 语音交互默认优化：`speechAutoSend`、`responseAutoPlayback` 改默认开启；录音时不再隐藏输入框
+- **恢复被上游注释的「静音自动确认」**（`VoiceRecording.svelte`）：停顿 3s 自动结束录音并提交 —— 不恢复则必须手动点 ✓
 
 ### 移除（相对上游）
 

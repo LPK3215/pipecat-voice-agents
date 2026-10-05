@@ -21,6 +21,46 @@
 | 1' | 同上（设置页读到的默认值） | `src/lib/components/chat/Settings/Audio.svelte` | 第 **94** 行 | `speechAutoSend = $settings.speechAutoSend ?? false` | `?? true` |
 | 2 | 回复**自动朗读** | `src/lib/components/chat/Settings/Audio.svelte` | 第 **95** 行 | `responseAutoPlayback = $settings.responseAutoPlayback ?? false` | `?? true` |
 | 3 | 录音时**不遮挡输入框** | `src/lib/components/chat/MessageInput.svelte` | 第 **1761** 行（`<form>` 的 class） | `class="w-full flex flex-col gap-1.5 {recording ? 'hidden' : ''}"` | `class="w-full flex flex-col gap-1.5"` |
+| **4** | **停顿 N 秒自动结束录音** | `src/lib/components/chat/MessageInput/VoiceRecording.svelte` | 第 **154–162** 行（`detectSound` 内） | **整段被上游注释掉**（所以必须手动点 ✓） | **取消注释 + 恢复**（见下方原文） |
+
+### 第 4 处：上游注释掉的「静音自动确认」
+
+这是**最关键的一处** —— 不改它，前面几处都白搭（因为录音根本不会自动结束）。
+
+上游的原始代码（**被注释掉**）：
+
+```js
+// if (domainData.some((value) => value > 0)) {
+// 	lastSoundTime = Date.now();
+// }
+
+// if (recording && Date.now() - lastSoundTime > 3000) {
+// 	if ($settings?.speechAutoSend ?? false) {
+// 		confirmRecording();
+// 	}
+// }
+```
+
+本分支恢复为（标注了 `[pipecat-open-webui 本分支改动]`）：
+
+```js
+// [pipecat-open-webui 本分支改动] 恢复「静音自动确认」：停顿 3s 且开启自动发送时，自动结束录音并提交
+if (domainData.some((value) => value > 0)) {
+	lastSoundTime = Date.now();
+}
+
+if (recording && Date.now() - lastSoundTime > 3000) {
+	if ($settings?.speechAutoSend ?? true) {
+		confirmRecording();
+	}
+}
+```
+
+**机制**：`detectSound()` 每帧读取频谱数据；**只要有声音就刷新 `lastSoundTime`**；**超过 3 秒没声音** → 调 `confirmRecording()` → 停录 → 转写 → `onConfirm` → 自动发送。
+
+> 两处上游来源对比，说明"为什么必须手动点 ✓"：
+> - **`stt.engine = 'web'`（浏览器识别）路径**：`speechRecognition.onend` 里**本来就会** `confirmRecording()` → 自动
+> - **`stt.engine = ''`（本地 Whisper）路径**（我们在用）：靠上面这段被注释的逻辑 → **不恢复就得手动点**
 
 > 第 1 处决定"**发不发**"，第 3 处决定"**看不见文字**"—— 这两处合起来才让你"看到转写文字后自动发送"。
 
