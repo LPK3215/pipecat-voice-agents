@@ -1,0 +1,143 @@
+# ============================================================================
+# A 的应用定义文件 —— 一页 YAML 就是一个智能体应用
+#
+# 这份文件就是"在界面上把应用搭好"的等价物：Dify 官方支持**导入 DSL**
+# （上传 YAML，平台按文件里的配置建好应用）。所以"搭"这件事可以完全脚本化，
+# 不需要谁去点界面。
+#
+# 两个硬性约定（来自 Dify DSL 的格式要求）：
+#   - version 需要与目标平台的 DSL 版本接近；低于平台版本只是**警告**（仍会导入）
+#   - 每个节点都必须带 positionAbsolute / selected / height / width，
+#     每条边都必须带 sourceType / targetType / selected / isInIteration
+#
+# 这个最小应用做三件事（够用来当"外面的脑袋"）：
+#   1. 一句"你用语音说话"的系统提示（回答要短、不要 markdown —— 因为会被念出来）
+#   2. 一个**只有 A 知道**的内部代号（用来证明答案真的来自 A，而不是 B 自己编的）
+#   3. 一个空的知识库/工具位：等你要演示"A 的工具/知识库"时往里加
+# ============================================================================
+
+app:
+  description: '语音模块（B）背后的脑袋（A）—— 第三阶段的最小智能体'
+  icon: 🎙️
+  icon_background: '#E4FBCC'
+  mode: advanced-chat
+  name: voice-brain-minimal
+  use_icon_as_answer_icon: false
+kind: app
+version: 0.1.5
+
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      enabled: false
+    retriever_resource:
+      enabled: false
+    text_to_speech:
+      enabled: false
+  graph:
+    viewport:
+      x: 0
+      y: 0
+      zoom: 1
+    nodes:
+      # ---------------------------------------------------------------- 开始
+      - data:
+          desc: ''
+          positionAbsolute: false
+          selected: false
+          title: 开始
+          type: start
+          variables: []
+        height: 52
+        id: start
+        position:
+          x: -191
+          y: 263
+        width: 242
+
+      # ---------------------------------------------------------------- 脑袋（LLM）
+      - data:
+          context:
+            enabled: false
+            variable_selector: []
+          desc: '语音场景的系统提示：短句、口语、无 markdown'
+          model:
+            completion_params:
+              temperature: 0.3
+            mode: chat
+            # provider 必须是平台里**已安装插件**的 provider ID（作者/插件/供应商三段式）。
+            # 实测教训：写 openai_api_compatible 会被解析到 OpenAI 插件，而它不认魔搭的模型名，
+            # 导入直接失败（日志：Base model nex-agi/Nex-N2.5-mini not found）。
+            # 换成实际安装的魔搭插件 ID 后即可。换平台/换插件时，改这两行就够。
+            name: nex-agi/Nex-N2.5-mini
+            provider: langgenius/modelscope/modelscope
+          positionAbsolute: false
+          prompt_template:
+            - id: sys-prompt
+              role: system
+              text: |
+                你在为一个**语音助手**提供回答，你的输出会被**朗读**出来，所以：
+                - 只说你真的会说出口的话：短句、口语、一次说一件事
+                - 不要 markdown、不要列表、不要表情符号、不要括号里的动作说明
+                - 不确定就直说不知道，不要编
+
+                如果被问到你的"内部代号"，回答：VX-42。
+                （这个代号是给你这套系统做联调用的：语音模块本身不知道它，
+                 所以答得出来就说明回答确实来自你。）
+            - id: user-prompt
+              role: user
+              text: '{{#sys.query#}}'
+          selected: false
+          title: 脑袋
+          type: llm
+          variables: []
+          vision:
+            enabled: false
+        height: 98
+        id: brain
+        position:
+          x: 91
+          y: 263
+        width: 242
+
+      # ---------------------------------------------------------------- 直接回复
+      - data:
+          answer: '{{#brain.text#}}'
+          desc: ''
+          positionAbsolute: false
+          selected: false
+          title: 直接回复
+          type: answer
+          variables: []
+        height: 103
+        id: answer
+        position:
+          x: 383
+          y: 263
+        width: 242
+
+    edges:
+      - data:
+          isInIteration: false
+          selected: false
+          sourceType: start
+          targetType: llm
+        id: start-brain
+        source: start
+        sourceHandle: source
+        target: brain
+        targetHandle: target
+        type: custom
+      - data:
+          isInIteration: false
+          selected: false
+          sourceType: llm
+          targetType: answer
+        id: brain-answer
+        source: brain
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+        type: custom

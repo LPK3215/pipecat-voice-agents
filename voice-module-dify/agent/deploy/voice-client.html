@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>语音模块 · 真 A 在背后</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         max-width: 640px; margin: 8vh auto; padding: 0 20px; line-height: 1.7; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { opacity: .65; font-size: 14px; margin-bottom: 24px; }
+  button { font-size: 16px; padding: 12px 22px; border-radius: 10px; border: 1px solid #8888;
+           background: #2f6fed; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.secondary { background: transparent; color: inherit; }
+  #status { margin-top: 18px; font-size: 14px; white-space: pre-wrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #c33;
+         margin-right: 8px; vertical-align: 1px; }
+  .dot.on { background: #2a2; }
+  .hint { margin-top: 28px; font-size: 13px; opacity: .6; }
+</style>
+</head>
+<body>
+<h1>语音模块 · 真 A 在背后</h1>
+<div class="sub">它只负责听和说；想问题、查东西、记东西都在外部的智能体平台上。</div>
+
+<div>
+  <button id="start">开始对话</button>
+  <button id="stop" class="secondary" disabled>停止</button>
+</div>
+<div id="status"><span class="dot"></span>未开始</div>
+
+<div class="hint">
+  点「开始对话」授权麦克风后，直接说话即可 —— 停顿约 0.6 秒它就会当作你说完了。<br>
+  WebSocket 地址：<span id="wsurl"></span>
+</div>
+
+<script>
+(() => {
+  // The page is served from the platform's origin; the voice module listens on its own port.
+  // CNB's preview pattern is "<prefix>-<port>.cnb.run", so swap the port unless overridden.
+  const override = new URLSearchParams(location.search).get('ws');
+  const host = location.hostname.replace(/-\d+\./, '-8090.');
+  const WS_URL = override || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/`;
+  document.getElementById('wsurl').textContent = WS_URL;
+
+  const statusEl = document.getElementById('status');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+
+  let ws = null, ctx = null, mic = null, node = null, silent = null;
+  let nextPlay = 0;
+
+  const say = (text, live) => {
+    statusEl.innerHTML = `<span class="dot${live ? ' on' : ''}"></span>${text}`;
+  };
+
+  function play(i16) {
+    if (!ctx) return;
+    const buf = ctx.createBuffer(1, i16.length, ctx.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < i16.length; i++) ch[i] = i16[i] / 0x8000;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const now = ctx.currentTime;
+    if (nextPlay < now) nextPlay = now + 0.05;   // small jitter buffer
+    src.connect(ctx.destination);
+    src.start(nextPlay);
+    nextPlay += buf.duration;
+  }
+
+  function clearQueue() {
+    nextPlay = 0;
+  }
+
+  async function start() {
+    startBtn.disabled = true;
+    say('正在连接…', false);
+    try {
+      ctx = new AudioContext({ sampleRate: 16000 });   // match the module's PCM rate
+      await ctx.resume();
+
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = 'arraybuffer';
+      ws.onmessage = (e) => { play(new Int16Array(e.data)); clearTimeout(window.__t); window.__t = setTimeout(() => {}, 0); };
+      ws.onclose = () => { say('连接已断开', false); stop(); };
+      await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
+
+      mic = await navigator.mediaDevices.getUserMedia({ audio: {
+        channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+
+      const src = ctx.createMediaStreamSource(mic);
+      node = ctx.createScriptProcessor(1024, 1, 1);
+      node.onaudioprocess = (ev) => {
+        if (!ws || ws.readyState !== 1) return;
+        const f32 = ev.inputBuffer.getChannelData(0);
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+          const v = Math.max(-1, Math.min(1, f32[i]));
+          i16[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+        }
+        ws.send(i16.buffer);
+      };
+      // keep the processor alive without playing the microphone back into the speakers
+      silent = ctx.createGain();
+      silent.gain.value = 0;
+      src.connect(node);
+      node.connect(silent);
+      silent.connect(ctx.destination);
+
+      stopBtn.disabled = false;
+      say('已连接 —— 直接说话吧', true);
+    } catch (err) {
+      say(`启动失败：${err && err.name ? err.name : err}\n（麦克风需要授权；页面必须通过 https 或 localhost 打开）`, false);
+      stop();
+    }
+  }
+
+  function stop() {
+    try { node && node.disconnect(); } catch (e) {}
+    try { silent && silent.disconnect(); } catch (e) {}
+    try { mic && mic.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    try { ws && ws.readyState === 1 && ws.close(); } catch (e) {}
+    try { ctx && ctx.close(); } catch (e) {}
+    ws = null; ctx = null; mic = null; node = null; silent = null;
+    clearQueue();
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    say('已停止', false);
+  }
+
+  startBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+})();
+</script>
+</body>
+</html>

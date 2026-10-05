@@ -1,0 +1,20 @@
+# The platform routes every plugin download (and sandbox traffic) through its `ssrf_proxy`
+# container. That container cannot start in this environment: its entrypoint arrives by file
+# bind-mount, and here the Docker daemon cannot see the workspace, so the "file" shows up as
+# an empty directory. Baking the same three files into an image side-steps it.
+#
+# Build with the platform's own ssrf_proxy directory as the context (nothing is copied into
+# this repository, so no third-party files are vendored):
+#
+#   docker build -f agent/deploy/Dockerfile.ssrf -t vm-ssrf-proxy <platform>/docker/ssrf_proxy
+#
+# then run it with the network alias `ssrf_proxy`, which is the name the other containers use.
+FROM ubuntu/squid:latest
+
+COPY squid.conf.template /etc/squid/squid.conf.template
+COPY squid-common.conf.template /etc/squid/dify_common.conf.template
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]

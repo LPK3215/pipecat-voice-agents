@@ -1,0 +1,148 @@
+# 第三阶段：把语音做成一个模块，插进已有的智能体系统
+
+**状态**：进行中 —— 骨架、脑袋接口、装配都已跑通；**真平台接入与端到端音频还没做**（见第 3 节，
+"已验证"和"未验证"分开写，这是本项目的规矩）。
+
+## 0. 与前两个阶段的关系（一句话）
+
+| | 第一阶段 | 第二阶段 | **第三阶段** |
+|---|---|---|---|
+| 做什么 | 把语音链路搭通 | 往链路里灌业务 | 把语音链路做成**模块**，插进别人已有的智能体系统 |
+| 脑袋在哪 | 本地 LLM | 本地 LLM + 你的业务 | **在 A（外部平台）** |
+| 交付物 | 能跑的管线 | 业务能力 | **一个可被接入的语音服务 + 一套能自证的探针** |
+
+**第二阶段是"把业务写进语音系统"，第三阶段是"把语音系统塞进别人的系统"。**
+
+## 1. A / B 边界（唯一必须记住的设计）
+
+> **调用方向**：`网页（你的）──▶ 语音模块 B（你的）──▶ A（别人的服务）`。
+> **B 是主人，A 是它调用的工具** —— 不是"A 里装了 B"。
+> 自证：停掉 A，网页照样打开、模块照样在听照样出声，只是没人回答（会明确说一句"连不上"，不静默）。
+>
+> 本仓库的目录名 `voice-module-dify` 标记的是**这个案例接的是谁**；模块代码与 Dify 无关，
+> 换 A 只改 `.env` 两行。完整案例见 [`../CASE-dify.md`](../CASE-dify.md)。
+
+| | A（脑袋） | B（本模块 = 耳朵和嘴） |
+|---|---|---|
+| 负责 | 想什么、查什么、记住什么、调什么工具 | 听（VAD + STT）、说（TTS）、**轮流判定**、打断、填场 |
+| 不负责 | 音频、轮流、打断、延迟 | **任何业务逻辑**：工具、知识库、记忆、编排一个都没有 |
+
+三条由此推出的硬约束：
+
+1. **轮流判定必须留在 B** —— A 听不到音频、只拿到文本，"用户说完了没"只能 B 判。
+   这是本模块最值钱的部分。
+2. **A 必须流式** —— A 是网络往返，不像本地模型。模块按"**首句就开口**"设计：边收边按句子喂 TTS。
+3. **A 慢的时候要有回声** —— 等待期间要有填场语音，否则用户会以为坏了。这是语音场景独有的要求，
+   前两个阶段都不涉及。
+
+## 2. 与 `pipecat-quickstart` 的解耦
+
+| | |
+|---|---|
+| 可以 | **读它的文档**（第一阶段：管线怎么搭、插槽怎么换；第二阶段：业务怎么做） |
+| 不可以 | import 它的模块、调用它的脚本、复制它的实现 |
+| 共用 | 只有框架本身（`pipecat-ai`）—— 本模块在它上面**从零写** |
+
+## 3. 已验证 / 未验证
+
+**已验证**（都可复跑）：
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 脑袋接口：流式、首个字符、会话续接、失败可见、首句提前 | `uv run python probe/verify_brain.py` | **4/4 通过**（替身脑袋，首个字符 344ms） |
+| 管线装配：VAD / STT / TTS / 轮流聚合 / 脑袋适配器 / Pipeline + Worker | `uv run python probe/verify_assembly.py` | **7/7 通过** |
+| **说话 + 听话两腿**（合成语音存成 WAV，再回读识别） | `uv run python probe/verify_speech_legs.py` | **通过**：3.45s 语音合成 231ms；回读重叠 69%（合成音是悲观输入，数字见输出） |
+| **接真实 A（自托管平台）** | 用 `server/agent_client.py` 直连平台的对话接口 | ✅ **通过**：HTTP 200，回答里出现 **A 独有的内部代号 `VX-42`**（模块自己不知道它）→ 证明脑袋真的是 A |
+| **真 A 的延迟**（三段里最要紧的一段） | 同上，`BRAIN_BASE_URL=http://localhost:5001/v1` | ✅ **首字 740–963ms**，全文 0.78–1.08s。与本地 LLM 的 ~800ms 基本持平 —— 「接上 A 会拖垮延迟」的担心在**简单应用上不成立**（因为 A 也是流式返回） |
+| 服务能启动并等待客户端 | `BRAIN_STUB=1 uv run python server/app.py` | 起在 `http://localhost:7860`（首页跳 `/client/`，框架自带前端） |
+| **端到端音频（无浏览器）** | `uv run python probe/verify_audio_e2e.py` | ✅ **通过**：合成语音 → WebSocket → VAD/STT → **真 A** → TTS → WebSocket → 音频回传（318KB / 10.0s）。产物 `logs/probe-e2e-answer.wav` **可直接播放** |
+| **分段延迟**（同一轮，真实数字） | 模块日志的 `[TURN n]` 行 | ✅ `request sent 0ms → A 首字 1334ms → 首句 1346ms → 交给 TTS 1346ms`。**首字到开口只差 12ms** —— "边收边按句喂 TTS"这套设计是有效的 |
+| lint | `uv run ruff check .` | 通过 |
+
+> **听效果的两条路**：① 直接播 `logs/probe-tts.wav`（探针产出的机器人语音）；
+> ② 起服务后用浏览器开 `http://localhost:7860` 对话 —— 但**云端容器里端口转发不够**：
+> SmallWebRTC 无 STUN/TURN，且转发通常只映射 TCP、转不了 WebRTC 的 UDP。
+> 要么在**本地机器**跑，要么配 **TURN 中继**（第一阶段文档已记录这个坑）。
+
+**未验证（这些是接下来要做的事，不要当成已完成）**：
+
+| 待做 | 说明 |
+|---|---|
+| 真平台接入 | 起 A（自托管，Docker）、用 `agent/import_app.py` 导入应用定义、拿到 API key |
+| `import_app.py` 的接口路径 | 端点名是从平台源码读出来的，**没在真实实例上跑过**；失败时脚本会明说，并有"界面点一次导入"的兜底 |
+| 端到端音频 | 需要一个真客户端连进来（浏览器或自建 WebRTC 客户端），量出"听到→A 首字→开口"三段延迟 |
+| 打断链路 | `stop` 只在替身身上验证过；真实平台的行为待测 |
+| 填场时机 | 默认 0.8s，属于拍脑袋值，要按 A 的真实延迟调 |
+
+### 3.1 实测记录：脚本化能走到哪一步（2026-10-05，Dify 1.17.1 自托管）
+
+| 步骤 | 结果 |
+|---|---|
+| 起平台（Docker Compose） | ✅ 成功。镜像 ~10GB；**注意本环境 Docker 守护进程看不到工作区文件**，靠文件挂载的 nginx / ssrf_proxy **起不来** → 改为直接暴露 `api:5001` + `web:3000` 两个端口绕过 nginx |
+| 首次初始化（建管理员） | ✅ `POST /console/api/setup` 脚本化成功 |
+| **登录** | ❌ `POST /console/api/login` 要求密码**先 RSA 加密**（服务端 `@decrypt_password_field` 解密），且成功是**下发 Cookie** 而不是返回 token。取公钥的接口在常见路径（`/passport` 等）都 404，从前端构建产物里也没挖到 → **这一步断在这里** |
+| 导入应用定义 / 建 API key | ⏸ 依赖登录，未验证 |
+
+> **结论（诚实版）**：`setup` 能脚本化，`login` **不能**（至少我没打通）。
+> 所以现在有 2~3 步必须人工在界面完成：登录 → 配模型供应商 → 导入 DSL + 建 key。
+> 这与"一个应用就是一页文件"的结论不冲突：**搭应用仍然是导入文件，不是手工搭流程**；
+> 人工的只是"账号鉴权"和"给平台配一个模型 key"这两件事。
+
+### 3.3 传输层：云环境里 WebRTC 出不了声，WebSocket 可以（实测）
+
+浏览器打开模块页面时，日志里只有 `GET /client/`、**没有 `[BOOT]`** —— 页面加载了，但 WebRTC
+的会话从未建立：**媒体走 UDP，普通 HTTP 端口转发转不了**（云 IDE、反向代理、电话平台都是如此）。
+症状就是"能打开、完全没声音"。
+
+改用 `server/ws_app.py`（同样的管线，只换传输）：
+
+```bash
+uv run python server/ws_app.py --host 0.0.0.0 --port 8090     # WebSocket 入口
+uv run python probe/verify_audio_e2e.py                        # 无浏览器的端到端音频探针
+```
+
+客户端约定：连上 websocket，把 **16 位单声道 PCM（16 kHz）** 按小块当二进制帧发进去，
+同样的二进制帧读回来就是语音。`server/raw_pcm_serializer.py` 就是这个约定的实现
+（跨了标准库与框架的边界，故意写得极薄）。
+
+**为什么这不只是权宜之计**：WebSocket 是"把语音能力嵌进别人系统"的标准形态 ——
+网页、电话系统、别的 Agent 都这么说。WebRTC 适合自己掌控网络路径的场合。
+
+### 3.2 平台侧另外三个坑（都实测踩到了）
+
+| # | 坑 | 表现 | 解法 |
+|---|---|---|---|
+| 1 | 平台自带的 nginx / ssrf_proxy **靠文件挂载**提供入口与出网代理 | nginx 永远重启 → 界面能开但内容空白（`/console/api` 落空）；插件市场下载重试 3 次后失败 | 用 `docker build` 把配置**烤进镜像**（构建上下文由客户端上传，不受挂载限制）：`agent/deploy/Dockerfile.nginx` + `Dockerfile.ssrf`，后者要带网络别名 `ssrf_proxy`，并记得传 `COREDUMP_DIR`（否则 squid 报 `Bungled ... coredump_dir`） |
+| 2 | DSL 里的 `provider` 必须是**已安装插件**的 provider ID | 写 `openai_api_compatible` 而只装了 OpenAI 插件时，导入报 `Base model <名字> not found`（OpenAI 插件不认魔搭的模型名） | provider 写成三段式真实 ID（如 `langgenius/openai_api_compatible/openai_api_compatible`）；可从插件目录的 `provider/*.yaml` 文件名反查 |
+| 3 | 服务 API 只认**已发布**的工作流 | 调用报 `Workflow not published`；库里只有 `version='draft'` 的 workflow、`apps.workflow_id` 为空 | 在界面点一次「发布」；或在数据层复制 draft 行成 `version='published'` 并更新 `apps.workflow_id`（本次实测可行） |
+
+> 另：平台的**应用 API 密钥是按原文匹配**的（`ApiToken.token == auth_token`，不做哈希），
+> 所以本轮为了免去人工点击，是直接在库里插入了一行密钥 —— 属于本地联调的权宜手段，
+> 生产环境请走界面或它的管理接口。
+
+## 4. 怎么跑
+
+```bash
+cd voice-module
+uv sync
+cp .env.example .env
+
+# 离线自测（不需要平台）：替身脑袋 + 真实管线
+#   .env 里 BRAIN_STUB=1
+uv run python server/app.py            # 浏览器开 http://localhost:7860
+uv run python probe/verify_brain.py    # 脑袋接口
+uv run python probe/verify_assembly.py # 装配
+
+# 接真实 A
+uv run python agent/import_app.py --dsl agent/app.dsl.yml   # 导入应用定义 → 拿 key
+#   把 key 填进 .env（BRAIN_BASE_URL / BRAIN_API_KEY），BRAIN_STUB=0
+```
+
+## 5. 下一步（按顺序）
+
+1. 起 A：自托管平台（Docker），配一个 LLM key。
+2. `agent/import_app.py` 导入 `agent/app.dsl.yml` → 拿到应用 API key。
+3. 接上真 A，跑通端到端音频，量出三段延迟（**这一步的数字才决定方案是否成立**）。
+4. 按真实延迟调填场时机，验证打断（用户插话 → 本地停 + 告诉 A 停）。
+5. 把"应用定义里有 A 独有的东西（内部代号 / 知识库 / 工具）"做成一条**证伪探针**：
+   只有 A 答得出来，才证明脑袋真的换了。
