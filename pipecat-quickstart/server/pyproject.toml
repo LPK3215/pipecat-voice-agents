@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://cnb.cool/lpk3215/pipecat-ai-test"
+Repository = "https://cnb.cool/lpk3215/pipecat-voice-agents"
 
 [project.optional-dependencies]
 # 中文最优的本地 ASR（STT_ENGINE=sensevoice，默认值）。

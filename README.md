@@ -4,6 +4,10 @@
 
 ![License: MIT (root & projects 1-2)](https://img.shields.io/badge/License-MIT-yellow.svg) ![License: Open WebUI (project 3)](https://img.shields.io/badge/License-Open%20WebUI-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
 
+> **Not affiliated with the Pipecat project.** Pipecat is an open-source framework by **Daily / pipecat-ai**
+> (BSD-2-Clause licensed). This repository is an **independent study and application** of that framework —
+> it is not affiliated with, sponsored by, or endorsed by the Pipecat project.
+
 > **Start here.** This repository holds **three projects** plus **one framework survey**. They answer **three different questions**.
 
 ---
@@ -194,7 +198,7 @@ Whisper auto-detects when no language is given, and **in practice it misidentifi
 ## Repository layout
 
 ```
-pipecat-ai-test/
+pipecat-voice-agents/
 ├── README.md                    # English primary overview (this file)
 ├── README.zh-CN.md              # Chinese companion (same structure)
 ├── LICENSE                      # root license (MIT, with per-project scope)
@@ -274,7 +278,7 @@ This is a **multi-project repository and the parts are licensed differently** �
 
 ## Repository
 
-- Repository: <https://cnb.cool/lpk3215/pipecat-ai-test>
+- Repository: <https://cnb.cool/lpk3215/pipecat-voice-agents>
 - Author: cnb.lpk
 - Project overview page: open [`project_overview.html`](project_overview.html) locally (double-click),
   or browse the GitHub Pages build in [`docs/`](docs/) (classic mode, served from `/docs`).

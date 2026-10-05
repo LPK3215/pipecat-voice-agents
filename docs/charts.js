@@ -1,5 +1,5 @@
 /* ==========================================================================
-   pipecat-ai-test · Project Overview — chart configuration
+   pipecat-voice-agents · Project Overview — chart configuration
    All data is taken from measured values recorded in the projects' own documentation
    (identical to the values in the surrounding text and tables on this page).
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>pipecat-ai-test · Project Overview</title>
+<title>pipecat-voice-agents · Project Overview</title>
 <meta name="description" content="One multi-project repository: three voice projects answering three different questions.">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,7 +23,7 @@
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M5 8v8M19 8v8M8 5v14M16 5v14"/></svg>
       </span>
-      <span class="brand-text">pipecat-ai-test<em>PROJECT OVERVIEW</em></span>
+      <span class="brand-text">pipecat-voice-agents<em>PROJECT OVERVIEW</em></span>
     </a>
 
     <nav class="nav" id="nav">
@@ -39,7 +39,7 @@
     </nav>
 
     <div class="topbar-actions">
-      <a class="ghost-btn" href="https://cnb.cool/lpk3215/pipecat-ai-test" target="_blank" rel="noopener">Repository</a>
+      <a class="ghost-btn" href="https://cnb.cool/lpk3215/pipecat-voice-agents" target="_blank" rel="noopener">Repository</a>
       <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle dark / light theme">
         <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -81,7 +81,7 @@
       <div class="hero-glow"></div>
       <div class="hero-inner">
         <div class="kicker">MULTI-PROJECT REPOSITORY · MONOREPO</div>
-        <h1>pipecat-ai-test</h1>
+        <h1>pipecat-voice-agents</h1>
         <p class="hero-sub">One repository, <strong>three voice projects</strong> — answering three different questions.</p>
         <p class="hero-desc">
           The same real-time voice capability, built three times under three different host relationships:
@@ -115,7 +115,7 @@
         <div class="hero-actions">
           <a class="btn primary" href="#quickstart">Quick start</a>
           <a class="btn" href="#architecture">View architecture</a>
-          <a class="btn" href="https://cnb.cool/lpk3215/pipecat-ai-test" target="_blank" rel="noopener">Repository ↗</a>
+          <a class="btn" href="https://cnb.cool/lpk3215/pipecat-voice-agents" target="_blank" rel="noopener">Repository ↗</a>
         </div>
       </div>
     </section>
@@ -366,7 +366,7 @@ USE_SLIM_DOCKER=true \
       project lives in that project's own README.</p>
       <div class="tree card">
         <details open>
-          <summary><span class="folder"></span>pipecat-ai-test/ <em>repository root</em></summary>
+          <summary><span class="folder"></span>pipecat-voice-agents/ <em>repository root</em></summary>
           <ul>
             <li><span class="file"></span>README.md <em>English primary overview</em></li>
             <li><span class="file"></span>README.zh-CN.md <em>Chinese companion (same structure)</em></li>
@@ -443,8 +443,8 @@ USE_SLIM_DOCKER=true \
         <div class="tab-panel active" data-panel="q1">
           <div class="code">
             <div class="code-head"><span class="code-title">bash · 1 API key</span><button class="copy" type="button">Copy</button></div>
-            <pre><code>git clone https://cnb.cool/lpk3215/pipecat-ai-test.git
-cd pipecat-ai-test/pipecat-quickstart/server
+            <pre><code>git clone https://cnb.cool/lpk3215/pipecat-voice-agents.git
+cd pipecat-voice-agents/pipecat-quickstart/server
 
 uv sync --extra sensevoice     # deps for the default Chinese STT (SenseVoice)
 cp .env.example .env           # only MODELSCOPE_API_KEY is required
@@ -456,7 +456,7 @@ uv run bot.py                  # open http://localhost:7860/client</code></pre>
         <div class="tab-panel" data-panel="q2">
           <div class="code">
             <div class="code-head"><span class="code-title">bash · running in 30 seconds (local stand-in)</span><button class="copy" type="button">Copy</button></div>
-            <pre><code>cd pipecat-ai-test/voice-module-dify
+            <pre><code>cd pipecat-voice-agents/voice-module-dify
 uv sync
 cp .env.example .env           # set BRAIN_STUB to 1 (local stand-in as the brain)
 
@@ -468,7 +468,7 @@ uv run python probe/verify_speech_legs.py   # verify it can really speak and lis
         <div class="tab-panel" data-panel="q3">
           <div class="code">
             <div class="code-head"><span class="code-title">bash · source mode</span><button class="copy" type="button">Copy</button></div>
-            <pre><code>cd pipecat-ai-test/pipecat-open-webui
+            <pre><code>cd pipecat-voice-agents/pipecat-open-webui
 
 # 1) backend dependencies
 cd backend &amp;&amp; uv venv .venv --python 3.12 \
@@ -694,15 +694,15 @@ cd backend &amp;&amp; USE_SLIM_DOCKER=true \
       <div class="card">
         <h3>Repository information</h3>
         <dl class="spec">
-          <dt>Repository</dt><dd><a href="https://cnb.cool/lpk3215/pipecat-ai-test" target="_blank" rel="noopener">https://cnb.cool/lpk3215/pipecat-ai-test</a></dd>
+          <dt>Repository</dt><dd><a href="https://cnb.cool/lpk3215/pipecat-voice-agents" target="_blank" rel="noopener">https://cnb.cool/lpk3215/pipecat-voice-agents</a></dd>
           <dt>Author</dt><dd>cnb.lpk</dd>
-          <dt>Citation</dt><dd><code>cnb.lpk. pipecat-ai-test: a multi-project voice agent repository. 2026.</code></dd>
+          <dt>Citation</dt><dd><code>cnb.lpk. pipecat-voice-agents: a multi-project voice agent repository. 2026.</code></dd>
         </dl>
       </div>
     </section>
 
     <footer class="footer">
-      <p>pipecat-ai-test · Project Overview — written from the <b>repository root</b> perspective, introducing the three projects.</p>
+      <p>pipecat-voice-agents · Project Overview — written from the <b>repository root</b> perspective, introducing the three projects.</p>
       <p class="muted">Every value on this page comes from the projects' own documentation / configuration / measured output, and identical values are kept identical wherever they appear.</p>
     </footer>
   </main>

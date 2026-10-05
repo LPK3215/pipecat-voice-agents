@@ -38,6 +38,12 @@ Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Repository renamed: `pipecat-ai-test` → **`pipecat-voice-agents`**. The name is now content-descriptive
+  and no longer reads like a test repository. Every in-repository reference (27 files, including the
+  `docs/` deployment copy, the project overview page, the card and the diagram generator) was updated in
+  one pass.
+- Both READMEs now carry a **non-affiliation notice**: Pipecat is an open-source framework by
+  **Daily / pipecat-ai**; this repository is an independent study and application of it.
 - Root [`README.md`](README.md) restructured: **the three projects come first**
   (at a glance → how they differ → one section each), with repository structure, language conventions and
   license moved after them. The two duplicated opening tables were merged and the ASCII comparison table

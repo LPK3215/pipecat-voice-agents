@@ -4,6 +4,9 @@
 
 ![License: MIT (root & projects 1-2)](https://img.shields.io/badge/License-MIT-yellow.svg) ![License: Open WebUI (project 3)](https://img.shields.io/badge/License-Open%20WebUI-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Projects 3](https://img.shields.io/badge/projects-3-brightgreen.svg)
 
+> **与 Pipecat 官方无隶属关系。** Pipecat 是 **Daily / pipecat-ai** 的开源框架（BSD-2-Clause）。
+> 本仓库是对该框架的**独立学习与实践**，与 Pipecat 项目无从属、赞助或背书关系。
+
 > **先看这一页。** 这个仓库里有**三个项目** + **一份框架调研**，它们回答的是**三个不同的问题**。
 
 ---
@@ -190,7 +193,7 @@ Whisper 不指定语言时会自动检测，**实测会把中文误判成泰语*
 ## 仓库结构
 
 ```
-pipecat-ai-test/
+pipecat-voice-agents/
 ├── README.md                    # 英文主版（默认展示）
 ├── README.zh-CN.md              # 中文配套版（本文件，章节一一对应）
 ├── LICENSE                      # 根许可证（MIT，附子项目适用范围）
@@ -265,7 +268,7 @@ pipecat-ai-test/
 
 ## 仓库
 
-- 仓库：<https://cnb.cool/lpk3215/pipecat-ai-test>
+- 仓库：<https://cnb.cool/lpk3215/pipecat-voice-agents>
 - 作者：cnb.lpk
 - 项目全景观览页：本地双击打开 [`project_overview.html`](project_overview.html)，
   或浏览 `docs/` 下的 GitHub Pages 构建（经典模式，从 `/docs` 服务）。

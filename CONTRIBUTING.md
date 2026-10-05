@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering a contribution to `pipecat-ai-test`.
+Thanks for considering a contribution to `pipecat-voice-agents`.
 
 > This is the **repository-level** guide and covers only what is common to this multi-project repository.
 > Each project has its own `CONTRIBUTING.md` with that project's environment, checks and commit details —

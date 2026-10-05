@@ -1,5 +1,5 @@
 /* ==========================================================================
-   pipecat-ai-test · Project Overview — interaction logic
+   pipecat-voice-agents · Project Overview — interaction logic
    Navigation highlight / scroll progress / tree folding / tabs / number count-up /
    theme toggle / tooltips on project cards / back-to-top
    ========================================================================== */
