@@ -296,6 +296,58 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 > 有一条单测守着这件事：`test_demo_rows_come_from_the_data_file_not_the_code` 会把数据文件里的
 > 订单号、主机名拿去 grep 源码 —— 谁把业务行写回代码里，测试就红。
 
+### 分层与跨层联通性：怎么判断是"真联通"而不是"写死在代码里"
+
+四层的边界，就是代码里的实际调用链：
+
+| 层 | 在仓库里是什么 | 它怎么到达下一层 |
+|---|---|---|
+| 接口层 | `FunctionSchema`（工具名 / 参数 / 描述）、RTVI·WebRTC 传输、探针命令行 | 模型按 schema 发起调用 |
+| 功能层 | `tools.py` / `sample_tools.py` 的 handler、`flows.py`、`guards.py` | 调用数据访问层的函数 |
+| 数据访问层 | `memory.py` / `knowledge.py` / `embeddings.py` 里的查询函数 | 拼参数化 SQL / 读文件 |
+| 数据层 | `server/data/*.db`、`sample-data/*`（路径可由环境变量指向别处） | —— |
+
+**判据（关键）**："先写数据、再问工具、答得出来"**不构成证据** —— 写死在代码里的常量同样答得出来。
+**证伪才有说服力**：**把数据层清空**，工具必须答"查不到"。常量给不出这个结果。
+
+一条命令看全过程（用临时库与临时数据文件，不碰你的真实数据）：
+
+```bash
+cd server && uv run ../verify_layers.py
+```
+
+```
+[1] 数据层 -> 数据访问层
+    [OK] 空数据层 -> 工具答"查不到"（答案不是代码里的常量）
+    [OK] 外部 sqlite3 客户端写入的行，立刻能被工具查到
+    [OK] 数据文件 -> 加载器 -> 数据层 -> 工具读到文件里的值
+[2] 代码声明的可查列 vs 数据库真实 schema：4 张表全部对得上（漂移否则要到运行时才炸）
+[3] 替换数据访问层的函数 -> 工具结果随之改变（说明真的走了层接口，不是内联逻辑）
+[4] 功能层 -> 接口层：12 个工具都有 handler；同一次接口调用，外部再写一行答案就变
+[5] 模型 -> 工具的传输层：由 verify_tools.py 覆盖（一次真实 LLM 调用）
+verdict: [OK] every layer boundary is connected for real
+```
+
+**两种方式的本质差异**：
+
+| | 数据写死在代码里 | 分层后通过接口联通 |
+|---|---|---|
+| 换数据 | 得改 `.py`、重新发布 | 换文件 / 换 DB / 改环境变量，`.py` 不动 |
+| 把数据层清空 | **仍然答得出来**（答案来自常量） | 答"查不到" |
+| 外部客户端写入一行 | 工具看不到 | 立刻可见 |
+| 单测能证明什么 | 只能证明常量**内部自洽** | 能证明跨层调用**真的到达了数据层** |
+| 防回退 | 无 | 架构守卫单测：业务行出现在源码里就红 |
+
+**谁在守这些边界**（`cd server && uv run pytest`）：
+
+| 边界 | 守它的测试 |
+|---|---|
+| 数据层 ⇄ 数据访问层 | `test_answers_come_from_the_data_layer_not_from_constants` |
+| 代码声明 ⇄ 真实 schema | `test_declared_columns_exist_in_the_real_schema` |
+| 数据文件 ⇄ 数据层 | `test_swapping_the_data_file_changes_answers_without_code_changes` |
+| 业务行不许回到代码里 | `test_demo_rows_come_from_the_data_file_not_the_code` |
+| 有状态工具按会话隔离 | `test_reminder_state_is_per_session` / `test_device_state_is_per_session` |
+
 工具的查询**不碰外部系统**，数据由独立的**采集脚本**写入本地库 —— 否则工具里现调接口
 会让用户多等几秒，外部源挂了问答也跟着崩。
 
@@ -604,6 +656,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 20 | 知识库写入侧：稳定 `source` + `--prune` | 原来用「调用时的原样路径」当文档标识：`../README.md` 与 `README.md` 会被当成两篇 → 检索重复命中、`--delete` 必须拼写一致。改为相对仓库根，并支持清掉源文件已不存在的记录（否则会检索到已删除的内容） |
 | 21 | 数据层对抗性验证；`search` 与时间戳修复 | 文档声称 SQL 层「白名单 + 结构化参数」，用 20 个注入样本实测确认成立（表名/列名/排序/聚合全被拦，敏感表不可达，库完好）。同一探针却查出：`search` 用**全局**列名名单，`orders` 没有那些列名 → 搜索被静默忽略、返回未过滤的行（`search="绝不存在zzz"` 也能返回 10 行）；`orders.updated_at` 的原始时间戳会进 `spoken` 被念出来。改为每表一份 `TEXT_COLUMNS`、无可用列时报错而非沉默，并格式化任意 `*_at` 字段 |
 | 22 | 业务数据搬出代码，进**数据文件** | 演示业务行原本是 `memory.py` 里的字面量（`bot.py` 直接调用），示例工具的城市天气 / 设备清单也一样写在 `sample_tools.py` 里 —— 这正是"假数据写死在代码里假装数据层"。改为 `sample-data/demo-business.json` / `sample-tools.json`，`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖，代码只做加载 + 白名单校验；设备状态同时改为按会话（与提醒一致）。加了一条架构守卫单测：业务行出现在源码里就红 |
+| 23 | 新增逐层联通性探针 `verify_layers.py` + 两条边界单测 | "先写数据再问工具、答得出来"**不构成证据**（写死的常量也能答）。改为**证伪**：清空数据层必须答"查不到"、外部 sqlite3 客户端写入必须立刻可见、替换数据访问层函数必须改变工具结果、代码声明的列必须与真实 schema 一致、换数据文件必须改变接口答案。8 项检查全过，并把「写死在代码里 vs 分层联通」的差异写进文档 |
 
 ### 为什么必须改 VAD（第 4 点）
 
@@ -707,6 +760,7 @@ pipecat-quickstart/
 ├── verify_stack.py          # 端到端自检（完整链路，较慢）
 ├── verify_tools.py          # 工具调用自检（只测后端）
 ├── verify_summarize.py      # 上下文摘要自检（撑过阈值，验证框架真的触发压缩）
+├── verify_layers.py         # 分层联通性自检（含"清空数据层必须答查不到"的证伪）
 ├── kb_eval.py               # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
 ├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
 ├── live_asr_bench.py        # 真实链路 ASR 基准（经 Opus 编解码）

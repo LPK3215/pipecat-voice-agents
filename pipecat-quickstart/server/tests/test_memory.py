@@ -4,6 +4,9 @@ once caused crashes).
 NOTE: the Chinese strings below are test data -- do not translate.
 """
 
+import sqlite3
+import time
+
 
 # ---------------------------------------------------------------- long-term memory
 def test_fact_roundtrip(temp_db):
@@ -103,6 +106,53 @@ def test_timestamps_are_formatted_for_any_at_column(temp_db):
     row = temp_db.query_table("orders", limit=1)["rows"][0]
     assert "time" in row and "updated_at" not in row
     assert len(row["time"]) == 16  # "2026-10-01 23:55"
+
+
+# ---------------------------------------------------------------- layer boundaries
+def test_answers_come_from_the_data_layer_not_from_constants(temp_db):
+    """The decisive test for "data hard-coded in the code" vs "layered with real interfaces".
+
+    With an EMPTY data layer the query must report that it found nothing -- hard-coded answers
+    would still be produced. Then a row written by an **external** sqlite3 client (not through
+    any function of this project) must be visible immediately: that is what proves the code
+    really reads the data layer instead of repeating constants of its own.
+    """
+    empty = temp_db.query_table("orders", limit=5)
+    assert empty["rows"] == []  # nothing in the data layer -> nothing to answer from
+    assert temp_db.query_table("orders", aggregate="count")["result"] == 0
+
+    conn = sqlite3.connect(temp_db.DB_PATH)
+    conn.execute(
+        "INSERT INTO orders (order_id, customer, status, amount, updated_at) VALUES (?,?,?,?,?)",
+        ("EXT-1", "外部写入", "待发货", 12.5, time.time()),
+    )
+    conn.commit()
+    conn.close()
+
+    hit = temp_db.query_table("orders", filters={"order_id": "EXT-1"})
+    assert hit["count"] == 1
+    assert hit["rows"][0]["customer"] == "外部写入"
+
+
+def test_declared_columns_exist_in_the_real_schema(temp_db):
+    """Code layer's declared interface (the whitelists) vs the data layer's real schema.
+
+    A whitelisted column that does not exist in the table would only surface as a runtime
+    "no such column" the first time a user happened to query it -- so the two sides are
+    compared directly here.
+    """
+    conn = sqlite3.connect(temp_db.DB_PATH)
+    real_tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+    for table, columns in temp_db.TABLE_COLUMNS.items():
+        assert table in real_tables, f"{table} is declared in code but does not exist in the DB"
+        real = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        assert not set(columns) - real, f"{table}: {sorted(set(columns) - real)} not in the DB"
+
+    for table, columns in {**temp_db.TEXT_COLUMNS, **temp_db.NUMERIC_COLUMNS}.items():
+        real = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        assert set(columns) <= real, f"{table}: {sorted(set(columns) - real)} not in the DB"
+    conn.close()
 
 
 # ---------------------------------------------------------------- business table queries (whitelist)
