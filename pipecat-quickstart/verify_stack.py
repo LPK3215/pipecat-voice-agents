@@ -72,6 +72,14 @@ from settings import (  # noqa: E402
 
 TARGET_SR = 16000
 
+# This harness feeds ONE fixed, complete utterance, so it must not wait for the smart-turn
+# model to decide whether the user is done. Left at the framework default (5.0s), an
+# "INCOMPLETE" verdict from the turn analyzer silently adds 5 seconds of dead air to every
+# measured stage -- and these numbers are supposed to describe the *pipeline*, not the turn
+# detector. See HANDBOOK.md section 9 for the underlying interaction (VAD stop_secs vs the
+# STT p99 latency).
+HARNESS_TURN_STOP_TIMEOUT = 0.5
+
 
 class Timeline:
     def __init__(self) -> None:
@@ -278,7 +286,8 @@ async def main() -> int:
     user_agg, assistant_agg = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=stop_secs))
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=stop_secs)),
+            user_turn_stop_timeout=HARNESS_TURN_STOP_TIMEOUT,
         ),
     )
 

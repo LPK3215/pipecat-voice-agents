@@ -57,9 +57,15 @@ def main() -> int:
     ap.add_argument("--dir", type=Path, default=None, help="directory (recursively collects .md/.txt)")
     ap.add_argument("--source", default=None, help="custom source name (single file only)")
     ap.add_argument("--list", action="store_true", help="list ingested documents and exit")
+    ap.add_argument("--delete", default=None, metavar="SOURCE", help="delete a document by source and exit")
     args = ap.parse_args()
 
     knowledge.init_db()
+
+    if args.delete:
+        removed = knowledge.delete_document(args.delete)
+        print(f"{'removed' if removed else 'not found'}: {args.delete}")
+        return 0 if removed else 1
 
     if args.list or (not args.paths and not args.dir):
         st = knowledge.stats()

@@ -365,6 +365,22 @@ verdict: [OK] full path passed
 > **真实体感端到端 ≈ 1.7 s + 0.45 s ≈ 2.1 s**。
 > 数字只用于**横向对比**（换模型、改配置前后的差值），不要当成用户感知延迟的绝对值。
 
+**2026-10-05 复测（商汤 `sensenova-6.8-flash-lite` + SenseVoice）**：
+
+```
+speech end -> VAD end of turn     453 ms
+speech end -> STT final text     859 ms
+speech end -> LLM first token    2038 ms
+speech end -> TTS first audio    2071 ms
+verdict: [OK] full path passed
+```
+
+> 这次复测顺带修掉一个**误导性测量**：本脚本原先把 `user_turn_stop_timeout` 留在框架默认的
+> 5 秒，而 SmartTurn 对这条固定音频判 `INCOMPLETE`，导致**每个阶段都虚高 5 秒**
+> （修前 `LLM first token 6609ms`）。现已在脚本里显式限制为 0.5s，
+> 详见 `HANDBOOK.md` 第 9 节第 11 条。
+> 另外注意两次复测的**服务商不同**（上表是魔搭 nex，这里是商汤），数字不能直接相减。
+
 ### 无浏览器冒烟测试
 
 `verify_stack.py` 走完整链路（含 STT/LLM/TTS），较慢；
@@ -544,7 +560,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 14 | 新增 `knowledge.py` + `embeddings.py`（RAG） | 框架没有知识库；嵌入默认走本地模型，不受单一服务商绑定（多数服务商无 `/v1/embeddings`） |
 | 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
 | 16 | 新增 `flows.py` / `summarize.py` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；官方 `FlowManager` / `LLMContextSummarizer` 需额外绑定，这里先给等价的最小实现 |
-| 17 | 新增 `tests/`（77 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要 |
+| 17 | 新增 `tests/`（86 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要、**观察者落库** |
 
 ### 为什么必须改 VAD（第 4 点）
 

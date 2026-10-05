@@ -64,6 +64,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  #
 from pipecat.services.openai.llm import OpenAILLMService  # noqa: E402
 from pipecat.workers.runner import WorkerRunner  # noqa: E402
 
+import memory  # noqa: E402 - 需先 load_dotenv
 from pipeline_logging import setup_logging  # noqa: E402
 from settings import (  # noqa: E402
     DEFAULT_SYSTEM_INSTRUCTION,
@@ -275,6 +276,11 @@ async def main() -> int:
     if not llm_cfg["api_key"]:
         print(f"missing {llm_cfg['api_key_env']} (it belongs in server/.env)")
         return 1
+
+    # Same local stores as bot.py, otherwise DB-backed tools (remember_fact / recall_fact /
+    # query_data) fail here with "no such table" and the self-check reports a false negative.
+    memory.init_db()
+    memory.seed_demo_business()
 
     repeat = max(1, args.repeat)
     run_log, _ = setup_logging(prefix="verify-tools")

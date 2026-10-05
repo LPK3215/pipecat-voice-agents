@@ -465,6 +465,28 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
     > 挑一个必然触发工具的问题（如「现在几点了」）先跑一遍。
     > 不通，就是环境问题，别急着下结论。
 
+11. **VAD 的 0.6s 与 STT 的 p99 会埋一个「5 秒兜底」的坑（2026-10-05 实测新增）。**
+    框架的默认轮次结束策略是 `TurnAnalyzerUserTurnStopStrategy`（本地 SmartTurn 模型）。
+    它会检查 `VAD stop_secs` 与 STT 的 p99 延迟：当 `stop_secs（0.6s） >= p99（SenseVoice 0.5s）`
+    时，内部等待时间会**塌缩为 0**，日志直接告警
+    `may cause delayed turn detection specified by the user_turn_stop_timeout`。
+    而 `user_turn_stop_timeout` 的**框架默认值是 5.0 秒** —— 一旦 SmartTurn 判出 `INCOMPLETE`
+    （实测这句普通话置信度只有 31%），轮次就一直等到 5 秒兜底才结束，
+    用户感知就是「**说完了，它愣 5 秒才回应**」。
+
+    实测（`verify_stack.py`，2026-10-05，商汤模型）：修前 `LLM first token 6609ms`，
+    修后 **2038ms**；同一条音频走真实 bot（`audio_probe.py`）是 1862ms。
+
+    **对策要分两侧看，别一刀切：**
+
+    - **产品侧（`bot.py`）不要乱调兜底。** SmartTurn 说 `INCOMPLETE` 的含义是
+      「用户可能还没说完」—— 把兜底调小会让长句被提前打断，正好破坏 4.1 节的 0.6s 初衷。
+      真实 bot 走 WebRTC 时这条音频被判为完整，端到端正常。
+    - **测量侧（`verify_stack.py`）必须显式限制。** 它喂的是一条**固定完整语句**，
+      不该等轮次检测器表态，所以显式传 `user_turn_stop_timeout=0.5`
+      （见脚本里的 `HARNESS_TURN_STOP_TIMEOUT`）。否则测出来的**每个阶段都虚高 5 秒**，
+      而这个脚本的职责恰恰是给出可信的分段延迟。
+
 ## 10. 常见改动对照表
 
 | 我想…… | 改哪里 |

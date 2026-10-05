@@ -134,6 +134,13 @@ DEFAULT_KOKORO_VOICE = "zf_xiaoxiao"
 # ---------- VAD ----------
 # The official default of 0.2s splits a Chinese sentence at its comma pauses, so the
 # LLM only receives half of it.
+#
+# NOTE: this value interacts with the framework's turn detector. When VAD stop_secs is
+# >= the STT p99 latency, the smart-turn strategy collapses its internal wait, and an
+# "INCOMPLETE" verdict then falls back to LLMUserAggregatorParams.user_turn_stop_timeout
+# (framework default: 5.0s) -- up to 5 seconds of dead air. That is why the synthetic
+# verify_stack.py harness passes an explicit small timeout instead of inheriting it.
+# See HANDBOOK.md section 9, item 11.
 DEFAULT_VAD_STOP_SECS = 0.6
 VAD_STOP_SECS_OFFICIAL_DEFAULT = 0.2  # official pipecat value, used for hints only
 

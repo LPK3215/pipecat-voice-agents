@@ -352,16 +352,21 @@ class TurnRecorder(BaseObserver):
 
 
 def load_memory_into_context(context, limit: int = 10) -> int:
-    """Inject long-term memory and the previous session into the LLMContext.
+    """Inject long-term memory and the tail of the previous session into the LLMContext.
 
     This is where "long-term memory" actually takes effect: the framework does not care how
     you store it, but you must inject it **when building the context** for the model to see
     it. Returns the number of injected messages.
 
+    Both parts honor ``limit``: at most ``limit`` facts, and at most ``limit`` previous
+    turns. The second part is what makes a restart resume the conversation instead of
+    starting from a blank slate.
+
     NOTE: the injected text is intentionally Chinese -- it is a prompt for a Chinese agent.
     """
     injected = 0
-    facts = list_facts(limit=20)
+
+    facts = list_facts(limit=limit)
     if facts:
         lines = "\n".join(f"- {f['key']}: {f['value']}" for f in facts)
         context.add_message(
@@ -371,6 +376,20 @@ def load_memory_into_context(context, limit: int = 10) -> int:
             }
         )
         injected += 1
+
+    # Tail of the previous session(s), so a fresh process can pick up where it left off.
+    # At startup the current session has no turns yet, so this is always a previous one.
+    turns = recent_turns(limit=limit)
+    if turns:
+        lines = "\n".join(f"{t['role']}: {t['content']}" for t in turns)
+        context.add_message(
+            {
+                "role": "user",
+                "content": f"以下是之前会话的最后几轮对话，可作为背景参考：\n{lines}",
+            }
+        )
+        injected += 1
+
     return injected
 
 
