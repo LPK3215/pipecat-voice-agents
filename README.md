@@ -283,5 +283,6 @@ This is a **multi-project repository and the parts are licensed differently** â€
 
 - Repository: <https://github.com/LPK3215/pipecat-voice-agents>
 - Author: LPK3215
-- Project overview page: open [`project_overview.html`](project_overview.html) locally (double-click),
-  or browse the GitHub Pages build in [`docs/`](docs/) (classic mode, served from `/docs`).
+- Project overview page: **online** at <https://lpk3215.github.io/pipecat-voice-agents/>
+  (GitHub Pages, classic mode, deployed from the `/docs` directory of `main`);
+  or open [`project_overview.html`](project_overview.html) locally (double-click).
