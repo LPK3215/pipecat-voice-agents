@@ -15,6 +15,7 @@
 - `docs/pipecat-open-webui-architecture.svg`：本分支架构图（由 `scripts/visualization/generate_voice_architecture.mjs` 生成）
 - `CONTRIBUTING.md` / `FAQ.md` / `AUTHORS`
 - `LICENSE-SUPPLEMENT.md`：**双协议**说明 —— 上游代码沿用 Open WebUI License，**本分支新增的独立文件采用 MIT**
+- `voice-docs/INTEGRATION.md`：**语音模块接入说明**（给后来者：做了什么动作 / 改了哪些文件 / 调用了哪些接口 / 升级方向）
 
 ### 移除（相对上游）
 
@@ -43,7 +44,11 @@
 - `LICENSE` / `LICENSE_NOTICE` / `LICENSE_HISTORY` / `CONTRIBUTOR_LICENSE_AGREEMENT`
 - 界面上的 "Open WebUI" 品牌
 
-### 已知问题 / 待办
+### 当前状态
 
-- 语音模块尚未实现（`voice-docs/ARCHITECTURE.md` 仅为契约草稿，无代码）
-- 尚未接入大模型 API（需在界面 Settings → Connections 配置）
+- ✅ 已接入 LLM（商汤 SenseNova，OpenAI 兼容），实测对话可用
+- ✅ 已接入语音：STT = 本地 faster-whisper；TTS = 浏览器 `speechSynthesis`
+- ✅ 公网可访问（CNB 端口代理，见 [`../FAQ.md`](../FAQ.md) Q12）
+- ⏭️ **有意未做**：实时双向语音（打断 / 主动播报）—— 见 [`INTEGRATION.md`](INTEGRATION.md) 第 6 节
+
+> `ARCHITECTURE.md` 是"外挂式"的早期设想，**本项目未采用**，保留作历史参考（详见 [`INTEGRATION.md`](INTEGRATION.md) 第 2 节）。
