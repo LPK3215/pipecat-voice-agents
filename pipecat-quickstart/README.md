@@ -7,7 +7,7 @@
 > | **需要几个 key** | **1 个**（只有 LLM 要钱；语音识别与合成全在本地跑） |
 > | **状态** | **持续维护中** —— 第一阶段完成，第二阶段（写自己的业务）进行中 |
 > | **总览** | ➡️ [`../README.md`](../README.md)（三个东西的区别） |
-> | **找调研/基准脚本？** | ➡️ [`../pipecat-modelscope/`](../pipecat-modelscope/) （📕 已冻结，别在上面开发） |
+> | **找调研/基准脚本？** | ➡️ [`reference/pipecat-modelscope/`](reference/pipecat-modelscope/) （📕 已冻结，别在上面开发） |
 >
 > **本项目的配套文档**：
 > - 📘 [`HANDBOOK.md`](docs/HANDBOOK.md) —— 第一阶段：怎么从零搭起来（插槽 / 配置 / 踩坑）
@@ -787,6 +787,8 @@ pipecat-quickstart/
 │   ├── HANDBOOK.md          # 第一阶段：怎么搭起来（插槽 / 配置 / 踩坑）
 │   ├── HANDBOOK-02.md       # 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
 │   └── TOOL_TESTS.md        # 工具调用压测报告（引用数据前先读顶部的作废声明）
+├── reference/               # 参考案例（只读，不再开发）
+│   └── pipecat-modelscope/  #   已冻结的调研项目：模型选型报告 + 基准脚本 + ANALYSIS.md
 └── README.md                # 本文（入口）
 ```
 

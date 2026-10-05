@@ -1,6 +1,6 @@
 # Pipecat 语音 Agent —— 项目总览
 
-> **先看这一页。** 这个仓库里有三样东西，用途完全不同，光看目录名分不出来。
+> **先看这一页。** 这个仓库里有三样东西，用途完全不同：一个能用的实现、它内部归档的调研项目、一份框架调研文档。
 
 ---
 
@@ -10,12 +10,12 @@
 |---|---|
 | **跑起来 / 继续开发** | **`pipecat-quickstart/`** ← **唯一在维护的** |
 | 了解框架能干什么、怎么组装 | `pipecat-项目调研.md` |
-| 找模型选型依据、延迟基准脚本 | `pipecat-modelscope/`（📕 **已冻结**） |
+| 找模型选型依据、延迟基准脚本 | `pipecat-quickstart/reference/pipecat-modelscope/`（📕 **已冻结**，已归档进主项目） |
 
 **一句话记法**：
 
 - 📗 **quickstart** = **能用的东西**（在这干活）
-- 📕 **modelscope** = **当时怎么选出来的**（历史资料，别在上面开发）
+- 📕 **reference/pipecat-modelscope** = **当时怎么选出来的**（历史资料，别在上面开发）
 - 📄 **调研文档** = **这框架是什么**（上手前读）
 
 ---
@@ -35,18 +35,19 @@
 
 | 文件 | 内容 |
 |---|---|
-| `README.md` | 这个项目本身怎么跑 |
-| `HANDBOOK.md` | 第一阶段：怎么从零搭起来（插槽、配置、踩坑） |
-| `HANDBOOK-02.md` | 第二阶段：怎么写自己的业务（工具、数据、编排、测试纪律） |
-| `TOOL_TESTS.md` | 工具调用压测报告（含**可信度标注**、未完成项与阻塞） |
+| `pipecat-quickstart/README.md` | 这个项目本身怎么跑 |
+| `pipecat-quickstart/docs/HANDBOOK.md` | 第一阶段：怎么从零搭起来（插槽、配置、踩坑） |
+| `pipecat-quickstart/docs/HANDBOOK-02.md` | 第二阶段：怎么写自己的业务（工具、数据、编排、测试纪律） |
+| `pipecat-quickstart/docs/TOOL_TESTS.md` | 工具调用压测报告（含**可信度标注**、未完成项与阻塞） |
 
-### 📕 `pipecat-modelscope/` —— 已冻结的调研/验证项目
+### 📕 `pipecat-quickstart/reference/pipecat-modelscope/` —— 已冻结的调研/验证项目
 
 | 项 | 说明 |
 |---|---|
 | 是什么 | **只回答三个问题**：连通性行不行、延迟快不快、该用哪个模型 |
 | 需要几个 key | **3 个**（Deepgram + Cartesia + 魔搭） |
 | 状态 | **不再维护** —— 不要在它上面继续开发 |
+| 位置 | **已归档进主项目**：`pipecat-quickstart/reference/`（不再单独占一个顶层目录，避免「两个并列项目」的误解） |
 
 保留价值（这些东西现在还有用）：
 
@@ -67,16 +68,18 @@
 同一个目标的**两个阶段**，不是两个并行方案：
 
 ```
-① 调研验证                          ② 落地实现
-pipecat-modelscope/          →      pipecat-quickstart/
-─────────────────────               ─────────────────────
-手写的最小验证                      官方 CLI 生成的脚手架
-STT/TTS 用云端（3 个 key）   →      STT/TTS 换本地（1 个 key）
-只测连通性与延迟             →      完整功能 + 工具 + 记忆 + 数据
-产出：选型结论与基准数据     →      产出：能用的东西 + 文档
+① 调研验证                                    ② 落地实现
+pipecat-modelscope/                    →      pipecat-quickstart/
+─────────────────────                         ─────────────────────
+手写的最小验证                                官方 CLI 生成的脚手架
+STT/TTS 用云端（3 个 key）             →      STT/TTS 换本地（1 个 key）
+只测连通性与延迟                       →      完整功能 + 工具 + 记忆 + 数据
+产出：选型结论与基准数据               →      产出：能用的东西 + 文档
+
+（① 现在归档在 ② 内部：pipecat-quickstart/reference/pipecat-modelscope/）
 ```
 
-**结论已经沉淀到 `pipecat-quickstart/` 里了，所以 modelscope 那一份就不必再动。**
+**结论已经沉淀到 `pipecat-quickstart/` 里了，所以 modelscope 那一份就不必再动 —— 现已作为参考案例归档进 `reference/`。**
 
 ---
 
@@ -88,7 +91,7 @@ STT/TTS 用云端（3 个 key）   →      STT/TTS 换本地（1 个 key）
 - modelscope 的基准是「音频推流结束」，且用的是**云端** STT/TTS
 - quickstart 的基准是「**用户真正说完**」那一刻
 
-前者**偏乐观约 0.5 秒**。详见 `pipecat-modelscope/README.md` 里的口径说明。
+前者**偏乐观约 0.5 秒**。详见 `pipecat-quickstart/reference/pipecat-modelscope/README.md` 里的口径说明。
 
 **2. 引用 `TOOL_TESTS.md` 的数据前，先读它顶部的作废声明。**
 那份报告里有一条结论已被重复试验推翻（「工具越多越不调」），
