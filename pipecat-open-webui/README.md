@@ -47,9 +47,10 @@ cd backend && USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-we
 | 场景 | 地址 |
 |---|---|
 | 本机 | <http://localhost:8000> |
-| **CNB 云环境（当前）** | **<https://6p1cwlsz8a-8000.cnb.run>** |
+| 公网 | 自行部署后由你的部署环境给出（见 [`FAQ.md`](FAQ.md) Q12） |
 
-> CNB 的转发规则来自环境变量 `CNB_VSCODE_PROXY_URI=https://6p1cwlsz8a-{{port}}.cnb.run`，把 `{{port}}` 换成 `8000` 即可。
+> 本分支只做语音 I/O，**不自带托管**；公网访问方式由你的部署环境决定
+> （云主机放行 `8000` 端口 / 云开发环境的端口转发面板 / Nginx 反向代理）。
 > 首次访问需注册管理员账号（**第一个注册的用户即管理员**）。
 
 ### 配置（`.env`）

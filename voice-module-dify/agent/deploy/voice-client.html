@@ -176,7 +176,7 @@
 <footer>
   WebSocket：<code id="wsurl"></code> —— 二进制帧是音频，文本帧是事件（两者互不影响）。<br>
   连不上？在网址后面加 <code>?ws=</code> 手动指定模块地址，例如 <code>?ws=ws://127.0.0.1:8090/</code>（本机）
-  或 <code>?ws=wss://你的地址-8090.cnb.run/</code>（公网预览）。<br>
+  或 <code>?ws=wss://你的域名:8090/</code>（公网部署）。<br>
   页面必须经 https 或 <code>http://localhost</code> 打开（直接双击本地文件常拿不到麦克风）。
 </footer>
 
@@ -184,7 +184,7 @@
 (() => {
   // The page is hosted next to the platform, but the voice module listens on its own port.
   // Two hosting shapes, and getting this wrong means "连接已断开" with no clue why:
-  //   preview : "abc-8080.cnb.run" -> the port is inside the hostname, so swap it
+  //   preview : "abc-8080.example.com" -> the port is inside the hostname, so swap it
   //   local   : "localhost:8080"   -> keep the host, use the module's port explicitly
   // (Measured: using the old rule on localhost produced "ws://localhost/" -- port 80, never
   //  the module. The IDE forwards the port for you, but the page still has to name it.)

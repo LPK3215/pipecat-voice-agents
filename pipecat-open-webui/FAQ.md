@@ -109,26 +109,24 @@ PORT=8000 PATH="$PWD/.venv/bin:$PATH" ./start.sh
 
 当前 `pipecat-open-webui/.env` 已接入商汤（`OPENAI_API_BASE_URL` / `OPENAI_API_KEY`）。
 
-## 访问（CNB 云环境）
+## 访问（公网部署）
 
-### Q12: 在 CNB 云环境下，怎么从浏览器打开这个服务？
+### Q12: 部署到服务器后，怎么从浏览器打开这个服务？
 
-**不是 `http://localhost:8000`**，而是走 **CNB 的公网代理**（服务已在 `0.0.0.0:8000` 监听，符合要求）。
+**不是 `http://localhost:8000`**，而是走**你所在部署环境的公网转发**
+（服务已在 `0.0.0.0:8000` 监听，符合要求）。
 
 ```bash
-# 取代理地址模板（形如 https://xxxxxx-{{port}}.cnb.run）
-echo "$CNB_VSCODE_PROXY_URI"
-# 本环境实际值：https://6p1cwlsz8a-{{port}}.cnb.run
+# start.sh 默认监听 0.0.0.0:8000，公网地址由你的部署环境给出：
+#   - 云主机 / 容器        -> 放行安全组的 8000 端口，访问 http://<公网 IP>:8000
+#   - WebIDE / 云开发环境  -> 在其 PORTS（端口转发）面板把 8000 暴露为公网 URL
+#   - 已有域名             -> 用 Nginx 等反向代理到 127.0.0.1:8000
 ```
-
-把 `{{port}}` 替换成实际端口 → **本环境访问地址：<https://6p1cwlsz8a-8000.cnb.run>**
 
 要点：
 
-- 服务**必须监听 `0.0.0.0`**（`start.sh` 默认如此）；监听 `localhost`/`127.0.0.1` 则无法通过代理访问
-- 也可在 WebIDE 的 **PORTS** 面板添加 `8000` 端口映射，从面板里点开的 URL 访问
-- 该域名前缀由**环境实例**决定，重建环境后可能变化 —— 以 `$CNB_VSCODE_PROXY_URI` 为准
-- 官方文档：<https://docs.cnb.cool/zh/workspaces/business-preview.md>
+- 服务**必须监听 `0.0.0.0`**（`start.sh` 默认如此）；监听 `localhost`/`127.0.0.1` 则无法从外部访问
+- 公网 URL 的前缀由**部署环境实例**决定，重建环境后可能变化 —— 以你环境面板给出的地址为准
 
 ## 语音（本分支接入）
 

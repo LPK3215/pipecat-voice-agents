@@ -152,7 +152,8 @@ cd backend
 PORT=8000 PATH="$PWD/.venv/bin:$PATH" ./start.sh
 ```
 
-访问：浏览器打开 `$CNB_VSCODE_PROXY_URI` 把 `{{port}}` 换成 `8000`（CNB 云环境，见 [`../FAQ.md`](../FAQ.md) Q12）。
+访问：浏览器打开 `http://<你的部署地址>:8000` —— 公网地址由你的部署环境给出
+（见 [`../FAQ.md`](../FAQ.md) Q12）。
 
 ---
 

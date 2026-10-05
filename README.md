@@ -132,7 +132,10 @@ uv run python probe/verify_speech_legs.py   # verify it can really speak and lis
 | Scenario | Address |
 |---|---|
 | Local | <http://localhost:8000> |
-| **CNB cloud environment (current)** | **<https://6p1cwlsz8a-8000.cnb.run>** |
+| Repository (source / docs) | <https://github.com/LPK3215/pipecat-voice-agents> |
+
+> This branch only does voice I/O and ships no hosting; public access is up to your own
+> deployment (see that project's `FAQ.md` Q12).
 
 **Startup** (source mode; see the "how to run this branch" section of that project's `README.md`):
 

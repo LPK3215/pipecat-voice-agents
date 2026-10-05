@@ -30,7 +30,7 @@
   - 修复 ②：DB 的 `audio.stt.whisper_model` 由 `base` 改为 **`small`** —— ⚠️ 它是 **PersistentConfig，数据库值优先于环境变量**，光改 `.env` 不生效
   - 实测（同一段中文音频）：修复前 → 泰语 ❌；修复后 → `你好请用一句话介绍一下,你自己。` ✅
   - 详见 [`../../FAQ.md`](../FAQ.md) Q14 与 [`VOICE-UX.md`](VOICE-UX.md) 第 1.5 节
-- **`README.md` 补充「本分支怎么跑」章节**：源码模式三步启动、CNB 访问地址、`.env` 配置表
+- **`README.md` 补充「本分支怎么跑」章节**：源码模式三步启动、公网访问地址、`.env` 配置表
 
 ### 移除（相对上游）
 
@@ -63,7 +63,7 @@
 
 - ✅ 已接入 LLM（商汤 SenseNova，OpenAI 兼容），实测对话可用
 - ✅ 已接入语音：STT = 本地 faster-whisper；TTS = 浏览器 `speechSynthesis`
-- ✅ 公网可访问（CNB 端口代理，见 [`../FAQ.md`](../FAQ.md) Q12）
+- ✅ 公网可访问（端口转发，见 [`../FAQ.md`](../FAQ.md) Q12）
 - ⏭️ **有意未做**：实时双向语音（打断 / 主动播报）—— 见 [`INTEGRATION.md`](INTEGRATION.md) 第 6 节
 
 > `ARCHITECTURE.md` 是"外挂式"的早期设想，**本项目未采用**，保留作历史参考（详见 [`INTEGRATION.md`](INTEGRATION.md) 第 2 节）。

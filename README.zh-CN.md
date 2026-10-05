@@ -130,7 +130,9 @@ uv run python probe/verify_speech_legs.py   # 验证它真的能说、也能听
 | 场景 | 地址 |
 |---|---|
 | 本机 | <http://localhost:8000> |
-| **CNB 云环境（当前）** | **<https://6p1cwlsz8a-8000.cnb.run>** |
+| 仓库（源码 / 文档） | <https://github.com/LPK3215/pipecat-voice-agents> |
+
+> 该分支只做语音 I/O，不自带托管；公网访问需自行部署（见该项目 `FAQ.md` Q12）。
 
 **启动**（源码模式，详见该项目 `README.md` 的「本分支怎么跑」一节）：
 
