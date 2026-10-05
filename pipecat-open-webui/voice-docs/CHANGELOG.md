@@ -16,6 +16,7 @@
 - `CONTRIBUTING.md` / `FAQ.md` / `AUTHORS`
 - `LICENSE-SUPPLEMENT.md`：**双协议**说明 —— 上游代码沿用 Open WebUI License，**本分支新增的独立文件采用 MIT**
 - `voice-docs/INTEGRATION.md`：**语音模块接入说明**（给后来者：做了什么动作 / 改了哪些文件 / 调用了哪些接口 / 升级方向）
+- `voice-docs/VOICE-MODES.md`：**语音形态选择与实现指南**（简单 I/O vs 实时对话：怎么选、实时对话的 5 个机制、在新宿主上怎么落地）
 
 ### 移除（相对上游）
 

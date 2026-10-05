@@ -3,7 +3,7 @@
 > **本文给谁看**：后来拿到这个项目的人。
 > 读完它，你应该能明白：**我们往 Open WebUI 里接了什么、怎么接的、改了哪里、调了哪些接口、以后怎么升级。**
 >
-> 相关文档：[`VOICE-README.md`](VOICE-README.md)（项目定位）｜ [`ARCHITECTURE.md`](ARCHITECTURE.md)（早期设想，**未采用的外挂式**）｜ [`../FAQ.md`](../FAQ.md)（跑起来 / 排错）
+> 相关文档：[`VOICE-MODES.md`](VOICE-MODES.md)（**语音形态怎么选**：简单 I/O vs 实时对话）｜ [`VOICE-README.md`](VOICE-README.md)（项目定位）｜ [`ARCHITECTURE.md`](ARCHITECTURE.md)（早期设想，**未采用的外挂式**）｜ [`../FAQ.md`](../FAQ.md)（跑起来 / 排错）
 
 ---
 
@@ -163,7 +163,7 @@ PORT=8000 PATH="$PWD/.venv/bin:$PATH" ./start.sh
 | **中文识别更准** | `.env` 设 `WHISPER_MODEL=small`（或 `medium`） | 更慢（CPU） |
 | **声音更自然** | 配 `AUDIO_TTS_ENGINE`（`openai` / `elevenlabs` / `azure`）指向云端 TTS | 要 key、要钱、要网 |
 | **换更强/更快的 LLM** | 改 `.env` 的 `OPENAI_API_BASE_URL` / `OPENAI_API_KEY` | 无 |
-| **实时双向语音**（边说边听、打断、主动播报） | **需要更深一层**：参考 `voice-module-dify` 的 brain 层（判停 / 打断 / 填场），并可能需要改前端 `CallOverlay.svelte` | 大（这才是真正的工作量） |
+| **实时双向语音**（边说边听、打断、主动播报） | **不是配置能解决的** —— 完整判断标准与实现要点见 [`VOICE-MODES.md`](VOICE-MODES.md) | 大（≈ 把 ② 的核心重做一遍） |
 | **跟上上游** | `git remote add upstream https://github.com/open-webui/open-webui.git` → `git diff upstream/main --stat` 看本分支改动 | 注意 `audio.py` 3 处冲突 |
 
 > ⚠️ **现状的边界**：当前是**点按式语音**（点麦克风 → 说一句 → 出结果），

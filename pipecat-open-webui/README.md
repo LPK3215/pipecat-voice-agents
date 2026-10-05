@@ -6,7 +6,7 @@
 > - **目的**：实验「把实时语音能力作为一个零件，插入现成的 agent 系统」（测试性质，非生产）
 > - **基线**：Open WebUI `v0.11.4`
 > - **许可**：**双协议** —— ① 上游代码沿用 **Open WebUI License**（保留品牌，见 [`LICENSE`](./LICENSE)）；② **本分支新增的独立文件采用 MIT**（见 [`LICENSE-SUPPLEMENT.md`](./LICENSE-SUPPLEMENT.md)）
-> - **本分支新增**：[`voice-docs/INTEGRATION.md`](./voice-docs/INTEGRATION.md)（**语音接入说明：改了什么 / 调了哪些接口**）、[`voice-docs/`](./voice-docs)（定位 / 平台选型 / 变更记录）、[`CONTRIBUTING.md`](./CONTRIBUTING.md)、[`FAQ.md`](./FAQ.md)、[`AUTHORS`](./AUTHORS)
+> - **本分支新增**：[`voice-docs/INTEGRATION.md`](./voice-docs/INTEGRATION.md)（**语音接入说明：改了什么 / 调了哪些接口**）、[`voice-docs/VOICE-MODES.md`](./voice-docs/VOICE-MODES.md)（**语音形态怎么选**）、[`voice-docs/`](./voice-docs)（定位 / 平台选型 / 变更记录）、[`CONTRIBUTING.md`](./CONTRIBUTING.md)、[`FAQ.md`](./FAQ.md)、[`AUTHORS`](./AUTHORS)
 > - **上游项目**：<https://github.com/open-webui/open-webui> ｜ 文档：<https://docs.openwebui.com/>
 > - **本分支作者 / 仓库**：cnb.lpk ｜ <https://cnb.cool/lpk3215/pipecat-ai-test>（见 [`AUTHORS`](./AUTHORS)）
 >
