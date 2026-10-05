@@ -74,7 +74,25 @@ def init_db() -> None:
 _SENT_RE = re.compile(r"[^。！？!?\n；;]+[。！？!?\n；;]?")
 
 
-def chunk_text(text: str, size: int = 300, overlap: int = 50) -> list[str]:
+# Measured with kb_eval.py on this repo's own documentation (15 hand-written cases):
+# 300 chars was the worst size tested; 500-800 are clearly better and differ from each
+# other by less than one case, so 500 (the most stable neighbourhood) is the default.
+DEFAULT_CHUNK_SIZE = 500
+DEFAULT_CHUNK_OVERLAP = 50
+
+# Weight of the lexical signal on top of the vector score (0 = pure vector search).
+# Measured: it improved **every** one of the 8 configurations tested, e.g. with
+# size=500/overlap=50 it lifted hit@3 from 73% to 87% and hit@1 from 53% to 60%.
+RERANK_ALPHA = 0.3
+# Candidates pulled from the vector scan before reranking; must exceed k, otherwise
+# reranking has nothing to reorder. Measured at 500/50 alpha=0.3: pool 10 -> 87%/0.71,
+# 20 -> 80%/0.70, 40 -> 87%/0.73 (hit@3 / MRR), hence 40.
+RERANK_POOL = 40
+
+
+def chunk_text(
+    text: str, size: int = DEFAULT_CHUNK_SIZE, overlap: int = DEFAULT_CHUNK_OVERLAP
+) -> list[str]:
     """Split long text into overlapping chunks.
 
     ``size`` is the target character count and ``overlap`` is the overlap between adjacent
@@ -100,12 +118,23 @@ def chunk_text(text: str, size: int = 300, overlap: int = 50) -> list[str]:
 
 
 # ---------------------------------------------------------------- writes
-def ingest(text: str, source: str, title: str = "", embedder=None) -> int:
-    """Insert/overwrite a document (deduplicated by source). Returns the chunk count."""
+def ingest(
+    text: str,
+    source: str,
+    title: str = "",
+    embedder=None,
+    size: int = DEFAULT_CHUNK_SIZE,
+    overlap: int = DEFAULT_CHUNK_OVERLAP,
+) -> int:
+    """Insert/overwrite a document (deduplicated by source). Returns the chunk count.
+
+    ``size`` / ``overlap`` are exposed so the retrieval evaluation harness (``kb_eval.py``)
+    can sweep them; normal callers should keep the defaults.
+    """
     from embeddings import build_embedder
 
     emb = embedder or build_embedder()
-    chunks = chunk_text(text)
+    chunks = chunk_text(text, size=size, overlap=overlap)
     if not chunks:
         return 0
     vecs = emb.embed(chunks)
@@ -148,8 +177,26 @@ def list_documents() -> list[dict]:
 
 
 # ---------------------------------------------------------------- retrieval
+def _bigrams(text: str) -> set[str]:
+    """Character bigrams. Chinese has no spaces, so there are no words to match on."""
+    cleaned = re.sub(r"[^\u4e00-\u9fff0-9a-zA-Z]", "", text or "")
+    if len(cleaned) < 2:
+        return {cleaned} if cleaned else set()
+    return {cleaned[i : i + 2] for i in range(len(cleaned) - 1)}
+
+
+def _lexical_overlap(query: str, chunk: str) -> float:
+    """Fraction of the query's bigrams that also appear in the chunk."""
+    q = _bigrams(query)
+    return len(q & _bigrams(chunk)) / len(q) if q else 0.0
+
+
 def search(query: str, k: int = 3, embedder=None) -> list[dict]:
     """Semantic search: return the top-k chunks (with source and similarity score).
+
+    The score blends the vector cosine with a lexical-overlap signal (``RERANK_ALPHA``):
+    pure vector ranking misses passages that share the query's exact wording, which is
+    common for short factual questions. See ``kb_eval.py`` for the measurements.
 
     Swapping the vector store means **changing only this function** (keep the return shape).
     """
@@ -171,17 +218,26 @@ def search(query: str, k: int = 3, embedder=None) -> list[dict]:
 
     mat = np.stack([np.frombuffer(r["vec"], dtype="float32") for r in rows])
     sims = mat @ qv  # vectors are normalized, so the dot product is the cosine
-    order = np.argsort(-sims)[: max(1, min(k, len(rows)))]
-    return [
-        {
-            "source": rows[int(i)]["source"],
-            "title": rows[int(i)]["title"],
-            "seq": rows[int(i)]["seq"],
-            "score": round(float(sims[int(i)]), 4),
-            "text": rows[int(i)]["text"],
-        }
-        for i in order
-    ]
+
+    pool = max(k, RERANK_POOL) if RERANK_ALPHA > 0 else k
+    order = np.argsort(-sims)[: max(1, min(pool, len(rows)))]
+
+    hits = []
+    for i in order:
+        text = rows[int(i)]["text"]
+        cosine = float(sims[int(i)])
+        score = (1 - RERANK_ALPHA) * cosine + RERANK_ALPHA * _lexical_overlap(q, text)
+        hits.append(
+            {
+                "source": rows[int(i)]["source"],
+                "title": rows[int(i)]["title"],
+                "seq": rows[int(i)]["seq"],
+                "score": round(score, 4),
+                "text": text,
+            }
+        )
+    hits.sort(key=lambda h: -h["score"])
+    return hits[: max(1, min(k, len(hits)))]
 
 
 def stats() -> dict:

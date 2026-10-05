@@ -191,7 +191,15 @@ uv run bot.py
 |---|---|---|
 | 嵌入 | 本地 `BAAI/bge-small-zh-v1.5`（transformers+torch，**无需 key**，512 维） | `EMBEDDING_PROVIDER=api` + `EMBEDDING_BASE_URL/API_KEY` |
 | 存储 | SQLite BLOB（float32 向量） | `KNOWLEDGE_DB` |
-| 检索 | NumPy 余弦暴力扫描（几百~几千块毫秒级） | 只改 `server/knowledge.py::search()` |
+| 检索 | NumPy 余弦暴力扫描（几百~几千块毫秒级）+ **词面重排**（`RERANK_ALPHA=0.3`） | 只改 `server/knowledge.py::search()` |
+
+分块与重排的默认值不是拍脑袋定的：用 `kb_eval.py`（语料 = 仓库自己的文档 + 15 个手写用例）扫过
+分块 300–800 × 重叠 × 重排权重 × 候选池，**hit@1 40%→60%、hit@3 53%→87%**。随时可复跑：
+
+```bash
+cd server && uv run ../kb_eval.py                      # 默认配置对比
+cd server && uv run ../kb_eval.py --sizes 300,500 --overlaps 0,50 --alpha 0.3
+```
 
 > 为什么嵌入默认本地：**当前 LLM 服务商没有 embeddings 接口**（实测商汤
 > `/v1/embeddings` 返回 404），且本地免费、不受单一服务商绑定 —— 与 STT/TTS 同思路。
@@ -665,6 +673,7 @@ pipecat-quickstart/
 ├── collect_orders.py        # 业务数据采集示例（采集与查询分离）
 ├── verify_stack.py          # 端到端自检（完整链路，较慢）
 ├── verify_tools.py          # 工具调用自检（只测后端）
+├── kb_eval.py               # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
 ├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
 ├── live_asr_bench.py        # 真实链路 ASR 基准（经 Opus 编解码）
 ├── text_probe.py            # 文本通道探针（真实 bot.py + 真实 WebRTC）

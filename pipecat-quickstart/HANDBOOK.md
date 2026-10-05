@@ -128,6 +128,7 @@ server/
 ├── audio_probe.py      # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
 ├── asr_bench.py        # 离线 ASR 基准：直接喂 WAV，秒级对比，改配置时用它
 ├── live_asr_bench.py   # 真实链路 ASR 基准：经 Opus 编解码，结论更可信
+├── kb_eval.py          # 知识库检索质量评测：扫分块 / 重排 / 候选池（第二阶段用）
 ├── verify_tools.py     # 工具调用自检（只测后端）+ --repeat 成功率统计
 ├── prewarm.py          # 预热本地模型（首次运行前跑一次，避免首个会话卡在下载）
 └── README.md / HANDBOOK.md / HANDBOOK-02.md / TOOL_TESTS.md   # 文档（本文即 HANDBOOK.md）
@@ -266,7 +267,8 @@ server/
 | 改 ASR 配置，秒级看效果 | `asr_bench.py`（离线，直接喂 WAV） |
 | 要下最终结论 | `live_asr_bench.py`（真实链路） |
 | 端到端是否真的通 | `audio_probe.py`（**唯一覆盖 VAD 与 STT 的探针**） |
-| 工具调用是否可用 | `verify_tools.py` |
+| 工具调用是否可用 | `verify_tools.py`（含 `--repeat N` 成功率统计） |
+| 调知识库检索质量 | `kb_eval.py`（真实文档语料 + 手写用例，扫分块/重排参数） |
 
 > **重要教训**：`asr_bench.py`（离线）比 `live_asr_bench.py`（真实链路）**偏乐观**。
 > 真实路径要过 Opus 编解码和多次重采样，比直接喂 WAV 更难认。

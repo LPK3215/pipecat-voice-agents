@@ -125,7 +125,6 @@ VAD_STOP_SECS_DEFAULT = VAD_STOP_SECS_OFFICIAL_DEFAULT  # official value, for hi
 # SQLite has zero dependencies and can be swapped later.
 memory.init_db()
 memory.seed_demo_business()  # demo business data; overwritten once real ingestion runs
-SESSION_ID = memory.new_session_id()
 
 
 def _mask(value: str | None) -> str:
@@ -142,7 +141,12 @@ def _pipecat_version() -> str:
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
     """Run the voice bot for this session."""
-    session_id = getattr(runner_args, "session_id", None) or "unknown"
+    # Per-session id, NOT a module-level one: with more than one session in a process a
+    # single shared id writes every session's turns under the same rows, so
+    # ``recent_turns(session_id)`` reads someone else's conversation and the documented
+    # "resume the previous session" promise breaks. Fall back to a fresh local id so the
+    # recorder always has a stable value to write under.
+    session_id = getattr(runner_args, "session_id", None) or memory.new_session_id()
 
     # The pipecat runner calls logger.remove() on startup, so sinks must be
     # re-attached once the session starts, otherwise this session is never logged.
@@ -272,7 +276,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             error_observer,
             # Function calls logged the way the framework recommends (its own observer).
             install_function_call_logging(),
-            memory.TurnRecorder(SESSION_ID),
+            memory.TurnRecorder(session_id),
             # Trust guard: see guards.py
             hallucination_guard,
             # Context summarizer: see summarize.py

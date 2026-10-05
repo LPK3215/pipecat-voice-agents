@@ -68,7 +68,9 @@ def test_ingest_and_search_ranking(kb):
     hits = kb.search("怎么重置密码", k=1, embedder=FakeEmbedder())
     assert hits, "should retrieve a result"
     assert hits[0]["source"] == "faq.md"
-    assert hits[0]["score"] > 0.9
+    # The score blends the cosine with a lexical-overlap term (RERANK_ALPHA), so a perfect
+    # vector match plus partial wording overlap lands around 0.88 rather than 1.0.
+    assert hits[0]["score"] > 0.8
 
 
 def test_ingest_overwrites_same_source(kb):
@@ -88,6 +90,29 @@ def test_search_empty_db_and_empty_query(kb):
     assert kb.search("任何问题", embedder=FakeEmbedder()) == []
     kb.ingest("密码相关。", source="a.md", embedder=FakeEmbedder())
     assert kb.search("   ", embedder=FakeEmbedder()) == []
+
+
+def test_lexical_overlap_ignores_punctuation():
+    from knowledge import _lexical_overlap
+
+    assert _lexical_overlap("重置密码", "怎么样重置密码？") > 0
+    assert _lexical_overlap("重置密码", "完全无关的内容") == 0.0
+
+
+def test_rerank_prefers_exact_wording(kb, monkeypatch):
+    """The reranker must be the tie-breaker when two chunks share the same vector score."""
+    import knowledge
+
+    kb.ingest("密码重置流程说明", source="a.md", embedder=FakeEmbedder())
+    kb.ingest("密码相关", source="b.md", embedder=FakeEmbedder())
+
+    monkeypatch.setattr(knowledge, "RERANK_ALPHA", 0.0)
+    base = kb.search("重置密码", k=2, embedder=FakeEmbedder())
+    assert base[0]["score"] == base[1]["score"]  # fake embedding -> cosine tie
+
+    monkeypatch.setattr(knowledge, "RERANK_ALPHA", 1.0)
+    reranked = kb.search("重置密码", k=2, embedder=FakeEmbedder())
+    assert reranked[0]["source"] == "a.md"  # shares both "重置" and "密码"
 
 
 def test_dim_mismatch_filtered(kb):

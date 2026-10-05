@@ -48,6 +48,7 @@ from pipecat.frames.frames import (  # noqa: E402
     Frame,
     LLMContextFrame,
     LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
     LLMRunFrame,
     LLMTextFrame,
     StartFrame,
@@ -104,30 +105,55 @@ class Sink(FrameProcessor):
     forwarded downstream -- waiting for it here never succeeds (this once caused a false
     "timeout"). Tool usage is instead detected via the LLM service's
     ``on_function_calls_started`` event.
+
+    Note 2: the model may speak a **preamble** ("let me check") *before* requesting a tool.
+    That text is not the answer, and an earlier version accepted it as the final answer the
+    moment a response ended -- so rounds were silently scored on a preamble. A response is
+    therefore only accepted here after a short settle window in which **no** tool request
+    follows it (see ``_settle``).
     """
 
-    def __init__(self, **kwargs):
+    SETTLE_SECS = 1.0
+
+    def __init__(self, tool_calls: list[str], **kwargs):
         super().__init__(**kwargs)
         self.text: list[str] = []
         self.errors: list[str] = []
         self.done = asyncio.Event()
+        self._tool_calls = tool_calls
+        self._current: list[str] = []
+        self._calls_at_start = 0
+
+    async def _settle(self, candidate: str, calls_at_end: int) -> None:
+        """Accept ``candidate`` only if no tool request shows up in the settle window."""
+        await asyncio.sleep(self.SETTLE_SECS)
+        if len(self._tool_calls) == calls_at_end:
+            self.text = [candidate]
+            self.done.set()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         logger.debug(f"[FRAME] sink received {type(frame).__name__}")
 
-        if isinstance(frame, LLMTextFrame):
-            self.text.append(frame.text)
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._current = []
+            self._calls_at_start = len(self._tool_calls)
+        elif isinstance(frame, LLMTextFrame):
+            self._current.append(frame.text)
         elif isinstance(frame, ErrorFrame):
             # Must be captured: otherwise "call failed" is misreported as "the model answered
             # on its own". A 429 (no quota) was once read as "the model did not call the tool" --
             # a completely wrong conclusion that looked entirely normal.
             self.errors.append(str(getattr(frame, "error", frame)))
         elif isinstance(frame, LLMFullResponseEndFrame):
-            # The tool-call turn has no text; only a final text counts as complete.
-            if self.text:
-                self.done.set()
+            # A tool request that landed *during* this response makes the text a preamble
+            # ("let me check"), so discard it outright; the answer comes after the tool result.
+            if self._current and len(self._tool_calls) == self._calls_at_start:
+                self.create_task(
+                    self._settle("".join(self._current), len(self._tool_calls)),
+                    name="sink-settle",
+                )
 
         await self.push_frame(frame, direction)
 
@@ -197,7 +223,7 @@ async def run_once(
     # The aggregator digests LLMTextFrame into LLMContextFrame / *TurnFrame context frames and
     # does not forward text frames downstream -- placed after it, no text is ever received
     # (this once looked like a hang).
-    sink = Sink()
+    sink = Sink(tool_calls)
     if no_user_agg:
         stages = [Kickoff(context, run_frame=run_frame), llm, sink, assistant_agg]
     else:
