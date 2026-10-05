@@ -182,10 +182,15 @@ uv run ../ingest_docs.py ../sample-data/product-faq.md   # 仓库自带的假手
 uv run ../ingest_docs.py --dir ./docs
 uv run ../ingest_docs.py --list            # 看已入库（不加载模型）
 uv run ../ingest_docs.py --delete <source> # 删除某篇（按 source）
+uv run ../ingest_docs.py --prune           # 清掉「源文件已不存在」的文档
 
 # 2) 之后正常对话即可 —— LLM 会自动调用 search_knowledge
 uv run bot.py
 ```
+
+> 文档标识（`source`）统一是**相对仓库根**的路径，所以从哪个目录调用、写相对还是绝对路径，
+> 都会更新**同一篇**文档。早期版本按「调用时的原样路径」存：`../README.md` 与 `README.md`
+> 会被当成两篇，检索时返回重复正文块，`--delete` 也必须一模一样地拼写才行。
 
 | 环节 | 选型 | 可替换点 |
 |---|---|---|
@@ -580,6 +585,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 17 | 新增 `tests/`（89 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要、**观察者落库**、工具状态隔离与异常兜底 |
 | 18 | 工具改为**按会话**构建（`build_tools(session_id)`） | 与「会话 ID 不再放模块级」同源：`set_reminder` 的状态原本是模块级列表，多会话时 A 的提醒会计进 B 的计数，而且无上限增长 |
 | 19 | 所有工具 handler 统一兜底（`safe_handler`） | 实测缺陷：`query_data` 的 `limit="十条"` 在 handler 内抛 `ValueError`，没人接住 → 工具跑了但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同类的静默失败）。在 `build_tools()` 集中包装，新加工具不会漏 |
+| 20 | 知识库写入侧：稳定 `source` + `--prune` | 原来用「调用时的原样路径」当文档标识：`../README.md` 与 `README.md` 会被当成两篇 → 检索重复命中、`--delete` 必须拼写一致。改为相对仓库根，并支持清掉源文件已不存在的记录（否则会检索到已删除的内容） |
 
 ### 为什么必须改 VAD（第 4 点）
 

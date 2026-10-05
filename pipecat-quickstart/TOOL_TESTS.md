@@ -279,6 +279,7 @@ STT/TTS/VAD 与工具集同 `server/bot.py`。
 | 排序 | 问「哪台服务器延迟最高」 | ✅ 3/3 答「web-02，431ms」 |
 | 文档检索（RAG） | 灌入假手册后问「保修期多久 / 退款要等多久 / 满多少免运费」 | ✅ 各 3/3 调 `search_knowledge`，并答出文档里的**编造数字**（18 个月 / 7 个工作日 / 199 元） |
 | 知识库删除 | `ingest_docs.py --delete` | ✅ 删除后列表少一篇；再删一次报 `not found` |
+| 写入侧幂等 / 清理 | 跨目录跨写法灌同一文件 + `--prune` | ✅ 从 `server/` 灌 `../README.md`、从 `/workspace` 灌 `pipecat-quickstart/README.md` 后仍只有 **1 篇**；删掉源文件后 `--prune` 精确报出并清掉（`pruned 1 stale document(s)`） |
 
 **为什么假数据也能说明问题**：那三个售后数字是**文档里独有的编造值**，
 模型不可能凭常识猜中 —— 答对即证明它真的检索了本地知识库，而不是"看起来像在检索"。

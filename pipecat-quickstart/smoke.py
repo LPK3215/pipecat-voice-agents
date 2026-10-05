@@ -75,7 +75,7 @@ def check_client_ui() -> bool:
 def check_offer() -> tuple[bool, str]:
     """Perform a real handshake with a small WebRTC client to exercise /api/offer."""
     try:
-        from aiortc import RTCPeerConnection, RTCSessionDescription
+        from aiortc import RTCPeerConnection
     except ImportError:
         print(f"  {WARN} aiortc not installed; skipping the WebRTC handshake check")
         return True, "skipped"

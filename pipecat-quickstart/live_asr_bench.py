@@ -36,7 +36,7 @@ SERVER = BASE / "server"
 PY = SERVER / ".venv" / "bin" / "python"
 
 sys.path.insert(0, str(BASE))
-from asr_bench import CACHE, SENTENCES, cer, synthesize  # noqa: E402
+from asr_bench import CACHE, SENTENCES, synthesize  # noqa: E402
 
 
 def wait_up(url: str, timeout: int = 180) -> bool:
