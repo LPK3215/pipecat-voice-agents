@@ -3,7 +3,7 @@
 > **本文给谁看**：后来拿到这个项目的人。
 > 读完它，你应该能明白：**我们往 Open WebUI 里接了什么、怎么接的、改了哪里、调了哪些接口、以后怎么升级。**
 >
-> 相关文档：[`VOICE-MODES.md`](VOICE-MODES.md)（**语音形态怎么选**：简单 I/O vs 实时对话）｜ [`VOICE-README.md`](VOICE-README.md)（项目定位）｜ [`ARCHITECTURE.md`](ARCHITECTURE.md)（早期设想，**未采用的外挂式**）｜ [`../FAQ.md`](../FAQ.md)（跑起来 / 排错）
+> 相关文档：[`VOICE-MODES.md`](VOICE-MODES.md)（**语音形态怎么选**：三档 A/B/C）｜ [`VOICE-UX.md`](VOICE-UX.md)（**交互体验怎么复现**：自动发送 / 自动朗读 / 不遮挡）｜ [`VOICE-README.md`](VOICE-README.md)（项目定位）｜ [`ARCHITECTURE.md`](ARCHITECTURE.md)（早期设想，**未采用的外挂式**）｜ [`../FAQ.md`](../FAQ.md)（跑起来 / 排错）
 
 ---
 

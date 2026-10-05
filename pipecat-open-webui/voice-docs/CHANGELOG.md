@@ -18,6 +18,8 @@
 - `voice-docs/INTEGRATION.md`：**语音模块接入说明**（给后来者：做了什么动作 / 改了哪些文件 / 调用了哪些接口 / 升级方向）
 - `voice-docs/VOICE-MODES.md`：**语音形态选择与实现指南**（三档：A 简单 I/O / B 连续对话 / C 精细实时；怎么选、C 档的 5 个机制、从 B 升 C 要补哪四层）
 - 更正：**③ 已能"连续对话"**（CallOverlay 自动循环 + 点击打断，属 B 档）；先前"③ 不能做实时对话"的表述不准确，已在 `VOICE-MODES.md` 更正
+- `voice-docs/VOICE-UX.md`：**语音交互体验与复现**（自动发送 / 自动朗读 / 录音不遮挡输入框；3 处改动 + 哪些是内置的）
+- 语音交互默认优化：`speechAutoSend`、`responseAutoPlayback` 改默认开启；录音时不再隐藏输入框
 
 ### 移除（相对上游）
 
