@@ -33,6 +33,10 @@
 > 实测结论与**可信度标注**（部分结论已作废）、未完成项与阻塞。
 > 引用其中的数据前请先读顶部的作废声明。
 
+> **语言约定（本项目全部文档适用）**：文档正文用中文；**代码、命令与终端输出一律按原文展示
+> （英文纯 ASCII）**，不做中文意译 —— 便于直接复制运行，也避免非 UTF-8 控制台的编码问题。
+> 例外：提示词、工具 `description` 与 `spoken` 朗读文案属于**功能内容**，在代码里本来就是中文。
+
 ## 配置一览
 
 | 项 | 值 | 需要 key |
@@ -552,14 +556,14 @@ LLM 只收到半句就作答。实测日志：
 30.653  User stopped speaking
 30.903  User started speaking                     ← 同一句又"重新开始"
 31.952  Transcription: [你自己 ]                  ← 后半句
-模型回复: 好的，我已经收到，请说。                  ← 因为输入是残缺的
+model reply : 好的，我已经收到，请说。                  ← 因为输入是残缺的
 ```
 
 改为 `0.6` 后：
 
 ```
-全部分段 : ['你好请用一句话接收一下,你自己。 ']    ← 整句完整
-模型回复 : 你好，我是语音助手，可以随时帮你解答问题、整理信息或陪你聊天。
+all segments : ['你好请用一句话接收一下,你自己。 ']    ← 整句完整
+model reply  : 你好，我是语音助手，可以随时帮你解答问题、整理信息或陪你聊天。
 ```
 
 代价：只多等约 0.2 s。
@@ -569,7 +573,7 @@ LLM 只收到半句就作答。实测日志：
 这一条是**靠新加的故障上报才发现的**：会话一建立，日志里马上出现
 
 ```
-[ERROR] OpenAILLMService#0 | invalid_request | 服务已不可用 | 异常=BadRequestError
+[ERROR] OpenAILLMService#0 | invalid_request | service unusable | exception=BadRequestError
 Error code: 400 - {'error': {'code': 'invalid_request',
   'message': 'Unexpected message role.', ...}}
 ```
