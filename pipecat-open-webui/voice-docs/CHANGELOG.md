@@ -22,6 +22,16 @@
 - 语音交互默认优化：`speechAutoSend`、`responseAutoPlayback` 改默认开启；录音时不再隐藏输入框
 - **恢复被上游注释的「静音自动确认」**（`VoiceRecording.svelte`）：停顿 3s 自动结束录音并提交 —— 不恢复则必须手动点 ✓
 
+### 修复
+
+- **中文语音被识别成泰语**（说中文 → Whisper 猜成泰语 → 回复也是泰语）
+  - 根因：`WHISPER_LANGUAGE` 默认为空 → 走「自动猜语种」（`config.py:1572`）
+  - 修复 ①：`.env` 设 **`WHISPER_LANGUAGE=zh`**（纯环境变量，**优先级高于界面里的 STT Language 设置**）
+  - 修复 ②：DB 的 `audio.stt.whisper_model` 由 `base` 改为 **`small`** —— ⚠️ 它是 **PersistentConfig，数据库值优先于环境变量**，光改 `.env` 不生效
+  - 实测（同一段中文音频）：修复前 → 泰语 ❌；修复后 → `你好请用一句话介绍一下,你自己。` ✅
+  - 详见 [`../../FAQ.md`](../FAQ.md) Q14 与 [`VOICE-UX.md`](VOICE-UX.md) 第 1.5 节
+- **`README.md` 补充「本分支怎么跑」章节**：源码模式三步启动、CNB 访问地址、`.env` 配置表
+
 ### 移除（相对上游）
 
 - `CODE_OF_CONDUCT.md`、`contribution_stats.py`、`demo.png`、`banner.png`、`TROUBLESHOOTING.md`、`.github/`、`docs/SECURITY.md`

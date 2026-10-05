@@ -8,7 +8,8 @@
 > | **状态** | ✅ **第二阶段已结项（`v0.1.0`，2026-10-05）** —— 能力 / 验证 / 文档三方面收口；结项快照与后续三项见 [HANDBOOK-02 §10](docs/HANDBOOK-02.md) |
 > | **仓库** | ➡️ <https://cnb.cool/lpk3215/pipecat-ai-test> |
 > | **作者** | cnb.lpk |
-> | **总览** | ➡️ [`../README.md`](../README.md)（三个东西的区别） |
+> | **总览** | ➡️ [`../README.md`](../README.md)（三个项目的关系） |
+> | **同仓库其他项目** | ➡️ [`../voice-module-dify/`](../voice-module-dify/)（语音模块，**主动调**平台） ｜ [`../pipecat-open-webui/`](../pipecat-open-webui/)（语音零件，**被**宿主调用） |
 > | **找调研/基准脚本？** | ➡️ [`reference/pipecat-modelscope/`](reference/pipecat-modelscope/) （📕 已冻结，别在上面开发） |
 >
 > **本项目的配套文档**：

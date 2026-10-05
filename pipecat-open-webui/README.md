@@ -9,8 +9,63 @@
 > - **本分支新增**：[`voice-docs/INTEGRATION.md`](./voice-docs/INTEGRATION.md)（**语音接入说明：改了什么 / 调了哪些接口**）、[`voice-docs/VOICE-MODES.md`](./voice-docs/VOICE-MODES.md)（**语音形态怎么选**）、[`voice-docs/VOICE-UX.md`](./voice-docs/VOICE-UX.md)（**语音交互体验怎么复现**）、[`voice-docs/`](./voice-docs)（定位 / 平台选型 / 变更记录）、[`CONTRIBUTING.md`](./CONTRIBUTING.md)、[`FAQ.md`](./FAQ.md)、[`AUTHORS`](./AUTHORS)
 > - **上游项目**：<https://github.com/open-webui/open-webui> ｜ 文档：<https://docs.openwebui.com/>
 > - **本分支作者 / 仓库**：cnb.lpk ｜ <https://cnb.cool/lpk3215/pipecat-ai-test>（见 [`AUTHORS`](./AUTHORS)）
+> - **同仓库的其他项目**：[`../pipecat-quickstart/`](../pipecat-quickstart/)（完整语音 Agent）、[`../voice-module-dify/`](../voice-module-dify/)（语音模块，**主动调**平台）。本项目与后者**方向相反**：这里是**被宿主系统调用**的零件。总览见 [`../README.md`](../README.md)
 >
 > 本分支视角的架构：![pipecat-open-webui architecture](./docs/pipecat-open-webui-architecture.svg)
+
+## 本分支怎么跑 🚀
+
+> ⚠️ **本节是本分支自己的运行方式，与下方上游的 pip / Docker 安装说明不同**（这里是**源码模式**，方便改代码）。
+
+### 前置
+
+Node 22+ / Python 3.12 / uv。**不需要 GPU** —— Open WebUI 只做「界面 + 编排」，模型算力在你连的大模型 API 那边（纯 CPU 服务器完全够用）。
+
+### 三步启动
+
+```bash
+cd /workspace/pipecat-open-webui
+
+# 1) 后端依赖（用官方「瘦身版」requirements-slim.txt，跳过 chromadb / transformers / onnxruntime 等重依赖）
+cd backend && uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python -r requirements-slim.txt && cd ..
+
+# 2) 前端依赖 + 构建（Node 默认堆约 4GB 不够，必须调大，否则 OOM）
+NODE_OPTIONS="--max-old-space-size=10240" npm ci
+NODE_OPTIONS="--max-old-space-size=10240" npm run build
+```
+
+```bash
+# 3) 启动（USE_SLIM_DOCKER=true 是官方瘦身开关；PORT 必须写在 shell 环境里，写 .env 对它无效）
+cd backend && USE_SLIM_DOCKER=true FRONTEND_BUILD_DIR=/workspace/pipecat-open-webui/build PORT=8000 \
+  PATH="$PWD/.venv/bin:$PATH" ./start.sh
+```
+
+**停止**：`pkill -f "uvicorn open_webui"`
+
+### 访问地址
+
+| 场景 | 地址 |
+|---|---|
+| 本机 | <http://localhost:8000> |
+| **CNB 云环境（当前）** | **<https://6p1cwlsz8a-8000.cnb.run>** |
+
+> CNB 的转发规则来自环境变量 `CNB_VSCODE_PROXY_URI=https://6p1cwlsz8a-{{port}}.cnb.run`，把 `{{port}}` 换成 `8000` 即可。
+> 首次访问需注册管理员账号（**第一个注册的用户即管理员**）。
+
+### 配置（`.env`）
+
+`.env` 会被自动加载，且已被 `.gitignore` 忽略（不会提交）：
+
+| 变量 | 说明 |
+|---|---|
+| `OPENAI_API_BASE_URL` / `OPENAI_API_KEY` | 接大模型（OpenAI 兼容）；本分支当前用商汤日日新 |
+| `USE_SLIM_DOCKER=true` | 跳过 chromadb 等重依赖（纯 CPU 机器建议开） |
+| `WHISPER_LANGUAGE=zh` | ⚠️ **必设**！不设时 Whisper 会「自动猜语种」，实测把中文**误判成泰语** |
+| `PORT=8000` | ⚠️ 必须写在 **shell 环境**里，写在 `.env` 里对 `start.sh` 无效 |
+
+**语音相关配置与排查**见 [`FAQ.md`](./FAQ.md) Q14、[`voice-docs/VOICE-UX.md`](./voice-docs/VOICE-UX.md)。
+
+---
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)

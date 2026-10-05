@@ -15,6 +15,12 @@
 > - 📘 **阶段手册**（从零搭出来的过程与踩坑）：[`docs/HANDBOOK-03.md`](docs/HANDBOOK-03.md)
 > - 📄 **贡献指南**：[`CONTRIBUTING.md`](CONTRIBUTING.md)
 > - 📄 **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
+>
+> 🧭 **它在整个仓库里的位置**：本仓库有三个项目 ——
+> [`pipecat-quickstart`](../pipecat-quickstart/)（完整的语音 Agent，语音就是产品本身）、
+> **本项目**（语音模块，**主动去调**外部平台）、
+> [`pipecat-open-webui`](../pipecat-open-webui/)（语音零件，**被**现成系统调用）。
+> 后两者方向正相反；总览见 [`../README.md`](../README.md)。
 
 ---
 
