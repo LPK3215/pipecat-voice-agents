@@ -48,7 +48,7 @@
 >
 > ⚠️ 默认 STT 引擎 **SenseVoice 需要额外依赖**（CPU 版 torch + funasr），用
 > `uv sync --extra sensevoice` 一键安装（已配好 CPU 源，不会拖 CUDA 版）。
-> 未安装时会**自动降级为 Whisper**（实测字错率 23.8% → SenseVoice **8.2%**）。降级会写告警，
+> 未安装时会**自动降级为 Whisper**（实测字错率 23.8% → SenseVoice **10.2%**）。降级会写告警，
 > 且横幅 `[BOOT] STT (configured)` 之后紧跟一行 `[BOOT] STT in effect` —— 两者不一致即为降级。
 
 **可选开关**（都在 `server/.env`，默认值已是最优）：
@@ -242,10 +242,10 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 ```
 实测（商汤，阳性对照）：
 ```
-✅ 工具被调用     5/5  100.0%
-❌ 调用失败        0/5    0.0%
-❌ 无回答          0/5    0.0%
-⚠️  自行作答       0/5    0.0%
+  [OK]   tool called                     5/5   100.0%
+  [ERR]  call failed (API error)         0/5     0.0%
+  [ERR]  no answer (request failed / pipeline stuck)  0/5   0.0%
+  [WARN] self-answered (no tool call)    0/5     0.0%
 ```
 
 `audio_probe.py` 同样把结论分成四类（打通 / 调用失败 / 无识别 / 不出声），便于定位。
@@ -289,7 +289,7 @@ server/logs/bot-latest.log     固定名，永远指向最近一次运行
 |---|---|
 | `[BOOT]` | **本次实际生效的配置**：会话 ID、模型、思考开关、key 状态、STT/TTS、VAD 阈值、提示词、日志路径 |
 | `[CLIENT]` | 前端事件：浏览器连接/断开、RTVI 消息、客户端信息（含用户标识） |
-| `[TURN]` | 一轮对话的时间线：识别文本 → 发往 LLM 的上下文 → LLM 回答 → 开始出声 → 分段延迟 |
+| `[TURN]` | 一轮对话的时间线：`transcript`（识别文本）→ `to_llm`（发往 LLM 的上下文）→ `first_token`（LLM 回答）→ `first_audio`（开始出声）→ `latency`（分段延迟） |
 | `[FRAME]` | 关键帧流水（DEBUG 级）：VAD、机器人说话起止、管线错误 |
 
 实际输出示例：
@@ -450,15 +450,15 @@ uv run ../audio_probe.py
 
 实测（2026-10-01，客户端侧计时，基准 = **用户说完的那一刻**）：
 
-| 节点 | Whisper base（改前） | **SenseVoice（当前）** |
+| 节点（探针输出标签） | Whisper base（改前） | **SenseVoice（当前）** |
 |---|---|---|
-| 收到识别文本 | 1218 ms | **934 ms** |
-| LLM 开始生成 | 1233 ms | **935 ms** |
-| 收到首个答案 token | 1731 ms | **1424 ms** |
-| TTS 开始合成 | 1842 ms | **1527 ms** |
-| **机器人开始出声** | **2038 ms** | **1721 ms** |
+| `user transcript`（收到识别文本） | 1218 ms | **934 ms** |
+| `LLM started`（LLM 开始生成） | 1233 ms | **935 ms** |
+| `first answer token`（收到首个答案 token） | 1731 ms | **1424 ms** |
+| `TTS started`（TTS 开始合成） | 1842 ms | **1527 ms** |
+| **`bot speaking`（机器人开始出声）** | **2038 ms** | **1721 ms** |
 
-后端日志独立测得的「首次出声」为 1160 ms，但它的基准是 **VAD 判定说完**
+后端日志独立测得的 `first_audio`（首次出声）为 1160 ms，但它的基准是 **VAD 判定说完**
 （比真实说完晚约 0.56 s）。1160 + 561 ≈ 1721 —— 两套口径互相印证。
 
 > **测试音频是 Piper 合成的，不是真人语音**，且线上还会经过 Opus 压缩。
@@ -520,7 +520,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 
 ## 相对官方模板的改动
 
-全部集中在 `server/`，共 12 处：
+全部集中在 `server/`，共 17 处（第 13–17 条是第二阶段新增，详见上文各专节与 `HANDBOOK-02.md`）：
 
 | # | 改动 | 原因 |
 |---|---|---|
@@ -536,6 +536,11 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 10 | 开场白角色 `developer` → `user` | **修掉了一个静默失败**（详见下节）：魔搭接口不认 `developer`，且它留在上下文里会让**后续每一轮都失败** |
 | 11 | 新增 `tools.py`（function calling） | 后端能力的扩展点；前端无需改动，pipecat 以 `llm-function-call*` 消息推送，Prebuilt 前端自动渲染 |
 | 12 | 新增故障上报（`ErrorObserver` → RTVI `error`） | 服务失败时前端原本毫无提示（连得上、握得手、但没反应）。现在错误同时写 `[ERROR]` 日志并推到前端 |
+| 13 | 新增 `memory.py`（SQLite：会话历史 / 长期记忆 / 业务表） | 框架**不提供任何持久化**；且 `TurnRecorder` 必须是**观察者**，挂在管线末端收不到文本帧（两侧文本都被各自的聚合器消费） |
+| 14 | 新增 `knowledge.py` + `embeddings.py`（RAG） | 框架没有知识库；嵌入默认走本地模型，不受单一服务商绑定（多数服务商无 `/v1/embeddings`） |
+| 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
+| 16 | 新增 `flows.py` / `summarize.py` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；官方 `FlowManager` / `LLMContextSummarizer` 需额外绑定，这里先给等价的最小实现 |
+| 17 | 新增 `tests/`（77 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要 |
 
 ### 为什么必须改 VAD（第 4 点）
 
@@ -627,7 +632,7 @@ pipecat-quickstart/
 │   ├── guards.py            # 可信性护栏：谎报执行检测 + 强制纠正
 │   ├── summarize.py         # 上下文摘要（超阈值压缩历史）
 │   ├── pipeline_logging.py  # 日志、对话时间线、故障上报（[ERROR] → 前端）
-│   ├── tests/               # pytest 单元测试（配置/工具/SQL/知识库）
+│   ├── tests/               # pytest 单元测试（配置/工具/SQL/知识库/护栏/编排/摘要）
 │   ├── pyproject.toml       # 依赖（含 sensevoice 可选 extra）
 │   ├── .env.example         # 密钥与服务商模板（按 LLM_PROVIDER 填）
 │   ├── .env                 # 真实密钥（已被 .gitignore 忽略）

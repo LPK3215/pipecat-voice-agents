@@ -112,9 +112,10 @@ uv run ../audio_probe.py           # 真实音频进 / 真实音频出（覆盖 
 server/
 ├── bot.py              # 管线装配：把 VAD/STT/LLM/TTS 串起来（核心，最先读这个）
 ├── settings.py         # 默认值 + 本地服务构造（build_stt/build_tts）的唯一来源（自检与运行共用，保证「测的就是跑的」）
-├── tools.py            # function calling 工具 —— 业务能力的扩展点（第二阶段的入口）
-├── pipeline_logging.py # 分段耗时日志
-└── .env                # 唯一必填：MODELSCOPE_API_KEY
+├── pipeline_logging.py # 日志：对话时间线 + 每轮分段延迟 + 工具调用六种结局 + 故障上报
+├── pyproject.toml      # 依赖（含 sensevoice 可选 extra，CPU 源已配好）
+├── .env / .env.example # 密钥模板（唯一必填：MODELSCOPE_API_KEY）
+└── logs/               # 运行时日志（*.log 已被 .gitignore 忽略）
 
 ../ （仓库根，验证工具箱）
 ├── smoke.py            # 冒烟：起服务 + 基础连通性
@@ -123,7 +124,28 @@ server/
 ├── audio_probe.py      # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
 ├── asr_bench.py        # 离线 ASR 基准：直接喂 WAV，秒级对比，改配置时用它
 ├── live_asr_bench.py   # 真实链路 ASR 基准：经 Opus 编解码，结论更可信
-└── verify_tools.py     # 工具调用自检（只测后端）
+├── verify_tools.py     # 工具调用自检（只测后端）+ --repeat 成功率统计
+├── prewarm.py          # 预热本地模型（首次运行前跑一次，避免首个会话卡在下载）
+└── README.md / HANDBOOK.md / HANDBOOK-02.md / TOOL_TESTS.md   # 文档（本文即 HANDBOOK.md）
+```
+
+**第二阶段（写自己的业务）新增的文件** —— 第一阶段可以先不看，需要时见
+[`HANDBOOK-02.md`](HANDBOOK-02.md)：
+
+```
+server/
+├── tools.py            # function calling 注册中心 —— 业务能力的扩展点
+├── sample_tools.py     # 示例工具集（天气 / 计算 / 换算 / 设备 / 通知 / 提醒）
+├── memory.py           # SQLite：会话历史 + 长期记忆 + 业务表（含 TurnRecorder）
+├── embeddings.py       # 文本嵌入（RAG 底座，本地 bge / OpenAI 兼容可切换）
+├── knowledge.py        # 知识库：文档切块 + 向量检索
+├── flows.py            # 显式编排：多步工具链（顺序由代码保证）
+├── guards.py           # 可信性护栏：谎报执行检测 + 强制纠正
+├── summarize.py        # 上下文摘要（超阈值压缩历史）
+└── tests/              # pytest 单元测试（秒级、不联网）
+
+../ ingest_docs.py      # 知识库写入侧（灌文档）
+../ collect_orders.py   # 业务数据采集示例（采集与查询分离）
 ```
 
 **设计约定**：`settings.py` 是唯一默认值来源，且 `build_stt/build_tts` 也放在这里，
@@ -219,7 +241,14 @@ server/
 | `TTS_ENGINE` | `piper` | `piper` / `kokoro` |
 | `PIPER_VOICE_ID` | `zh_CN-huayan-medium` | 中文音色 |
 | `VAD_STOP_SECS` | `0.6` | 见 4.1 |
+| `KOKORO_VOICE_ID` | `zf_xiaoxiao` | 仅 `TTS_ENGINE=kokoro` 时生效 |
+| `ALLOW_MISSING_KEY` | 未设置 | 设 `1` 跳过缺 key 的 fail-fast（仅调试前端/传输层） |
 | `SYSTEM_INSTRUCTION` | 见 settings.py | 强调「会被朗读，别用 markdown/emoji」 |
+| `TOOLS_EXCLUDE` | — | 逗号分隔，临时摘掉若干工具（按需分组加载，第二阶段） |
+| `MEMORY_DB` | `server/data/memory.db` | 会话历史 / 长期记忆 / 业务表 |
+| `EMBEDDING_PROVIDER` | `local` | `local`（本地 bge，无需 key）/ `api`（OpenAI 兼容 `/v1/embeddings`） |
+| `EMBEDDING_MODEL` | `BAAI/bge-small-zh-v1.5` | 仅 `local` 生效 |
+| `KNOWLEDGE_DB` | `server/data/knowledge.db` | 知识库（与业务库分开管理） |
 
 引擎名写错会**静默退回默认值**（不是报错）—— 少一个可选依赖或拼错都不该让服务起不来。
 
@@ -340,6 +369,11 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
 4. **失败路径用 `warning` 级**，这样查「为什么没回答」时可以直接过滤出来。
 5. **一个事件只记一次。** 权威记录交给组件，工具内部不要重复回显
    （本项目曾让同一件事在 INFO 里出现两遍，噪音很大）。
+6. **日志文案一律英文纯 ASCII。** 中文与特殊字符（框线、emoji、箭头）在非 UTF-8
+   控制台（如中文 Windows 的 GBK）下会抛编码异常或显示乱码。且日志文案是**跨文件契约**：
+   `text_probe.py` / `audio_probe.py` / `live_asr_bench.py` / `smoke.py` 都用正则解析它，
+   改文案必须同步改解析方。提示词、工具的 `description` 与 `spoken` 朗读文案属于**功能内容**，
+   保持中文不变。
 
 ### 7.5 自查清单（搭新项目时照做）
 
@@ -349,6 +383,7 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
 - [ ] 上下文完整落盘（不截断），含可用工具清单
 - [ ] 广播帧没有重复记录
 - [ ] 工具实现里没有重复的回显日志
+- [ ] 日志文案全为英文纯 ASCII，且解析它的探针脚本已同步更新
 
 ---
 
@@ -356,13 +391,16 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
 
 **端到端延迟**（客户端侧计时，基准 = **用户说完的那一刻**）：
 
-| 节点 | Whisper base | SenseVoice |
+| 节点（探针输出标签） | Whisper base | SenseVoice（当前默认） |
 |---|---|---|
-| 收到识别文本 | 1218 ms | — |
-| LLM 开始生成 | 1233 ms | — |
-| 收到首个答案 token | 1731 ms | — |
-| TTS 开始合成 | 1842 ms | — |
-| **机器人开始出声** | **2038 ms** | **1832 ms** |
+| `user transcript`（收到识别文本） | 1218 ms | **934 ms** |
+| `LLM started`（LLM 开始生成） | 1233 ms | **935 ms** |
+| `first answer token`（收到首个答案 token） | 1731 ms | **1424 ms** |
+| `TTS started`（TTS 开始合成） | 1842 ms | **1527 ms** |
+| **`bot speaking`（机器人开始出声）** | **2038 ms** | **1721 ms** |
+
+> 探针的输出标签是**英文纯 ASCII**（项目约定：代码内的终端输出与注释一律英文纯 ASCII，
+> 避免非 UTF-8 控制台编码问题；见 7.4 第 6 条），上表括号内为中文对照。
 
 **时间花在哪**（约 2s 的构成）：
 
