@@ -413,6 +413,20 @@ TABLE_COLUMNS: dict[str, list[str]] = {
     "orders": ["id", "order_id", "customer", "status", "amount", "updated_at"],
 }
 
+# Columns that ``search`` scans with LIKE, per table.
+#
+# Why per table: this used to be one global name list ("name", "message", "note", "host").
+# The ``orders`` table has none of those (it has order_id / customer), so ``search`` added
+# no WHERE clause at all and the query returned **unfiltered rows as if they had matched** --
+# measured: ``search="绝不存在zzz"`` still returned 10 rows. An adversarial probe (a search
+# string shaped like an injection) is what surfaced it.
+TEXT_COLUMNS: dict[str, list[str]] = {
+    "metrics": ["name", "note", "unit"],
+    "hosts": ["name", "ip", "region"],
+    "alerts": ["host", "message"],
+    "orders": ["order_id", "customer"],
+}
+
 # Numeric columns that support aggregation
 NUMERIC_COLUMNS: dict[str, list[str]] = {
     "metrics": ["value"],
@@ -425,11 +439,17 @@ _AGG_FUNCS = ("count", "avg", "max", "min", "sum")
 
 
 def _fmt_row(table: str, row: sqlite3.Row) -> dict:
-    """Convert timestamps to readable time. The model reads '2026-10-01 23:55' better than 1790870057."""
+    """Convert timestamps to readable time. The model reads '2026-10-01 23:55' better than 1790870057.
+
+    Any ``*_at`` column is formatted, not just ``created_at``: ``orders`` uses ``updated_at``,
+    and with only ``created_at`` handled its raw epoch reached ``spoken`` -- which the bot reads
+    aloud ("updated_at是1791185075.6945438").
+    """
     out = dict(row)
-    ts = out.pop("created_at", None)
-    if ts is not None:
-        out["time"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+    for key in [k for k in out if k.endswith("_at")]:
+        ts = out.pop(key)
+        if ts is not None:
+            out["time"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
     return out
 
 
@@ -465,10 +485,14 @@ def query_table(
         params.append(val)
 
     if search:
-        text_cols = [c for c in cols if c in ("name", "message", "note", "host")]
-        if text_cols:
-            where_sql.append("(" + " OR ".join(f"{c} LIKE ?" for c in text_cols) + ")")
-            params += [f"%{search}%"] * len(text_cols)
+        text_cols = [c for c in TEXT_COLUMNS.get(table, []) if c in cols]
+        if not text_cols:
+            # Never ignore it silently: returning unfiltered rows as if they matched is worse
+            # than an error the model can report. (Every whitelisted table has searchable
+            # columns -- see test_memory.test_every_queryable_table_supports_text_search.)
+            return {"error": f"表 {table} 不支持文本搜索", "searchable_columns": []}
+        where_sql.append("(" + " OR ".join(f"{c} LIKE ?" for c in text_cols) + ")")
+        params += [f"%{search}%"] * len(text_cols)
 
     where = f"WHERE {' AND '.join(where_sql)}" if where_sql else ""
     limit = max(1, min(int(limit), 50))

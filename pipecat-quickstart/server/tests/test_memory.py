@@ -39,6 +39,72 @@ def test_search_facts_single_char_does_not_crash(temp_db):
     assert temp_db.search_facts("") == []
 
 
+# ---------------------------------------------------------------- the SQL layer's promise
+def test_identifiers_are_whitelisted_not_interpolated(temp_db):
+    """The documented promise is "the model never writes SQL": table, filter column, order_by
+    and aggregate are all exact-match checked against a whitelist before SQL is built.
+
+    Every sample below is injection-shaped and must be rejected -- and the data must survive.
+    """
+    temp_db.seed_demo_business()
+    before = temp_db.query_table("orders", limit=50)["rows"]
+
+    for bad_table in ("orders; DROP TABLE orders;--", "orders)--", "orders' OR '1'='1"):
+        assert "error" in temp_db.query_table(table=bad_table)
+    # tables that exist in the DB but are deliberately not exposed (history, memory, KB)
+    for hidden in ("turns", "facts", "documents", "chunks"):
+        assert "error" in temp_db.query_table(table=hidden)
+
+    for col in ("status' OR '1'='1", "1=1", "(SELECT 1)"):
+        assert "error" in temp_db.query_table("orders", filters={col: "x"})
+
+    for order_by in ("id DESC; DROP TABLE orders;--", "(SELECT 1)", "id, updated_at"):
+        assert "error" in temp_db.query_table("orders", order_by=order_by)
+
+    for aggregate in (
+        "sum:amount; DROP TABLE orders",
+        "count); DROP TABLE orders;--",
+        "sum:id",
+        "load_extension:amount",
+    ):
+        assert "error" in temp_db.query_table("orders", aggregate=aggregate)
+
+    # A value shaped like SQL is a literal: it matches nothing, it does not execute.
+    assert temp_db.query_table("orders", filters={"status": "x' OR '1'='1"})["rows"] == []
+
+    assert temp_db.query_table("orders", limit=50)["rows"] == before
+
+
+def test_search_filters_orders_by_customer(temp_db):
+    """Regression: the searchable columns were one global name list, and `orders` has none of
+    those names -- so `search` added no condition and returned unfiltered rows that looked like
+    matches (`search="绝不存在zzz"` still returned 10 rows)."""
+    temp_db.seed_demo_business()
+    rows = temp_db.query_table("orders", limit=50)["rows"]
+    assert rows
+    # Data-driven on purpose: the seed and the sample CSV ship different customer names.
+    partial = rows[0]["customer"][:1]
+    hit = temp_db.query_table("orders", search=partial, limit=50)["rows"]
+    assert hit
+    assert all(partial in (r["customer"] + r["order_id"]) for r in hit)
+    assert temp_db.query_table("orders", search="绝不存在zzz", limit=50)["rows"] == []
+
+
+def test_every_queryable_table_supports_text_search(temp_db):
+    """Otherwise `search` would silently do nothing (the bug above) instead of erroring."""
+    for table in temp_db.TABLE_COLUMNS:
+        assert temp_db.TEXT_COLUMNS.get(table), f"{table} has no searchable column"
+
+
+def test_timestamps_are_formatted_for_any_at_column(temp_db):
+    """`orders` uses `updated_at`; formatting only `created_at` let a raw epoch reach `spoken`,
+    which the bot reads aloud ("updated_at是1791185075.6945438")."""
+    temp_db.seed_demo_business()
+    row = temp_db.query_table("orders", limit=1)["rows"][0]
+    assert "time" in row and "updated_at" not in row
+    assert len(row["time"]) == 16  # "2026-10-01 23:55"
+
+
 # ---------------------------------------------------------------- business table queries (whitelist)
 def test_query_table_basic(temp_db):
     temp_db.seed_demo_business()
