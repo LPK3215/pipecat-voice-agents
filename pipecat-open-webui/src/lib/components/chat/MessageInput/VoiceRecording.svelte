@@ -151,15 +151,16 @@
 
 					visualizerData = visualizerData;
 
-					// if (domainData.some((value) => value > 0)) {
-					// 	lastSoundTime = Date.now();
-					// }
+					// [pipecat-open-webui 本分支改动] 恢复「静音自动确认」：停顿 3s 且开启自动发送时，自动结束录音并提交
+					if (domainData.some((value) => value > 0)) {
+						lastSoundTime = Date.now();
+					}
 
-					// if (recording && Date.now() - lastSoundTime > 3000) {
-					// 	if ($settings?.speechAutoSend ?? false) {
-					// 		confirmRecording();
-					// 	}
-					// }
+					if (recording && Date.now() - lastSoundTime > 3000) {
+						if ($settings?.speechAutoSend ?? true) {
+							confirmRecording();
+						}
+					}
 				}
 
 				window.requestAnimationFrame(processFrame);
