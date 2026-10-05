@@ -7,11 +7,19 @@ defaults, and the rule that a dead brain must be *sayable* rather than silent.
 
 import asyncio
 import dataclasses
+import json
 
+import httpx
 import pytest
-from agent_client import BrainClient, BrainError
+from agent_client import BrainClient, BrainError, normalize_events
 from brain import BrainProcessor
-from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame, TextFrame
+from pipecat.frames.frames import (
+    InputAudioRawFrame,
+    OutputAudioRawFrame,
+    OutputTransportMessageFrame,
+    OutputTransportMessageUrgentFrame,
+    TextFrame,
+)
 from raw_pcm_serializer import RawPCMFrameSerializer
 from settings import load_config
 
@@ -59,8 +67,120 @@ def test_serializer_sends_audio_out_and_nothing_else():
         )
     )
     assert out == b"\x00\x01"
-    # Control/text frames are not the client's business: the contract is "audio bytes only".
+    # Frames that are neither audio nor a message stay off the wire: the audio contract is
+    # "binary frames are PCM", and adding chatter to it would break clients built on that.
     assert asyncio.run(serializer.serialize(TextFrame("hi"))) is None
+
+
+# ---------------------------------------------------------------- the activity channel
+def test_serializer_sends_events_as_json_text():
+    """The page tells the two channels apart by frame type, so events must be text (str)."""
+    serializer = RawPCMFrameSerializer()
+    out = asyncio.run(
+        serializer.serialize(OutputTransportMessageFrame(message={"kind": "tool", "text": "查"}))
+    )
+    assert isinstance(out, str)
+    assert json.loads(out) == {"kind": "tool", "text": "查"}
+
+
+def test_serializer_also_carries_urgent_events():
+    """The module sends events as *urgent* frames (they bypass the TTS pause -- measured: as
+    ordinary frames they arrived ~16s late, after the answer had been spoken). Both variants
+    must reach the client, or turning the log "on time" would silently drop it instead."""
+    serializer = RawPCMFrameSerializer()
+    out = asyncio.run(
+        serializer.serialize(
+            OutputTransportMessageUrgentFrame(message={"kind": "state", "state": "speaking"})
+        )
+    )
+    assert isinstance(out, str)
+    assert json.loads(out) == {"kind": "state", "state": "speaking"}
+
+
+def test_serializer_ignores_text_from_the_client():
+    """No second control channel: audio in, nothing else."""
+    assert asyncio.run(RawPCMFrameSerializer().deserialize('{"kind": "hi"}')) is None
+
+
+def test_one_platform_event_can_carry_thought_tool_and_result():
+    notes = normalize_events(
+        {
+            "event": "agent_thought",
+            "thought": "要不要查一下",
+            "tool": "search_knowledge",
+            "tool_input": '{"query": "保修"}',
+            "observation": "命中 2 条",
+        }
+    )
+    assert [note["kind"] for note in notes] == ["thinking", "tool", "result"]
+    assert notes[1]["detail"] == '{"query": "保修"}'
+
+
+def test_node_events_carry_progress_and_elapsed():
+    started = normalize_events({"event": "node_started", "data": {"title": "检索"}})[0]
+    finished = normalize_events(
+        {"event": "node_finished", "data": {"title": "检索", "elapsed_time": 0.31}}
+    )[0]
+    assert started["state"] == "started" and started["elapsed"] is None
+    assert finished["state"] == "finished" and finished["elapsed"] == 0.31
+
+
+@pytest.mark.parametrize(
+    "event", [{"event": "ping"}, {"event": "message_end"}, {"event": "tts_message"}, {}]
+)
+def test_noise_is_dropped_instead_of_shown(event):
+    """Keep-alives and unknown events must vanish, not become log lines or crash the stream."""
+    assert normalize_events(event) == []
+
+
+def test_client_emits_events_live_and_still_streams_the_answer():
+    """The regression that matters: turning events on must not disturb the answer path."""
+    def sse(payload: dict) -> str:
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    body = "".join(
+        [
+            sse(
+                {
+                    "event": "agent_thought",
+                    "thought": "先看看",
+                    "conversation_id": "c1",
+                    "task_id": "t1",
+                }
+            ),
+            sse({"event": "agent_thought", "tool": "search_knowledge", "observation": "2 条"}),
+            sse({"event": "message", "answer": "你"}),
+            sse({"event": "message", "answer": "好"}),
+            sse({"event": "ping"}),
+            "data: [DONE]\n\n",
+        ]
+    )
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=body.encode(), headers={"content-type": "text/event-stream"}
+        )
+
+    seen: list[dict] = []
+
+    async def on_event(note: dict) -> None:
+        seen.append(note)
+
+    async def run() -> tuple[str, list[dict]]:
+        cfg = dataclasses.replace(
+            load_config().brain, base_url="http://brain.test/v1", api_key="app-test"
+        )
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        async with http, BrainClient(cfg, client=http, on_event=on_event) as client:
+            text = ""
+            async for delta in client.stream("在吗"):
+                text += delta
+            return text, client.last_turn.events
+
+    text, events = asyncio.run(run())
+    assert text == "你好"  # the answer is untouched
+    assert [note["kind"] for note in seen] == ["thinking", "tool", "result"]
+    assert [note["kind"] for note in events] == ["thinking", "tool", "result"]  # kept for probes
 
 
 def test_serializer_ignores_empty_payloads():

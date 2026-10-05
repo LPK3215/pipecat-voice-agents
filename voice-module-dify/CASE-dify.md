@@ -95,6 +95,8 @@ bash case-run.sh
 | 平台直接调用的首字延迟（绕开语音层） | 740–963 ms |
 
 完整的分阶段延迟在模块日志里（每轮一行 `[TURN n] ...`），可随时复跑 `probe/verify_audio_e2e.py`。
+页面上那一栏"它在干什么"，就是把平台的过程事件（`agent_thought` / `node_started` / `node_finished`）
+实时显示出来 —— 契约与实现细节见 [`docs/CONCEPTS.md`](docs/CONCEPTS.md) 的 Q9。
 
 ## 7. 这个案例和"第二阶段"的关系
 

@@ -82,7 +82,39 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
+
+        # A real platform streams its process, not just the answer: what it is thinking, which
+        # tool it called, how the workflow nodes went. The stub mirrors that shape, so the
+        # module's event channel can be verified with no platform running -- including the part
+        # that matters most: the events arrive **during** the wait, not after it.
+        self._event(
+            {"event": "agent_thought", "thought": "先看用户在问什么"},
+            conversation_id,
+            task_id,
+        )
         time.sleep(self.first_chunk_delay)  # the platform's "thinking" time
+        self._event(
+            {
+                "event": "agent_thought",
+                "thought": "要不要查一下知识库",
+                "tool": "search_knowledge",
+                "tool_input": json.dumps({"query": query[:20]}, ensure_ascii=False),
+                "observation": "命中 2 条（替身数据）",
+            },
+            conversation_id,
+            task_id,
+        )
+        self._event(
+            {"event": "node_started", "data": {"title": "检索知识库"}},
+            conversation_id,
+            task_id,
+        )
+        self._event(
+            {"event": "node_finished", "data": {"title": "检索知识库", "elapsed_time": 0.31}},
+            conversation_id,
+            task_id,
+        )
+
         for index, piece in enumerate(answer):
             event = {
                 "event": "message",
@@ -98,6 +130,10 @@ class _Handler(BaseHTTPRequestHandler):
             f"data: {json.dumps({'event': 'message_end'})}\n\n".encode()
         )
         self._write_chunked(b"")  # terminate the chunked body
+
+    def _event(self, payload: dict, conversation_id: str, task_id: str) -> None:
+        payload = {"conversation_id": conversation_id, "task_id": task_id, **payload}
+        self._write_chunked(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode())
 
     def _write_chunked(self, payload: bytes) -> None:
         if not payload:

@@ -72,6 +72,8 @@ async def run_session(cfg: Config, transport, *, session_id: str) -> None:
 
     async with BrainClient(cfg.brain) as client:
         brain = BrainProcessor(client, cfg.filler)
+        # Live activity log: the platform's process events go straight out to the client.
+        client.on_event = brain.emit_event
         user_aggregator.event_handler("on_user_turn_started")(brain.on_user_turn_started)
         user_aggregator.event_handler("on_user_turn_stopped")(brain.on_user_turn_stopped)
 

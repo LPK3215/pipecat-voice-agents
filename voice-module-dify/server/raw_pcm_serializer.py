@@ -11,25 +11,53 @@ the module.
 
 from __future__ import annotations
 
-from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame, StartFrame
+import json
+
+from pipecat.frames.frames import (
+    Frame,
+    InputAudioRawFrame,
+    OutputAudioRawFrame,
+    OutputTransportMessageFrame,
+    OutputTransportMessageUrgentFrame,
+    StartFrame,
+)
 from pipecat.serializers.base_serializer import FrameSerializer
 
 
 class RawPCMFrameSerializer(FrameSerializer):
-    """16-bit signed PCM, mono, at a fixed sample rate, no framing beyond the websocket."""
+    """16-bit signed PCM, mono, at a fixed sample rate, no framing beyond the websocket.
+
+    Two kinds of frame share the socket, separated by **type**, not by a header:
+
+        binary frame = PCM audio          (the contract below, unchanged)
+        text frame   = one JSON event     (what the platform is doing, for the page to show)
+
+    Text frames are additive: a client that only reads binary still works exactly as before.
+
+    **Filter by a key you know.** The pipeline also emits its own client-protocol messages on
+    this socket (`{"label": "rtvi-ai", "type": ...}` -- metrics, transcription, speaking state).
+    They are not part of this contract and differ per transport, so a client should ignore any
+    text frame that does not carry the field it is looking for (`kind`, in the page's case).
+    """
 
     def __init__(self, sample_rate: int = 16000):
         super().__init__()
         self._sample_rate = sample_rate
 
     async def serialize(self, frame: Frame) -> str | bytes | None:
-        """Frames going out to the client: audio only, raw bytes."""
+        """Frames going out to the client: audio as raw bytes, process events as JSON text."""
         if isinstance(frame, OutputAudioRawFrame):
             return frame.audio
+        if isinstance(frame, (OutputTransportMessageFrame, OutputTransportMessageUrgentFrame)):
+            return json.dumps(frame.message, ensure_ascii=False)
         return None
 
     async def deserialize(self, data: str | bytes) -> Frame | None:
-        """Frames coming in from the client: raw bytes are the user's microphone."""
+        """Frames coming in from the client: raw bytes are the user's microphone.
+
+        Text frames from the client are ignored on purpose -- the module takes audio in and
+        nothing else; there is no second control channel to get out of sync.
+        """
         if isinstance(data, (bytes, bytearray)) and len(data) > 0:
             return InputAudioRawFrame(
                 audio=bytes(data),

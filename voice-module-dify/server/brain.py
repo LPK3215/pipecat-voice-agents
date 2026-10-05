@@ -12,6 +12,9 @@ Duties, in order of how easy they are to get wrong:
    ("嗯，我看一下。"), or a working system feels broken.
 4. **Interrupt properly.** When the user barges in: stop talking locally, cancel the stream,
    and tell the platform to stop generating.
+5. **Show what is happening.** The platform's process events (thinking / tool calls / workflow
+   nodes) are pushed to the client as transport *messages*, so the page can show a live log.
+   Without it, "it is thinking hard" and "it is stuck" look identical to the user.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ import re
 from agent_client import BrainClient, BrainError
 from loguru import logger
 from observability import TurnTimeline
-from pipecat.frames.frames import Frame, TTSSpeakFrame
+from pipecat.frames.frames import Frame, OutputTransportMessageUrgentFrame, TTSSpeakFrame
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from settings import FillerConfig
 
@@ -54,6 +57,27 @@ class BrainProcessor(FrameProcessor):
         # Transparent: this processor never consumes frames, it only adds speech.
         await self.push_frame(frame, direction)
 
+    # ---------------------------------------------------------------- telling the user
+
+    async def emit_event(self, note: dict) -> None:
+        """Send one process event to the client -- and to the log.
+
+        It travels as a transport **message** frame, so it reaches the output transport on the
+        normal path: no side channel, no second connection, and the audio contract (binary
+        frames are PCM) is untouched. `app.py` wires the brain client's `on_event` here.
+
+        **Urgent on purpose.** While TTS is speaking it pauses frame processing, so an ordinary
+        data frame sits in the queue until the audio drains -- measured: the turn's events were
+        delivered ~16s late, i.e. after the answer had finished being spoken, which is the exact
+        opposite of "show what it is doing". System frames bypass that pause.
+        """
+        logger.debug(f"[EVENT] {note}")
+        await self.push_frame(OutputTransportMessageUrgentFrame(message=note))
+
+    async def _state(self, state: str) -> None:
+        """One-word status for the page: listening / thinking / speaking / error."""
+        await self.emit_event({"kind": "state", "state": state})
+
     # ---------------------------------------------------------------- turn events
 
     async def on_user_turn_started(self, *_args) -> None:
@@ -62,6 +86,8 @@ class BrainProcessor(FrameProcessor):
             logger.info("[BRAIN] user interrupted -- stopping the platform and local speech")
             await self._cancel_current()
             await self.push_frame(TTSSpeakFrame("", append_to_context=False))
+            await self.emit_event({"kind": "interrupt"})
+        await self._state("listening")
 
     async def on_user_turn_stopped(self, _aggregator, _strategy, message=None, **_kwargs) -> None:
         """The user finished a turn: ask the platform and start speaking its answer."""
@@ -76,6 +102,8 @@ class BrainProcessor(FrameProcessor):
         self.turns += 1
         self._timeline = TurnTimeline()
         logger.info(f"[TURN {self.turns}] user: {text}")
+        await self.emit_event({"kind": "user", "text": text})
+        await self._state("thinking")
         await self._cancel_current()
         self._task = asyncio.create_task(self._answer(text))
 
@@ -115,15 +143,22 @@ class BrainProcessor(FrameProcessor):
             if not spoke_anything:
                 await self._speak("我没听清，能再说一遍吗？", timeline, first=True)
             logger.info(f"[TURN {self.turns}] {timeline.report()}")
+            # The three latency budgets, on the page: where the milliseconds actually went.
+            await self.emit_event({"kind": "timing", "text": timeline.report()})
+            await self._state("listening")
         except asyncio.CancelledError:
             logger.info("[BRAIN] answer cancelled")
             raise
         except BrainError as exc:
             # Never silent: the user is told, and the log keeps the cause.
             logger.error(f"[BRAIN] {type(exc).__name__}: {exc}")
+            await self.emit_event({"kind": "error", "text": str(exc)})
+            await self._state("error")
             await self.push_frame(TTSSpeakFrame(exc.spoken, append_to_context=False))
         except Exception as exc:
             logger.exception(f"[BRAIN] unexpected failure: {type(exc).__name__}")
+            await self.emit_event({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
+            await self._state("error")
             await self.push_frame(
                 TTSSpeakFrame("抱歉，出了点问题。", append_to_context=False)
             )
@@ -139,15 +174,18 @@ class BrainProcessor(FrameProcessor):
             return
         if first:
             timeline.mark("first_sentence")
+        await self.emit_event({"kind": "say", "text": sentence})
         await self.push_frame(TTSSpeakFrame(sentence, append_to_context=False))
         if first:
             timeline.mark("tts_queued")
+            await self._state("speaking")
             logger.info(f"[BRAIN] first sentence handed to TTS: {sentence[:40]}")
 
     async def _speak_filler_later(self) -> None:
         try:
             await asyncio.sleep(self._filler.delay_secs)
             logger.info(f"[BRAIN] platform is slow -> filler: {self._filler.text}")
+            await self.emit_event({"kind": "say", "text": self._filler.text, "filler": True})
             await self.push_frame(
                 TTSSpeakFrame(self._filler.text, append_to_context=False)
             )
