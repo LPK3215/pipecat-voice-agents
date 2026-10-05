@@ -19,9 +19,9 @@ business data for a Chinese-facing assistant.
 
 Usage:
     cd server
-    uv run ../collect_orders.py                    # built-in demo data
-    uv run ../collect_orders.py --csv orders.csv   # import from CSV (order_id,customer,status,amount)
-    uv run ../collect_orders.py --list             # show current orders
+    uv run ../scripts/collect_orders.py                    # built-in demo data
+    uv run ../scripts/collect_orders.py --csv orders.csv   # import from CSV (order_id,customer,status,amount)
+    uv run ../scripts/collect_orders.py --list             # show current orders
 """
 
 import argparse
@@ -29,7 +29,8 @@ import csv
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "server"))
 
 from dotenv import load_dotenv  # noqa: E402

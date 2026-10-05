@@ -344,8 +344,8 @@ class ConversationLogger(BaseObserver):
         which then re-classified still-in-flight frames as unseen and duplicated logs;
       - the framework dedupes by push count and has neither problem.
 
-    Log line format is a cross-file contract: ``text_probe.py`` / ``audio_probe.py`` /
-    ``live_asr_bench.py`` parse it with regexes. If you change a message, update those.
+    Log line format is a cross-file contract: ``scripts/text_probe.py`` / ``scripts/audio_probe.py`` /
+    ``scripts/live_asr_bench.py`` parse it with regexes. If you change a message, update those.
     """
 
     def __init__(self, **kwargs):

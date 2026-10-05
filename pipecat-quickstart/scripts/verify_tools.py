@@ -4,7 +4,7 @@ Backend capability only, without audio:
     text question -> LLM -> tool triggered -> tool result fed back -> LLM composes the final answer
 
 Why a separate script:
-    ``verify_stack.py`` runs the full voice path (STT->LLM->TTS), where whether a tool was
+    ``scripts/verify_stack.py`` runs the full voice path (STT->LLM->TTS), where whether a tool was
     actually called can only be inferred from synthesized speech. Here
     ``FunctionCallResultFrame`` is inspected directly, so "called / not called / what
     arguments / what result" is visible at a glance.
@@ -22,10 +22,10 @@ Four mutually exclusive outcomes (completely different debugging directions, nev
     [WARN] self-answered   model decided no tool was needed            -> check **model/prompt**
 
 Usage:
-    cd server && uv run ../verify_tools.py
-    cd server && uv run ../verify_tools.py --question "今天星期几"
-    cd server && uv run ../verify_tools.py --repeat 20        # measure the real success rate
-    cd server && uv run ../verify_tools.py --dump-context     # print the context for debugging
+    cd server && uv run ../scripts/verify_tools.py
+    cd server && uv run ../scripts/verify_tools.py --question "今天星期几"
+    cd server && uv run ../scripts/verify_tools.py --repeat 20        # measure the real success rate
+    cd server && uv run ../scripts/verify_tools.py --dump-context     # print the context for debugging
 
 Exit code 0 = at least one round produced a final answer.
 """
@@ -35,11 +35,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "server"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
 
 from dotenv import load_dotenv  # noqa: E402
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 load_dotenv(BASE / "server" / ".env", override=True)
 
 from loguru import logger  # noqa: E402

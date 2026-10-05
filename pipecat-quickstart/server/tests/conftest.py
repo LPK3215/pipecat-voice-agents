@@ -2,7 +2,7 @@
 
 These are **unit tests**: no network, no LLM calls, no speech models -- pure logic only
 (config resolution, tool handlers, SQL whitelist and persistence). End-to-end verification is
-still done by the repo-root scripts verify_stack.py / smoke.py / audio_probe.py.
+still done by the repo-root scripts scripts/verify_stack.py / scripts/smoke.py / scripts/audio_probe.py.
 
 Why they exist: the repo previously had no unit tests, so regression checks meant running the
 full path (minutes). These pin down the logic that "a one-line change can silently break" --

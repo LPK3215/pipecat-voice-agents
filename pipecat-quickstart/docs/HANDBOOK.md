@@ -63,7 +63,7 @@
 | **语音进** | 说话 → 屏幕字幕 | 说话 → 机器人出声 |
 
 走哪条取决于用户此刻用嘴还是用键盘，四条通路在代码里**并存**。
-本仓库的 `text_probe.py` 覆盖「文字进→语音出」，`audio_probe.py` 覆盖「语音进→语音出」。
+本仓库的 `scripts/text_probe.py` 覆盖「文字进→语音出」，`scripts/audio_probe.py` 覆盖「语音进→语音出」。
 
 ---
 
@@ -104,8 +104,8 @@ cp .env.example .env
 uv run bot.py                      # 默认 7860；外网访问加 --host 0.0.0.0
 
 # 5) 验证
-uv run ../smoke.py                 # 自动拉起 bot.py 再测，测完自动关闭
-uv run ../audio_probe.py           # 真实音频进 / 真实音频出（覆盖 VAD 与 ASR）
+uv run ../scripts/smoke.py                 # 自动拉起 bot.py 再测，测完自动关闭
+uv run ../scripts/audio_probe.py           # 真实音频进 / 真实音频出（覆盖 VAD 与 ASR）
 ```
 
 浏览器打开 `http://localhost:7860` 即可对话（需要麦克风权限）。
@@ -121,19 +121,24 @@ server/
 ├── .env / .env.example # 密钥模板（唯一必填：MODELSCOPE_API_KEY）
 └── logs/               # 运行时日志（*.log 已被 .gitignore 忽略）
 
-../ （仓库根，验证工具箱）
-├── smoke.py            # 冒烟：起服务 + 基础连通性
-├── verify_stack.py     # 全栈自检，可换模型 / 换参数对比
-├── text_probe.py       # 文本通道探针（真实 bot.py + 真实 WebRTC）
-├── audio_probe.py      # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
-├── asr_bench.py        # 离线 ASR 基准：直接喂 WAV，秒级对比，改配置时用它
-├── live_asr_bench.py   # 真实链路 ASR 基准：经 Opus 编解码，结论更可信
-├── kb_eval.py          # 知识库检索质量评测：扫分块 / 重排 / 候选池（第二阶段用）
-├── verify_tools.py     # 工具调用自检（只测后端）+ --repeat 成功率统计
-├── verify_summarize.py # 上下文摘要自检：撑过阈值，验证框架真的触发压缩
-├── verify_layers.py    # 分层联通性自检：含"清空数据层必须答查不到"的证伪
-├── prewarm.py          # 预热本地模型（首次运行前跑一次，避免首个会话卡在下载）
-└── README.md / HANDBOOK.md / HANDBOOK-02.md / TOOL_TESTS.md   # 文档（本文即 HANDBOOK.md）
+../ （仓库根）
+├── scripts/            # 全部独立脚本（自检 / 探针 / 基准 / 采集）
+│   ├── smoke.py            # 冒烟：起服务 + 基础连通性
+│   ├── verify_stack.py     # 全栈自检，可换模型 / 换参数对比
+│   ├── verify_tools.py     # 工具调用自检（只测后端）+ --repeat 成功率统计
+│   ├── verify_summarize.py # 上下文摘要自检：撑过阈值，验证框架真的触发压缩
+│   ├── verify_layers.py    # 分层联通性自检：含"清空数据层必须答查不到"的证伪
+│   ├── text_probe.py       # 文本通道探针（真实 bot.py + 真实 WebRTC）
+│   ├── audio_probe.py      # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
+│   ├── asr_bench.py        # 离线 ASR 基准：直接喂 WAV，秒级对比，改配置时用它
+│   ├── live_asr_bench.py   # 真实链路 ASR 基准：经 Opus 编解码，结论更可信
+│   ├── kb_eval.py          # 知识库检索质量评测：扫分块 / 重排 / 候选池
+│   ├── ingest_docs.py      # 知识库写入侧：把文档灌进库
+│   ├── collect_orders.py   # 业务数据采集示例
+│   └── prewarm.py          # 预热本地模型（首次运行前跑一次，避免首个会话卡在下载）
+├── sample-data/        # 数据层样例文件（订单 CSV / 假手册 / 演示业务 JSON / 表声明 / 测试音频）
+├── docs/               # 文档：本文（HANDBOOK.md）/ HANDBOOK-02.md / TOOL_TESTS.md
+└── README.md           # 入口
 ```
 
 **第二阶段（写自己的业务）新增的文件** —— 第一阶段可以先不看，需要时见
@@ -150,8 +155,8 @@ server/
 ├── guards.py           # 可信性护栏：谎报执行检测 + 强制纠正
 └── tests/              # pytest 单元测试（秒级、不联网）
 
-../ ingest_docs.py      # 知识库写入侧（灌文档）
-../ collect_orders.py   # 业务数据采集示例（采集与查询分离）
+../ scripts/ingest_docs.py      # 知识库写入侧（灌文档）
+../ scripts/collect_orders.py   # 业务数据采集示例（采集与查询分离）
 ```
 
 **设计约定**：`settings.py` 是唯一默认值来源，且 `build_stt/build_tts` 也放在这里，
@@ -263,17 +268,17 @@ server/
 | 场景 | 工具 |
 |---|---|
 | 改了配置/逻辑，先跑快速回归 | `uv run pytest`（单元测试，秒级、不联网） |
-| 改了配置，想快速确认没跑偏 | `smoke.py`（自动拉起 + 关闭） |
-| 想量化改某个旋钮的效果 | `verify_stack.py --model X` / `--stop-secs 0.2` |
-| 改 ASR 配置，秒级看效果 | `asr_bench.py`（离线，直接喂 WAV） |
-| 要下最终结论 | `live_asr_bench.py`（真实链路） |
-| 端到端是否真的通 | `audio_probe.py`（**唯一覆盖 VAD 与 STT 的探针**） |
-| 工具调用是否可用 | `verify_tools.py`（含 `--repeat N` 成功率统计） |
-| 上下文摘要是否真的触发 | `verify_summarize.py`（把上下文撑过阈值，等框架的压缩回调） |
-| 各层之间是否真的联通（而非写死在代码里） | `verify_layers.py`（含"清空数据层必须答查不到"的证伪） |
-| 调知识库检索质量 | `kb_eval.py`（真实文档语料 + 手写用例，扫分块/重排参数） |
+| 改了配置，想快速确认没跑偏 | `scripts/smoke.py`（自动拉起 + 关闭） |
+| 想量化改某个旋钮的效果 | `scripts/verify_stack.py --model X` / `--stop-secs 0.2` |
+| 改 ASR 配置，秒级看效果 | `scripts/asr_bench.py`（离线，直接喂 WAV） |
+| 要下最终结论 | `scripts/live_asr_bench.py`（真实链路） |
+| 端到端是否真的通 | `scripts/audio_probe.py`（**唯一覆盖 VAD 与 STT 的探针**） |
+| 工具调用是否可用 | `scripts/verify_tools.py`（含 `--repeat N` 成功率统计） |
+| 上下文摘要是否真的触发 | `scripts/verify_summarize.py`（把上下文撑过阈值，等框架的压缩回调） |
+| 各层之间是否真的联通（而非写死在代码里） | `scripts/verify_layers.py`（含"清空数据层必须答查不到"的证伪） |
+| 调知识库检索质量 | `scripts/kb_eval.py`（真实文档语料 + 手写用例，扫分块/重排参数） |
 
-> **重要教训**：`asr_bench.py`（离线）比 `live_asr_bench.py`（真实链路）**偏乐观**。
+> **重要教训**：`scripts/asr_bench.py`（离线）比 `scripts/live_asr_bench.py`（真实链路）**偏乐观**。
 > 真实路径要过 Opus 编解码和多次重采样，比直接喂 WAV 更难认。
 > 曾出现「离线满分、真实链路仍错」的情况，**最终结论必须以真实链路为准**。
 
@@ -380,7 +385,7 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
    （本项目曾让同一件事在 INFO 里出现两遍，噪音很大）。
 6. **日志文案一律英文纯 ASCII。** 中文与特殊字符（框线、emoji、箭头）在非 UTF-8
    控制台（如中文 Windows 的 GBK）下会抛编码异常或显示乱码。且日志文案是**跨文件契约**：
-   `text_probe.py` / `audio_probe.py` / `live_asr_bench.py` / `smoke.py` 都用正则解析它，
+   `scripts/text_probe.py` / `scripts/audio_probe.py` / `scripts/live_asr_bench.py` / `scripts/smoke.py` 都用正则解析它，
    改文案必须同步改解析方。提示词、工具的 `description` 与 `spoken` 朗读文案属于**功能内容**，
    保持中文不变。
 
@@ -482,15 +487,15 @@ if frame.broadcast_sibling_id is not None and data.direction != FrameDirection.D
     （实测这句普通话置信度只有 31%），轮次就一直等到 5 秒兜底才结束，
     用户感知就是「**说完了，它愣 5 秒才回应**」。
 
-    实测（`verify_stack.py`，2026-10-05，商汤模型）：修前 `LLM first token 6609ms`，
-    修后 **2038ms**；同一条音频走真实 bot（`audio_probe.py`）是 1862ms。
+    实测（`scripts/verify_stack.py`，2026-10-05，商汤模型）：修前 `LLM first token 6609ms`，
+    修后 **2038ms**；同一条音频走真实 bot（`scripts/audio_probe.py`）是 1862ms。
 
     **对策要分两侧看，别一刀切：**
 
     - **产品侧（`bot.py`）不要乱调兜底。** SmartTurn 说 `INCOMPLETE` 的含义是
       「用户可能还没说完」—— 把兜底调小会让长句被提前打断，正好破坏 4.1 节的 0.6s 初衷。
       真实 bot 走 WebRTC 时这条音频被判为完整，端到端正常。
-    - **测量侧（`verify_stack.py`）必须显式限制。** 它喂的是一条**固定完整语句**，
+    - **测量侧（`scripts/verify_stack.py`）必须显式限制。** 它喂的是一条**固定完整语句**，
       不该等轮次检测器表态，所以显式传 `user_turn_stop_timeout=0.5`
       （见脚本里的 `HARNESS_TURN_STOP_TIMEOUT`）。否则测出来的**每个阶段都虚高 5 秒**，
       而这个脚本的职责恰恰是给出可信的分段延迟。

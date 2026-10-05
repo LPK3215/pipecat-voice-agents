@@ -27,9 +27,9 @@ What it compares:
     Character bigrams are used because Chinese has no spaces.
 
 Usage:
-    cd server && uv run ../kb_eval.py                    # default corpus = repo docs
-    cd server && uv run ../kb_eval.py --top-k 5
-    cd server && uv run ../kb_eval.py --doc ../README.md
+    cd server && uv run ../scripts/kb_eval.py                    # default corpus = repo docs
+    cd server && uv run ../scripts/kb_eval.py --top-k 5
+    cd server && uv run ../scripts/kb_eval.py --doc ../README.md
 """
 
 from __future__ import annotations
@@ -39,7 +39,8 @@ import os
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 SERVER = BASE / "server"
 
 # The knowledge base reads KNOWLEDGE_DB at import time -- point it at a scratch DB before
@@ -48,7 +49,12 @@ SCRATCH_DB = BASE / ".cache" / "kb_eval.db"
 os.environ["KNOWLEDGE_DB"] = str(SCRATCH_DB)
 sys.path.insert(0, str(SERVER))
 
-DEFAULT_DOCS = ["README.md", "HANDBOOK.md", "HANDBOOK-02.md", "TOOL_TESTS.md"]
+DEFAULT_DOCS = [
+    "README.md",
+    "docs/HANDBOOK.md",
+    "docs/HANDBOOK-02.md",
+    "docs/TOOL_TESTS.md",
+]
 
 # (question, keyword that must appear in the retrieved chunk)
 # NOTE: the Chinese strings here are evaluation data -- do not translate.

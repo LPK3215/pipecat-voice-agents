@@ -1,7 +1,7 @@
 """Drive the real bot.py with real audio (no browser, no microphone).
 
-This closes the last gap: `text_probe.py` uses the text channel and **bypasses STT and
-VAD**; `verify_stack.py` tests STT/VAD/LLM/TTS but on a self-built pipeline, not through
+This closes the last gap: `scripts/text_probe.py` uses the text channel and **bypasses STT and
+VAD**; `scripts/verify_stack.py` tests STT/VAD/LLM/TTS but on a self-built pipeline, not through
 the transport. Here WAV audio is sent over a **real WebRTC audio track** into a genuinely
 running `bot.py`, reproducing the full browser-microphone path.
 
@@ -11,8 +11,8 @@ That is more honest than reading logs because it includes transport and codec ov
 i.e. the user's real wait.
 
 Usage:
-    cd server && uv run ../audio_probe.py
-    cd server && uv run ../audio_probe.py --no-spawn
+    cd server && uv run ../scripts/audio_probe.py
+    cd server && uv run ../scripts/audio_probe.py --no-spawn
 """
 
 import argparse
@@ -31,13 +31,14 @@ from pathlib import Path
 from aiortc.mediastreams import MediaStreamTrack
 from av import AudioFrame
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 SERVER = BASE / "server"
 HOST = "127.0.0.1"
 PORT = int(os.getenv("PROBE_PORT", "7862"))
 ROOT = f"http://{HOST}:{PORT}"
 LABEL = "rtvi-ai"
-WAV = BASE / "verify-input-zh.wav"
+WAV = BASE / "sample-data" / "verify-input-zh.wav"
 
 TARGET_SR = 16000
 CHUNK_MS = 20
@@ -249,13 +250,17 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--wait", type=float, default=25.0)
     ap.add_argument("--no-spawn", action="store_true")
-    ap.add_argument("--wav", default=None, help="override the test audio path (default verify-input-zh.wav)")
+    ap.add_argument(
+        "--wav",
+        default=None,
+        help="override the test audio path (default sample-data/verify-input-zh.wav)",
+    )
     ap.add_argument("--ref", default=None, help="reference transcript for this audio; computes CER when given")
     args = ap.parse_args()
 
     wav = Path(args.wav) if args.wav else WAV
     if not wav.exists():
-        print(f"missing test audio {wav}; run first: cd server && uv run ../verify_stack.py")
+        print(f"missing test audio {wav}; run first: cd server && uv run ../scripts/verify_stack.py")
         return 1
     globals()["WAV"] = wav
 
@@ -338,7 +343,7 @@ def main() -> int:
             print(f"    {line.strip()[:160]}")
     print("=" * 74)
 
-    # Four **mutually exclusive** verdicts (consistent with verify_tools.py / HANDBOOK-02
+    # Four **mutually exclusive** verdicts (consistent with scripts/verify_tools.py / HANDBOOK-02
     # section 6): all look like "the bot did not answer well", but the debugging direction
     # differs completely, so they must not be lumped together.
     errors = info.get("errors") or []

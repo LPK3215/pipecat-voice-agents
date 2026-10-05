@@ -7,8 +7,8 @@ Covers the parts README claims work but that were never verified in a headless e
     3. backend log            any wiring errors (missing key / service construction failure)
 
 Usage:
-    cd server && uv run ../smoke.py                # spawn bot.py, then test
-    cd server && uv run ../smoke.py --no-spawn     # test an already-running bot.py
+    cd server && uv run ../scripts/smoke.py                # spawn bot.py, then test
+    cd server && uv run ../scripts/smoke.py --no-spawn     # test an already-running bot.py
 
 Exit code 0 = everything passed.
 """
@@ -24,7 +24,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 SERVER = BASE / "server"
 HOST = "127.0.0.1"
 PORT = int(os.getenv("SMOKE_PORT", "7860"))

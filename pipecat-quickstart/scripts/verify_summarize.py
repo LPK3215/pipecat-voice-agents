@@ -13,8 +13,8 @@ Why a separate script:
     project's most common failure mode.
 
 Usage:
-    cd server && uv run ../verify_summarize.py
-    cd server && uv run ../verify_summarize.py --prefill 30
+    cd server && uv run ../scripts/verify_summarize.py
+    cd server && uv run ../scripts/verify_summarize.py --prefill 30
 
 Exit code 0 = a compaction really happened.
 """
@@ -24,7 +24,8 @@ import asyncio
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "server"))
 
 from dotenv import load_dotenv  # noqa: E402

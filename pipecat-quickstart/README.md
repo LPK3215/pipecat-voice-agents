@@ -10,9 +10,9 @@
 > | **找调研/基准脚本？** | ➡️ [`../pipecat-modelscope/`](../pipecat-modelscope/) （📕 已冻结，别在上面开发） |
 >
 > **本项目的配套文档**：
-> - 📘 [`HANDBOOK.md`](HANDBOOK.md) —— 第一阶段：怎么从零搭起来（插槽 / 配置 / 踩坑）
-> - 📗 [`HANDBOOK-02.md`](HANDBOOK-02.md) —— 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
-> - 📕 [`TOOL_TESTS.md`](TOOL_TESTS.md) —— 工具调用压测报告（**引用数据前先读顶部的作废声明**）
+> - 📘 [`HANDBOOK.md`](docs/HANDBOOK.md) —— 第一阶段：怎么从零搭起来（插槽 / 配置 / 踩坑）
+> - 📗 [`HANDBOOK-02.md`](docs/HANDBOOK-02.md) —— 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
+> - 📕 [`TOOL_TESTS.md`](docs/TOOL_TESTS.md) —— 工具调用压测报告（**引用数据前先读顶部的作废声明**）
 
 ---
 
@@ -22,14 +22,14 @@
 
 **当前状态：前后端均已启动并实测通过，零报错。**
 
-> 📘 **[HANDBOOK.md — 语音对话 Agent 搭建手册](HANDBOOK.md)**
+> 📘 **[HANDBOOK.md — 语音对话 Agent 搭建手册](docs/HANDBOOK.md)**
 > 第一阶段总结：心智模型、从零复现步骤、四个模型插槽如何切换、实测数据、踩坑清单。
 > 想「照着文档从零搭一遍」或做汇报，看这份；本文只讲**这个项目怎么跑**。
 >
-> 📗 **[HANDBOOK-02.md — 第二阶段：写自己的业务](HANDBOOK-02.md)**
+> 📗 **[HANDBOOK-02.md — 第二阶段：写自己的业务](docs/HANDBOOK-02.md)**
 > 工具开发规范、schema 描述怎么写、数据接入、记忆双层设计、编排、测试纪律、完整示例。
 >
-> 📕 **[TOOL_TESTS.md — 工具调用压测报告](TOOL_TESTS.md)**
+> 📕 **[TOOL_TESTS.md — 工具调用压测报告](docs/TOOL_TESTS.md)**
 > 实测结论与**可信度标注**（部分结论已作废）、未完成项与阻塞。
 > 引用其中的数据前请先读顶部的作废声明。
 
@@ -88,7 +88,7 @@ cp .env.example .env      # 按 LLM_PROVIDER 填对应密钥，其余已预设�
 
 # 首次建议先预热本地模型（Whisper/SenseVoice + Piper 音色）——
 # 否则会在「第一个会话建立时」才下载，期间用户第一句话无响应
-uv run ../prewarm.py
+uv run ../scripts/prewarm.py
 
 uv run bot.py             # 需要外网可访问时加：--host 0.0.0.0 --port 7860
 ```
@@ -162,7 +162,7 @@ SENSENOVA_MODEL=sensenova-6.8-flash-lite
 - 注意区分：共绩的**大模型云服务**是 `api.suanli.cn`，
   而它的**算力 Open API** 是 `openapi.suanli.cn`（另一套鉴权，与本项目无关）。
 - 启动横幅 `[BOOT]` 会打印实际生效的「LLM 服务商 / 模型」，可据此确认切换是否生效。
-- `verify_stack.py` / `verify_tools.py` 跟随同一套解析，可用 `--model` 临时覆盖模型名。
+- `scripts/verify_stack.py` / `scripts/verify_tools.py` 跟随同一套解析，可用 `--model` 临时覆盖模型名。
 
 ---
 
@@ -177,12 +177,12 @@ SENSENOVA_MODEL=sensenova-6.8-flash-lite
 ```bash
 cd server
 # 1) 灌文档（.md/.txt，可传文件或目录）
-uv run ../ingest_docs.py ../README.md
-uv run ../ingest_docs.py ../sample-data/product-faq.md   # 仓库自带的假手册（用于验证检索）
-uv run ../ingest_docs.py --dir ./docs
-uv run ../ingest_docs.py --list            # 看已入库（不加载模型）
-uv run ../ingest_docs.py --delete <source> # 删除某篇（按 source）
-uv run ../ingest_docs.py --prune           # 清掉「源文件已不存在」的文档
+uv run ../scripts/ingest_docs.py ../README.md
+uv run ../scripts/ingest_docs.py ../sample-data/product-faq.md   # 仓库自带的假手册（用于验证检索）
+uv run ../scripts/ingest_docs.py --dir ./docs
+uv run ../scripts/ingest_docs.py --list            # 看已入库（不加载模型）
+uv run ../scripts/ingest_docs.py --delete <source> # 删除某篇（按 source）
+uv run ../scripts/ingest_docs.py --prune           # 清掉「源文件已不存在」的文档
 
 # 2) 之后正常对话即可 —— LLM 会自动调用 search_knowledge
 uv run bot.py
@@ -198,12 +198,15 @@ uv run bot.py
 | 存储 | SQLite BLOB（float32 向量） | `KNOWLEDGE_DB` |
 | 检索 | NumPy 余弦暴力扫描（几百~几千块毫秒级）+ **词面重排**（`RERANK_ALPHA=0.3`） | 只改 `server/knowledge.py::search()` |
 
-分块与重排的默认值不是拍脑袋定的：用 `kb_eval.py`（语料 = 仓库自己的文档 + 15 个手写用例）扫过
-分块 300–800 × 重叠 × 重排权重 × 候选池，**hit@1 40%→60%、hit@3 53%→87%**。随时可复跑：
+分块与重排的默认值不是拍脑袋定的：用 `scripts/kb_eval.py`（语料 = 仓库自己的文档 + 15 个手写用例）扫过
+分块 300–800 × 重叠 × 重排权重 × 候选池；出厂配置（500/50 + 词面重排 α=0.3）对比旧默认
+（300/0 纯余弦）是 **hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**。注意语料就是**本仓库自己的文档**，
+所以文档一增补，绝对数字就会漂移（语料 201→247 块之后两档都下降过）—— 只有**同一次运行内**的相对比较有意义。
+随时可复跑：
 
 ```bash
-cd server && uv run ../kb_eval.py                      # 默认配置对比
-cd server && uv run ../kb_eval.py --sizes 300,500 --overlaps 0,50 --alpha 0.3
+cd server && uv run ../scripts/kb_eval.py                      # 默认配置对比
+cd server && uv run ../scripts/kb_eval.py --sizes 300,500 --overlaps 0,50 --alpha 0.3
 ```
 
 > 为什么嵌入默认本地：**当前 LLM 服务商没有 embeddings 接口**（实测商汤
@@ -254,17 +257,17 @@ my_local_weather  =  recall_fact(城市)  →  get_weather(city)
 创建并接好事件，我们只需在 `assistant_params` 里打开开关
 （阈值见 `settings.build_summarization_config()`，默认 20 条未摘要消息）。超过阈值时把
 **较早**的消息压成一条摘要，最近几条原文保留。实测：`51 -> 6` 条，可用
-`verify_summarize.py` 复跑。
+`scripts/verify_summarize.py` 复跑。
 
 > 这一版之前是手写观察者（`summarize.py`），已删除 —— 框架已经提供了同样的能力，
 > 而且额外带 token 阈值触发、手动触发与结果校验。这正是 `HANDBOOK.md` 第 7.1 节的教训：
 > **动手写之前先把框架目录翻一遍**。
 
-**成功率度量（`verify_tools.py --repeat N`）** —— 模型是否调工具是**非确定性**的，
+**成功率度量（`scripts/verify_tools.py --repeat N`）** —— 模型是否调工具是**非确定性**的，
 样本量为 1 等于噪声。内建重复统计 + 四种**互斥**结论：
 
 ```bash
-cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 20
+cd server && uv run ../scripts/verify_tools.py --question "现在几点了？" --repeat 20
 ```
 实测（商汤，阳性对照）：
 ```
@@ -274,7 +277,7 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
   [WARN] self-answered (no tool call)    0/5     0.0%
 ```
 
-`audio_probe.py` 同样把结论分成四类（打通 / 调用失败 / 无识别 / 不出声），便于定位。
+`scripts/audio_probe.py` 同样把结论分成四类（打通 / 调用失败 / 无识别 / 不出声），便于定位。
 
 ---
 
@@ -285,8 +288,8 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 | 数据 | 放在哪 | 换掉它要改代码吗 |
 |---|---|---|
 | 业务行（指标 / 主机 / 告警 / 订单） | `sample-data/demo-business.json`（`DEMO_DATA_FILE` 可覆盖） | **不用** —— 换文件即可 |
-| 订单导入 | `sample-data/orders.csv` → `collect_orders.py --csv` | **不用** |
-| 知识库文档 | 任意 .md/.txt → `ingest_docs.py` → `server/data/knowledge.db` | **不用** |
+| 订单导入 | `sample-data/orders.csv` → `scripts/collect_orders.py --csv` | **不用** |
+| 知识库文档 | 任意 .md/.txt → `scripts/ingest_docs.py` → `server/data/knowledge.db` | **不用** |
 | 示例工具数据（城市天气 / 设备清单） | `sample-data/sample-tools.json`（`SAMPLE_TOOLS_DATA` 可覆盖） | **不用** |
 | 库文件本身 | `server/data/memory.db`、`server/data/knowledge.db`（`MEMORY_DB` / `KNOWLEDGE_DB`） | **不用** |
 | **可查的表 / 列（你自己的库结构）** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE` 可覆盖） | **不用** —— 在文件里声明你的表即可 |
@@ -322,7 +325,7 @@ cd server && uv run ../verify_tools.py --question "现在几点了？" --repeat 
 一条命令看全过程（用临时库与临时数据文件，不碰你的真实数据）：
 
 ```bash
-cd server && uv run ../verify_layers.py
+cd server && uv run ../scripts/verify_layers.py
 ```
 
 ```
@@ -333,7 +336,7 @@ cd server && uv run ../verify_layers.py
 [2] 代码声明的可查列 vs 数据库真实 schema：4 张表全部对得上（漂移否则要到运行时才炸）
 [3] 替换数据访问层的函数 -> 工具结果随之改变（说明真的走了层接口，不是内联逻辑）
 [4] 功能层 -> 接口层：12 个工具都有 handler；同一次接口调用，外部再写一行答案就变
-[5] 模型 -> 工具的传输层：由 verify_tools.py 覆盖（一次真实 LLM 调用）
+[5] 模型 -> 工具的传输层：由 scripts/verify_tools.py 覆盖（一次真实 LLM 调用）
 verdict: [OK] every layer boundary is connected for real
 ```
 
@@ -362,15 +365,15 @@ verdict: [OK] every layer boundary is connected for real
 
 ```bash
 cd server
-uv run ../collect_orders.py            # 采集内置示例数据入 orders 表
-uv run ../collect_orders.py --csv ../sample-data/orders.csv   # 用仓库自带的假数据（18 笔，跑两次不翻倍）
-uv run ../collect_orders.py --list     # 查看
+uv run ../scripts/collect_orders.py            # 采集内置示例数据入 orders 表
+uv run ../scripts/collect_orders.py --csv ../sample-data/orders.csv   # 用仓库自带的假数据（18 笔，跑两次不翻倍）
+uv run ../scripts/collect_orders.py --list     # 查看
 
 # 之后模型可直接用 query_data 查：table=orders
 ```
 
 - 示例表：`orders`（订单号唯一，采集用 upsert 以免重复）。
-- **换数据源只改 `collect_orders.py::fetch_from_source`**，工具/提示词不用动。
+- **换数据源只改 `scripts/collect_orders.py::fetch_from_source`**，工具/提示词不用动。
 - 新增业务表的完整步骤见 `HANDBOOK-02.md` 第 8 节。
 
 ---
@@ -438,10 +441,10 @@ server/logs/bot-latest.log     固定名，永远指向最近一次运行
 
 ```bash
 cd server
-uv run ../verify_stack.py                          # 用 .env 的配置
-uv run ../verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # 换模型对比
-uv run ../verify_stack.py --stop-secs 0.2          # 复现"被切成两段"的问题
-uv run ../verify_stack.py --whisper small          # 换更大 STT 模型
+uv run ../scripts/verify_stack.py                          # 用 .env 的配置
+uv run ../scripts/verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # 换模型对比
+uv run ../scripts/verify_stack.py --stop-secs 0.2          # 复现"被切成两段"的问题
+uv run ../scripts/verify_stack.py --whisper small          # 换更大 STT 模型
 ```
 
 实测输出（nex-N2.5-mini，2026-10-01 复测，Whisper base）：
@@ -482,13 +485,13 @@ verdict: [OK] full path passed
 
 ### 无浏览器冒烟测试
 
-`verify_stack.py` 走完整链路（含 STT/LLM/TTS），较慢；
+`scripts/verify_stack.py` 走完整链路（含 STT/LLM/TTS），较慢；
 只想快速确认「前端能打开 + WebRTC 能握手 + 后端装配无错」时用：
 
 ```bash
 cd server
-uv run ../smoke.py            # 自动拉起 bot.py 再测，测完自动关闭
-uv run ../smoke.py --no-spawn # 只测已经跑起来的实例
+uv run ../scripts/smoke.py            # 自动拉起 bot.py 再测，测完自动关闭
+uv run ../scripts/smoke.py --no-spawn # 只测已经跑起来的实例
 ```
 
 ```
@@ -501,12 +504,12 @@ verdict: [OK] frontend and backend handshake passed
 
 ### 文本通道探针（不用麦克风驱动真实 bot.py）
 
-`smoke.py` 只验证到握手为止。想验证**一整轮真实对话**、又不想开口说话时用：
+`scripts/smoke.py` 只验证到握手为止。想验证**一整轮真实对话**、又不想开口说话时用：
 
 ```bash
 cd server
-uv run ../text_probe.py                            # 默认问「现在几点了？」
-uv run ../text_probe.py --question "今天星期几"
+uv run ../scripts/text_probe.py                            # 默认问「现在几点了？」
+uv run ../scripts/text_probe.py --question "今天星期几"
 ```
 
 它通过真实 WebRTC 数据通道发 RTVI `send-text` 消息 —— 与官方 Prebuilt 前端
@@ -535,7 +538,7 @@ uv run ../text_probe.py --question "今天星期几"
 
 ```bash
 cd server
-uv run ../verify_tools.py                          # 只测后端，不经过音频
+uv run ../scripts/verify_tools.py                          # 只测后端，不经过音频
 ```
 
 直接驱动真实管线，检查「工具是否被调用 + 是否有最终回答」。
@@ -544,7 +547,7 @@ uv run ../verify_tools.py                          # 只测后端，不经过音
 > 有时凭自身知识直接回答。因此通过条件是「拿到了最终回答」，
 > 工具是否调用另行报告（见脚本输出）。
 
-**踩过的两个坑**（都在 `verify_tools.py` 里有注释，写新工具时务必注意）：
+**踩过的两个坑**（都在 `scripts/verify_tools.py` 里有注释，写新工具时务必注意）：
 
 1. **收集器必须放在 assistant 聚合器之前。**
    聚合器会把 `LLMTextFrame` 消化成 `LLMContextFrame` / `*TurnFrame`，
@@ -560,7 +563,7 @@ uv run ../verify_tools.py                          # 只测后端，不经过音
 
 ```bash
 cd server
-uv run ../audio_probe.py
+uv run ../scripts/audio_probe.py
 ```
 
 把 WAV 通过**真实 WebRTC 音频轨**送进真正跑起来的 `bot.py`，
@@ -589,12 +592,12 @@ uv run ../audio_probe.py
 ## ASR / TTS 引擎选型（都本地免费，可随时切换）
 
 两个引擎**都本地运行、无需 key、零费用**，但中文表现差距很大。
-用 `asr_bench.py` 量化（6 句中文，标准答案已知）：
+用 `scripts/asr_bench.py` 量化（6 句中文，标准答案已知）：
 
 ```bash
 cd server
-uv run ../asr_bench.py                              # 只测 base（无下载）
-uv run ../asr_bench.py --models base small sensevoice
+uv run ../scripts/asr_bench.py                              # 只测 base（无下载）
+uv run ../scripts/asr_bench.py --models base small sensevoice
 ```
 
 | ASR 引擎 | 字错率 | 完全正确 | 单句耗时 |
@@ -649,9 +652,9 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 4 | VAD `stop_secs` 0.2 → 0.6 | **关键**：官方默认会把一句中文按逗号停顿切成两段（详见下节） |
 | 5 | 提示词中文化 | 官方英文 prompt 会被中文音色读得很难听 |
 | 6 | 新增 `pipeline_logging.py` 与观测器 | 全量日志，跑一次即可定位问题 |
-| 7 | 新增 `settings.py` | 默认值与本地服务构造（`build_stt`/`build_tts`）与 `verify_stack.py` 共用，避免「测的」和「跑的」配置漂移 |
+| 7 | 新增 `settings.py` | 默认值与本地服务构造（`build_stt`/`build_tts`）与 `scripts/verify_stack.py` 共用，避免「测的」和「跑的」配置漂移 |
 | 8 | 缺 `MODELSCOPE_API_KEY` 时 **fail-fast** | 早期只打一行 ERROR 就照常启动：浏览器能连上、握手也成功，但一开口必然没反应，看起来像网络故障。现在直接终止并给出填 key 的步骤 |
-| 9 | Whisper 加 `initial_prompt="以下是普通话的句子。"` | base 模型会把中文转成繁体（「请」→「請」）。实测已修，且量级不小：**CER 41.3% → 23.8%**（`asr_bench.py`，不加提示词的那两档逐句都是繁体） |
+| 9 | Whisper 加 `initial_prompt="以下是普通话的句子。"` | base 模型会把中文转成繁体（「请」→「請」）。实测已修，且量级不小：**CER 41.3% → 23.8%**（`scripts/asr_bench.py`，不加提示词的那两档逐句都是繁体） |
 | 10 | 开场白角色 `developer` → `user` | **修掉了一个静默失败**（详见下节）：魔搭接口不认 `developer`，且它留在上下文里会让**后续每一轮都失败** |
 | 11 | 新增 `tools.py`（function calling） | 后端能力的扩展点；前端无需改动，pipecat 以 `llm-function-call*` 消息推送，Prebuilt 前端自动渲染 |
 | 12 | 新增故障上报（`ErrorObserver` → RTVI `error`） | 服务失败时前端原本毫无提示（连得上、握得手、但没反应）。现在错误同时写 `[ERROR]` 日志并推到前端 |
@@ -665,7 +668,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 20 | 知识库写入侧：稳定 `source` + `--prune` | 原来用「调用时的原样路径」当文档标识：`../README.md` 与 `README.md` 会被当成两篇 → 检索重复命中、`--delete` 必须拼写一致。改为相对仓库根，并支持清掉源文件已不存在的记录（否则会检索到已删除的内容） |
 | 21 | 数据层对抗性验证；`search` 与时间戳修复 | 文档声称 SQL 层「白名单 + 结构化参数」，用 20 个注入样本实测确认成立（表名/列名/排序/聚合全被拦，敏感表不可达，库完好）。同一探针却查出：`search` 用**全局**列名名单，`orders` 没有那些列名 → 搜索被静默忽略、返回未过滤的行（`search="绝不存在zzz"` 也能返回 10 行）；`orders.updated_at` 的原始时间戳会进 `spoken` 被念出来。改为每表一份 `TEXT_COLUMNS`、无可用列时报错而非沉默，并格式化任意 `*_at` 字段 |
 | 22 | 业务数据搬出代码，进**数据文件** | 演示业务行原本是 `memory.py` 里的字面量（`bot.py` 直接调用），示例工具的城市天气 / 设备清单也一样写在 `sample_tools.py` 里 —— 这正是"假数据写死在代码里假装数据层"。改为 `sample-data/demo-business.json` / `sample-tools.json`，`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖，代码只做加载 + 白名单校验；设备状态同时改为按会话（与提醒一致）。加了一条架构守卫单测：业务行出现在源码里就红 |
-| 23 | 新增逐层联通性探针 `verify_layers.py` + 两条边界单测 | "先写数据再问工具、答得出来"**不构成证据**（写死的常量也能答）。改为**证伪**：清空数据层必须答"查不到"、外部 sqlite3 客户端写入必须立刻可见、替换数据访问层函数必须改变工具结果、代码声明的列必须与真实 schema 一致、换数据文件必须改变接口答案。8 项检查全过，并把「写死在代码里 vs 分层联通」的差异写进文档 |
+| 23 | 新增逐层联通性探针 `scripts/verify_layers.py` + 两条边界单测 | "先写数据再问工具、答得出来"**不构成证据**（写死的常量也能答）。改为**证伪**：清空数据层必须答"查不到"、外部 sqlite3 客户端写入必须立刻可见、替换数据访问层函数必须改变工具结果、代码声明的列必须与真实 schema 一致、换数据文件必须改变接口答案。8 项检查全过，并把「写死在代码里 vs 分层联通」的差异写进文档 |
 | 24 | 可查的表/列改为**数据文件**声明；空数据不再念出 `None` | ①白名单原本写死在 `memory.py`，换成你自己的库还得改代码 —— 改为 `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE` 可覆盖），实测外部建的 `tickets` 表只要在文件里声明就能列表/过滤/搜索/聚合，没声明的表明确报"未知的表"；②数据为空时 `sum/avg` 会答"结果是 None"（把 Python 的 None 念出来），改为数据访问层标记"无数据"、功能层答"没有查到符合条件的记录"，`count` 的 0 仍如实回答 |
 
 ### 为什么必须改 VAD（第 4 点）
@@ -765,23 +768,29 @@ pipecat-quickstart/
 ├── sample-data/             # 数据层样例（都是**文件**，不是代码）：orders.csv（18 笔订单）+ product-faq.md（测试 RAG 用）
 │                            #   + demo-business.json（指标/主机/告警/订单，启动时加载）+ sample-tools.json（城市天气/设备）
 │                            #   + business-schema.json（可查的表/列声明：换库不用改代码）
-├── prewarm.py               # 预热本地模型（首次运行前跑一次）
-├── ingest_docs.py           # 把文档灌入知识库（RAG 写入侧）
-├── collect_orders.py        # 业务数据采集示例（采集与查询分离）
-├── verify_stack.py          # 端到端自检（完整链路，较慢）
-├── verify_tools.py          # 工具调用自检（只测后端）
-├── verify_summarize.py      # 上下文摘要自检（撑过阈值，验证框架真的触发压缩）
-├── verify_layers.py         # 分层联通性自检（含"清空数据层必须答查不到"的证伪）
-├── kb_eval.py               # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
-├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
-├── live_asr_bench.py        # 真实链路 ASR 基准（经 Opus 编解码）
-├── text_probe.py            # 文本通道探针（真实 bot.py + 真实 WebRTC）
-├── audio_probe.py           # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
-├── smoke.py                 # 无浏览器冒烟测试（前端 + 握手 + 装配）
-└── README.md
+│                            #   + verify-input-zh.wav（音频探针用的 16k 中文音频；**未入库**，换机器需自备）
+├── scripts/                 # 独立脚本：自检 / 探针 / 基准 / 采集（不再散在根目录）
+│   ├── verify_stack.py      # 端到端自检（完整链路，较慢）
+│   ├── verify_tools.py      # 工具调用自检（只测后端）+ --repeat 成功率统计
+│   ├── verify_summarize.py  # 上下文摘要自检（撑过阈值，验证框架真的触发压缩）
+│   ├── verify_layers.py     # 分层联通性自检（含"清空数据层必须答查不到"的证伪）
+│   ├── smoke.py             # 无浏览器冒烟测试（前端 + 握手 + 装配）
+│   ├── text_probe.py        # 文本通道探针（真实 bot.py + 真实 WebRTC）
+│   ├── audio_probe.py       # 音频链路探针（真实音频进 / 出，含 STT 与 VAD）
+│   ├── asr_bench.py         # ASR 基准：多配置中文识别字错率 / 耗时对比
+│   ├── live_asr_bench.py    # 真实链路 ASR 基准（经 Opus 编解码）
+│   ├── kb_eval.py           # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
+│   ├── ingest_docs.py       # 把文档灌入知识库（RAG 写入侧）
+│   ├── collect_orders.py    # 业务数据采集示例（采集与查询分离）
+│   └── prewarm.py           # 预热本地模型（首次运行前跑一次）
+├── docs/                    # 文档（README 留在根目录当入口）
+│   ├── HANDBOOK.md          # 第一阶段：怎么搭起来（插槽 / 配置 / 踩坑）
+│   ├── HANDBOOK-02.md       # 第二阶段：怎么写自己的业务（工具 / 数据 / 编排 / 测试）
+│   └── TOOL_TESTS.md        # 工具调用压测报告（引用数据前先读顶部的作废声明）
+└── README.md                # 本文（入口）
 ```
 
-> **为什么有 `settings.py`**：`bot.py` 与 `verify_stack.py` 需要同一批默认值
+> **为什么有 `settings.py`**：`bot.py` 与 `scripts/verify_stack.py` 需要同一批默认值
 > （模型、VAD 阈值、提示词……）**以及同一套 STT/TTS 构造逻辑**（`build_stt`/`build_tts`）。
 > 若各写一份，改了一侧而没改另一侧，
 > 自检结果就会失真——而这种漂移**不会报错**，只会让人对着错误数字做决策。

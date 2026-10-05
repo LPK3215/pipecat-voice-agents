@@ -2,7 +2,7 @@
 """Live-path ASR comparison: run the same sentences through different STT engines over a
 full WebRTC path.
 
-Why this is needed (the offline asr_bench.py is not enough):
+Why this is needed (the offline scripts/asr_bench.py is not enough):
     The offline bench feeds the WAV **directly to the model**, skipping the real path's
     Opus codec, WebRTC jitter buffer, and repeated resampling. Measured: a configuration
     that scores perfectly offline still mishears over the real path -- so only CER measured
@@ -10,15 +10,15 @@ Why this is needed (the offline asr_bench.py is not enough):
 
 Approach:
     Spawn one bot.py (engine chosen via the STT_ENGINE environment variable), then for each
-    test audio run audio_probe.py (--no-spawn reuses the same server) and collect the
+    test audio run scripts/audio_probe.py (--no-spawn reuses the same server) and collect the
     transcript and latency.
 
-NOTE: audio_probe.py's output is a contract -- the regexes below parse its stdout. If you
+NOTE: scripts/audio_probe.py's output is a contract -- the regexes below parse its stdout. If you
 change its printed labels, update them here too.
 
 Usage:
-    cd server && uv run ../live_asr_bench.py                      # only the default engine
-    cd server && uv run ../live_asr_bench.py --engines sensevoice whisper
+    cd server && uv run ../scripts/live_asr_bench.py                      # only the default engine
+    cd server && uv run ../scripts/live_asr_bench.py --engines sensevoice whisper
 """
 
 from __future__ import annotations
@@ -31,11 +31,12 @@ import sys
 import time
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 SERVER = BASE / "server"
 PY = SERVER / ".venv" / "bin" / "python"
 
-sys.path.insert(0, str(BASE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/asr_bench.py sits next to this script
 from asr_bench import CACHE, SENTENCES, synthesize  # noqa: E402
 
 
@@ -76,7 +77,7 @@ def run_one(wav: Path, ref: str, port: int) -> dict:
     proc = subprocess.run(
         [
             str(PY),
-            str(BASE / "audio_probe.py"),
+            str(BASE / "scripts/audio_probe.py"),
             "--no-spawn",
             "--wait",
             "12",

@@ -7,10 +7,10 @@ proving that all three stages plus the orchestration really work without opening
 
 Usage (run from the server dir with its virtualenv):
     cd server
-    uv run ../verify_stack.py                                  # use the .env config
-    uv run ../verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # temporarily try another model
-    uv run ../verify_stack.py --stop-secs 0.2                   # reproduce "split into two"
-    uv run ../verify_stack.py --whisper small
+    uv run ../scripts/verify_stack.py                                  # use the .env config
+    uv run ../scripts/verify_stack.py --model Qwen/Qwen3.8-Flash-Next   # temporarily try another model
+    uv run ../scripts/verify_stack.py --stop-secs 0.2                   # reproduce "split into two"
+    uv run ../scripts/verify_stack.py --whisper small
 
 Log: server/logs/verify-<timestamp>.log
 """
@@ -23,11 +23,12 @@ import time
 import wave
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent / "server"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
 
 from dotenv import load_dotenv  # noqa: E402
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 load_dotenv(BASE / "server" / ".env", override=True)
 
 import numpy as np  # noqa: E402
@@ -259,7 +260,7 @@ async def main() -> int:
     print(f"  VAD stop_secs = {stop_secs}")
     print("=" * 74)
 
-    wav = BASE / "verify-input-zh.wav"
+    wav = BASE / "sample-data" / "verify-input-zh.wav"
     if not wav.exists():
         make_wav(voice, wav)
 

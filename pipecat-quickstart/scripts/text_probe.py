@@ -13,9 +13,9 @@ One run verifies three things:
     3. which RTVI messages the frontend actually receives (captions / metrics / tool calls / errors)
 
 Usage:
-    cd server && uv run ../text_probe.py
-    cd server && uv run ../text_probe.py --question "今天星期几"
-    cd server && uv run ../text_probe.py --no-spawn        # connect to a running bot.py only
+    cd server && uv run ../scripts/text_probe.py
+    cd server && uv run ../scripts/text_probe.py --question "今天星期几"
+    cd server && uv run ../scripts/text_probe.py --no-spawn        # connect to a running bot.py only
 """
 
 import argparse
@@ -31,7 +31,8 @@ import urllib.request
 from collections import Counter
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 SERVER = BASE / "server"
 HOST = "127.0.0.1"
 PORT = int(os.getenv("PROBE_PORT", "7861"))

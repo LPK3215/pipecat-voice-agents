@@ -2,7 +2,7 @@
 """Offline ASR benchmark: quantify Chinese recognition accuracy and latency across configs.
 
 Why a dedicated benchmark:
-    The full-path probe (audio_probe.py) takes over two minutes per run and only shows one
+    The full-path probe (scripts/audio_probe.py) takes over two minutes per run and only shows one
     transcript, so it cannot tell you "did a config change actually help". This isolates ASR
     offline: the same sentence set, several configs side by side, and a comparable number --
     **character error rate (CER)**.
@@ -16,9 +16,9 @@ The test set is synthesized with Piper:
 NOTE: SENTENCES and CURRENT_PROMPT below are intentionally Chinese test data / prompts.
 
 Usage:
-    cd server && uv run ../asr_bench.py                 # base only (no download)
-    cd server && uv run ../asr_bench.py --models small  # also small (downloads ~500MB)
-    cd server && uv run ../asr_bench.py --models base small medium
+    cd server && uv run ../scripts/asr_bench.py                 # base only (no download)
+    cd server && uv run ../scripts/asr_bench.py --models small  # also small (downloads ~500MB)
+    cd server && uv run ../scripts/asr_bench.py --models base small medium
 """
 
 from __future__ import annotations
@@ -30,7 +30,8 @@ import time
 import wave
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 CACHE = BASE / ".cache" / "asr_bench"
 TARGET_SR = 16000
 

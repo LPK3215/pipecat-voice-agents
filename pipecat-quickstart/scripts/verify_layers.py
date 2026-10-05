@@ -17,13 +17,13 @@ only confirms the positive direction:
     3   stub the data-access function -> the tool result changes (the call goes through the
         layer interface, not through inlined logic)
     4   the logic layer is reachable through the interface layer (FunctionSchema handlers)
-    5   transport layer (model -> tool call) is covered by verify_tools.py
+    5   transport layer (model -> tool call) is covered by scripts/verify_tools.py
 
 Everything runs against a scratch database and scratch data files, so the real data is untouched.
 Exit code 0 = every boundary check passed.
 
 Usage:
-    cd server && uv run ../verify_layers.py
+    cd server && uv run ../scripts/verify_layers.py
 """
 
 import json
@@ -33,7 +33,8 @@ import tempfile
 import time
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "server"))
 
 # Point every layer at scratch data BEFORE importing the modules (they read env at import time).
@@ -219,7 +220,7 @@ def main() -> int:
     )
 
     print("\n[5] transport layer (model -> tool call)")
-    print("  [INFO] the real LLM call chain is covered by verify_tools.py (one live call)")
+    print("  [INFO] the real LLM call chain is covered by scripts/verify_tools.py (one live call)")
 
     failed = [label for ok, label, _ in RESULTS if not ok]
     print("\n" + "-" * 78)

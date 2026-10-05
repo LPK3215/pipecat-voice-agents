@@ -1,7 +1,7 @@
 """Single source of truth for runtime defaults.
 
 The only reason this module exists: the README promises that "what the self-check
-reports is what actually runs". ``bot.py`` and ``verify_stack.py`` need the same
+reports is what actually runs". ``bot.py`` and ``scripts/verify_stack.py`` need the same
 defaults; if each kept its own copy, a change on one side would silently invalidate
 the self-check -- and that kind of drift does not raise an error, it just makes people
 base decisions on wrong latency numbers.
@@ -9,7 +9,7 @@ base decisions on wrong latency numbers.
 Convention:
     Defaults live here, plus the construction logic for the two local services
     (``build_stt`` / ``build_tts``). The real values still come from environment
-    variables (read individually in bot.py). bot.py and verify_stack.py share both the
+    variables (read individually in bot.py). bot.py and scripts/verify_stack.py share both the
     defaults and the construction logic, so "what is tested is what runs".
 """
 
@@ -107,7 +107,7 @@ WHISPER_TTFS_P99 = 1.0
 
 # ---------- STT engine ----------
 # Both are **local, free, no key**, but Chinese accuracy differs a lot
-# (asr_bench.py, 6-sentence set):
+# (scripts/asr_bench.py, 6-sentence set):
 #   sensevoice: 10.2% CER, 158ms/sentence -- non-autoregressive, built for Chinese
 #   whisper   : 23.8% CER, 607ms/sentence (base) -- general but weak on Chinese
 # Choosing sensevoice improves accuracy AND latency; it is not a trade-off.
@@ -139,7 +139,7 @@ DEFAULT_KOKORO_VOICE = "zf_xiaoxiao"
 # >= the STT p99 latency, the smart-turn strategy collapses its internal wait, and an
 # "INCOMPLETE" verdict then falls back to LLMUserAggregatorParams.user_turn_stop_timeout
 # (framework default: 5.0s) -- up to 5 seconds of dead air. That is why the synthetic
-# verify_stack.py harness passes an explicit small timeout instead of inheriting it.
+# scripts/verify_stack.py harness passes an explicit small timeout instead of inheriting it.
 # See HANDBOOK.md section 9, item 11.
 DEFAULT_VAD_STOP_SECS = 0.6
 VAD_STOP_SECS_OFFICIAL_DEFAULT = 0.2  # official pipecat value, used for hints only
@@ -273,7 +273,7 @@ def build_summarization_config():
 
 
 # ---------------------------------------------------------------------------
-# Local service construction (shared by bot.py and verify_stack.py)
+# Local service construction (shared by bot.py and scripts/verify_stack.py)
 #
 # Both return ``(service, description)``. The description states the engine that is
 # **actually in effect**: configuring sensevoice / kokoro falls back to whisper / piper
@@ -320,7 +320,7 @@ def build_stt(
     """Construct the local STT service.
 
     Both engines run locally with no key; SenseVoice is **both faster and more accurate**
-    on Chinese (asr_bench.py: 10.2% CER / 158ms vs Whisper base 23.8% / 607ms), hence the
+    on Chinese (scripts/asr_bench.py: 10.2% CER / 158ms vs Whisper base 23.8% / 607ms), hence the
     default; Whisper remains the general fallback. If the funasr dependency is missing it
     falls back to Whisper -- a missing optional dependency should not stop the service,
     but the fallback must be reported in the log and in the returned description.

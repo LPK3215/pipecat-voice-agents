@@ -10,7 +10,7 @@ Why it is needed:
     Run this script once to pull the models into the local cache; later starts are fast.
 
 Usage:
-    cd server && uv run ../prewarm.py
+    cd server && uv run ../scripts/prewarm.py
 """
 
 import os
@@ -18,7 +18,8 @@ import sys
 import wave
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "server"))
 
 from dotenv import load_dotenv  # noqa: E402

@@ -8,19 +8,20 @@ Why writes and queries are separated (consistent with HANDBOOK-02):
 
 Usage:
     cd server
-    uv run ../ingest_docs.py ../README.md                     # single file
-    uv run ../ingest_docs.py --dir ./docs                     # directory (recursive, .md/.txt)
-    uv run ../ingest_docs.py ../README.md --source manual     # custom source name
-    uv run ../ingest_docs.py --list                           # list ingested docs (no model load)
-    uv run ../ingest_docs.py --dir ./docs --prune             # also drop docs whose file is gone
-    uv run ../ingest_docs.py --delete <source>                # delete one document by source
+    uv run ../scripts/ingest_docs.py ../README.md                     # single file
+    uv run ../scripts/ingest_docs.py --dir ./docs                     # directory (recursive, .md/.txt)
+    uv run ../scripts/ingest_docs.py ../README.md --source manual     # custom source name
+    uv run ../scripts/ingest_docs.py --list                           # list ingested docs (no model load)
+    uv run ../scripts/ingest_docs.py --dir ./docs --prune             # also drop docs whose file is gone
+    uv run ../scripts/ingest_docs.py --delete <source>                # delete one document by source
 """
 
 import argparse
 import sys
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+# Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
+BASE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE / "server"))
 
 from dotenv import load_dotenv  # noqa: E402

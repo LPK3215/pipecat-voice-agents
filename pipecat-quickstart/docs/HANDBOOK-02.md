@@ -205,7 +205,7 @@ def build_tools() -> ToolsSchema:
 |---|---|---|
 | `turns` | 会话历史（框架的短期记忆持久化） | `TurnRecorder`（**观察者**，挂在 `observers=`；两侧文本帧都会被各自聚合器消费，管线处理器收不到） |
 | `facts` | 长期记忆（跨会话） | `remember_fact` 工具 |
-| `metrics` / `hosts` / `alerts` / `orders` | 业务数据 | 采集脚本（当前是示例数据，见 `collect_orders.py`） |
+| `metrics` / `hosts` / `alerts` / `orders` | 业务数据 | 采集脚本（当前是示例数据，见 `scripts/collect_orders.py`） |
 
 ### 3.3 加一张业务表的步骤
 
@@ -218,7 +218,7 @@ def build_tools() -> ToolsSchema:
    订单号唯一，因此用 upsert 而非纯 insert —— 否则重跑采集会插入重复行
    （参考已有的 `record_metric` 是纯 insert，因为它按时间追加、本就不重复）
 5. **采集脚本**：新增一个独立脚本，调 `upsert_order` 落数据
-6. **测试**：`verify_tools.py --question "订单 A2026 到哪了"`，看工具有没有被调用、参数对不对
+6. **测试**：`scripts/verify_tools.py --question "订单 A2026 到哪了"`，看工具有没有被调用、参数对不对
 
 **不用改的**：`query_data` 工具、schema 描述（`schema_summary()` 自动带上新表）。
 
@@ -286,22 +286,22 @@ def build_tools() -> ToolsSchema:
 cd server
 
 # ① 阳性对照：先确认环境是通的
-uv run ../verify_tools.py --question "现在几点了"
+uv run ../scripts/verify_tools.py --question "现在几点了"
 #    ← 必须看到「[OK]   tool called」和**非空**的最终回答
 #    ← 如果这里是「[ERR]  call failed」，说明是环境问题（欠费/网络），别往下测
 
 # ② 单次验证：新工具能不能被正确调用
-uv run ../verify_tools.py --question "订单 A20261001001 到哪了"
+uv run ../scripts/verify_tools.py --question "订单 A20261001001 到哪了"
 
 # ③ 重复统计：真实成功率是多少（关键，别只看一次）
 for i in $(seq 1 20); do
-  uv run ../verify_tools.py --question "订单 A20261001001 到哪了"
+  uv run ../scripts/verify_tools.py --question "订单 A20261001001 到哪了"
 done
 ```
 
 ### 6.2 结论的四种情形必须分清
 
-`verify_tools.py` 会输出**互斥**的四种结论：
+`scripts/verify_tools.py` 会输出**互斥**的四种结论：
 
 | 输出 | 含义 | 排查方向 |
 |---|---|---|
@@ -375,7 +375,7 @@ TABLE_COLUMNS["orders"] = ["order_id", "customer", "status", "amount", "updated_
 NUMERIC_COLUMNS["orders"] = ["amount"]
 ```
 
-**③ 采集脚本**（新文件 `collect_orders.py`，独立于 bot 运行）
+**③ 采集脚本**（新文件 `scripts/collect_orders.py`，独立于 bot 运行）
 
 ```python
 """定时从订单系统把数据拉到本地库。工具只读本地库，不直接调外部接口。"""
@@ -400,8 +400,8 @@ def sync():
 **⑥ 测试**：
 
 ```bash
-uv run ../verify_tools.py --question "订单 A20261001001 现在什么状态"
-uv run ../verify_tools.py --question "这个月一共多少笔订单"
+uv run ../scripts/verify_tools.py --question "订单 A20261001001 现在什么状态"
+uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 ```
 
 **⑦ 回归**：`uv run bot.py`，用语音问一遍，确认端到端可用。
@@ -438,32 +438,32 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 | 12 个类型各异的工具（`tools.py` 6 个核心 + `sample_tools.py` 6 个示例） | `server/tools.py` + `server/sample_tools.py` | ✅ 单工具选型可靠 |
 | 工具调用全量日志 | `pipeline_logging.py` | ✅ 六种结局完整记录 |
 | 工具数量按需加载 | `TOOLS_EXCLUDE` | ✅ |
-| 验证脚本区分四种失败 | `verify_tools.py` | ✅ 已修（曾把 429 误报为「自行作答」） |
-| **知识库 / RAG（文档语义检索）** | `knowledge.py` + `embeddings.py` + `search_knowledge` | ✅ 本地嵌入 + SQLite 向量检索；写入侧 `ingest_docs.py` |
+| 验证脚本区分四种失败 | `scripts/verify_tools.py` | ✅ 已修（曾把 429 误报为「自行作答」） |
+| **知识库 / RAG（文档语义检索）** | `knowledge.py` + `embeddings.py` + `search_knowledge` | ✅ 本地嵌入 + SQLite 向量检索；写入侧 `scripts/ingest_docs.py` |
 | **可信性护栏（检测 + 强制拦截）** | `guards.py` + `bot.py` 纠正回调 | ✅ 命中写 `[GUARD]`，并注入纠正让模型如实重答（同动作只纠一次，防循环） |
 | **显式编排（多步任务）** | `flows.py` + 复合工具 `my_local_weather` | ✅ 实测「我这边天气怎么样」正确回想城市（不再自行编「北京」） |
-| **上下文摘要** | 框架 `LLMContextSummarizer`（阈值见 `settings.py`） | ✅ 已换成官方实现（删除手写观察者）；实测触发 **51 → 6 条**，可用 `verify_summarize.py` 复跑 |
-| **成功率统计** | `verify_tools.py --repeat N` | ✅ 内建四种互斥结论分布；阳性对照实测 5/5 = 100% |
-| **探针四类结论** | `audio_probe.py` | ✅ 打通 / 调用失败 / 无识别 / 不出声 分开报 |
-| **业务表 + 采集示例** | `memory.py` 的 `orders` 表 + `collect_orders.py` | ✅ 采集与查询分离链路打通 |
+| **上下文摘要** | 框架 `LLMContextSummarizer`（阈值见 `settings.py`） | ✅ 已换成官方实现（删除手写观察者）；实测触发 **51 → 6 条**，可用 `scripts/verify_summarize.py` 复跑 |
+| **成功率统计** | `scripts/verify_tools.py --repeat N` | ✅ 内建四种互斥结论分布；阳性对照实测 5/5 = 100% |
+| **探针四类结论** | `scripts/audio_probe.py` | ✅ 打通 / 调用失败 / 无识别 / 不出声 分开报 |
+| **业务表 + 采集示例** | `memory.py` 的 `orders` 表 + `scripts/collect_orders.py` | ✅ 采集与查询分离链路打通 |
 | **工具状态按会话隔离** | `build_tools(session_id)` + `sample_tools.reminder_schema` | ✅ 修掉模块级 `_REMINDERS`（跨会话串计数 + 无上限增长）；`bot.py` 改为在 `run_bot` 内构建工具 |
 | **工具异常不再静默** | `tools.safe_handler`（在 `build_tools()` 中统一包装 12 个 handler） | ✅ 修掉实测缺陷：`query_data` 的 `limit="十条"` 抛 ValueError → 永不回调；现记 traceback + 回 `ok=False` |
-| **知识库写入侧幂等与清理** | `ingest_docs.py`（稳定 `source` + `--prune`） | ✅ 跨目录跨写法灌同一文件仍只有 **1 篇**；源文件删除后 `--prune` 精确清掉，不再检索到已删内容 |
-| **ASR 基准口径修正与复核** | `asr_bench.py`（基线改为实际运行配置 + 扫齐 `语言 × 提示词` 四档） | ✅ 首次测出 `initial_prompt` 的真实量级：**CER 41.3% → 23.8%**；并测出显式 `zh` 只省延迟（424ms vs 671ms）不提精度 |
+| **知识库写入侧幂等与清理** | `scripts/ingest_docs.py`（稳定 `source` + `--prune`） | ✅ 跨目录跨写法灌同一文件仍只有 **1 篇**；源文件删除后 `--prune` 精确清掉，不再检索到已删内容 |
+| **ASR 基准口径修正与复核** | `scripts/asr_bench.py`（基线改为实际运行配置 + 扫齐 `语言 × 提示词` 四档） | ✅ 首次测出 `initial_prompt` 的真实量级：**CER 41.3% → 23.8%**；并测出显式 `zh` 只省延迟（424ms vs 671ms）不提精度 |
 | **数据层对抗性验证与修复** | `tests/test_memory.py` + `memory.TEXT_COLUMNS` | ✅ 20 个注入样本全部拦下、库完好、敏感表不可达；同一探针顺带查出 `search` 对 `orders` 静默失效（返回未过滤的行）与 `updated_at` 原始时间戳进 `spoken`，均已修 |
 | **数据与代码分离（数据在数据层）** | `sample-data/*.json` + `DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` | ✅ 演示业务行与示例工具数据全部搬出代码：同代码换文件即换答案（实测指标 99.95→42.0、多出 `ALT-0001` 订单、杭州天气消失）；另有架构守卫单测防回退 |
-| **分层联通性（跨层接口是否真实）** | `verify_layers.py` + `tests/test_memory.py` | ✅ 9/9：空数据层必须答"查不到"（**证伪"写死在代码里"**）、外部 sqlite3 客户端写入立刻可见、替换数据访问层函数即改变工具结果、代码声明列与真实 schema 一致、换数据文件即换接口答案 |
+| **分层联通性（跨层接口是否真实）** | `scripts/verify_layers.py` + `tests/test_memory.py` | ✅ 9/9：空数据层必须答"查不到"（**证伪"写死在代码里"**）、外部 sqlite3 客户端写入立刻可见、替换数据访问层函数即改变工具结果、代码声明列与真实 schema 一致、换数据文件即换接口答案 |
 | **换库不用改代码** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE`） | ✅ 表/列白名单改为数据文件声明：实测外部建 `tickets` 表 + 文件里声明 → 列表/过滤/搜索/聚合全通；未声明的表明确报"未知的表"。空数据的 `sum/avg` 不再念出 `None`，`count` 的 0 如实回答 |
 | **单元测试** | `server/tests/` | ✅ **100 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明） |
-| **工具调用成功率实测**（2026-10-05） | `verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
-| **数据接入链路端到端实测**（2026-10-05） | `collect_orders.py --csv` + `ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
-| **检索质量评测与调优**（2026-10-05） | `kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500、加入词面重排后 **hit@1 40%→60%、hit@3 53%→87%、MRR 0.49→0.73**；原默认（300/50 纯余弦）恰好是最差的一档 |
+| **工具调用成功率实测**（2026-10-05） | `scripts/verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
+| **数据接入链路端到端实测**（2026-10-05） | `scripts/collect_orders.py --csv` + `scripts/ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
+| **检索质量评测与调优**（2026-10-05） | `scripts/kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500 + 词面重排 α=0.3，出厂配置对比旧默认（300/0 纯余弦）**hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**；原默认（300/50 纯余弦）是最差的一档。语料随文档增长，绝对值会漂移，只有同一次运行内可比 |
 
 ### 未完成（按优先级）
 
 > **口径更新（2026-10-05）**：原先挂着的两项「验证缺口」（工具选择的真实成功率、工具数量是否有影响）
 > **已跑完并关闭**（见 `TOOL_TESTS.md` 第 7 节）；「RAG 检索质量调优」也**已做完**——用仓库自己的
-> 文档建了评测集（`kb_eval.py`），并据此改了分块与重排（见上表）。
+> 文档建了评测集（`scripts/kb_eval.py`），并据此改了分块与重排（见上表）。
 > 下面两项才是真正剩下的：第 1 项**需要你介入**（给数据源），第 2 项是**可选替换**。
 
 | # | 待办 | 性质 | 阻塞 |
@@ -472,7 +472,7 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 | 2 | 换官方 `FlowManager`（阶段式对话） | 可选替换 | 无（`flows.py` 目前只做固定调用链；完整的阶段式对话尚未用到） |
 
 **历史重测方案与前置检查见 `TOOL_TESTS.md` 第 6 节，执行结果见其第 7 节。**
-**检索调优的评测口径与结果见 `kb_eval.py`（可随时复跑）与 `TOOL_TESTS.md` 第 7.5 节。**
+**检索调优的评测口径与结果见 `scripts/kb_eval.py`（可随时复跑）与 `TOOL_TESTS.md` 第 7.5 节。**
 
 ---
 

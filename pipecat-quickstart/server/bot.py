@@ -66,7 +66,7 @@ load_dotenv(override=True)
 # ==========================================================================
 # Configuration (all overridable via environment variables)
 #
-# Defaults all come from settings.py, which verify_stack.py also reads, so
+# Defaults all come from settings.py, which scripts/verify_stack.py also reads, so
 # "the config the self-check reports" is exactly "the config the bot runs" --
 # no drift between the two sides.
 # ==========================================================================
@@ -110,7 +110,7 @@ ENABLE_TOOLS = tools_enabled()
 # import time would turn that state into process-global state (see sample_tools.py).
 
 # STT / TTS engine selection and construction live in settings.build_stt / build_tts,
-# shared with verify_stack.py so the two sides cannot drift.
+# shared with scripts/verify_stack.py so the two sides cannot drift.
 
 # VAD "end of speech" threshold. The official default of 0.2s splits a Chinese
 # sentence at its comma pauses.

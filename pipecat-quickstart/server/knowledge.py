@@ -74,7 +74,7 @@ def init_db() -> None:
 _SENT_RE = re.compile(r"[^。！？!?\n；;]+[。！？!?\n；;]?")
 
 
-# Measured with kb_eval.py on this repo's own documentation (15 hand-written cases):
+# Measured with scripts/kb_eval.py on this repo's own documentation (15 hand-written cases):
 # 300 chars was the worst size tested; 500-800 are clearly better and differ from each
 # other by less than one case, so 500 (the most stable neighbourhood) is the default.
 DEFAULT_CHUNK_SIZE = 500
@@ -128,7 +128,7 @@ def ingest(
 ) -> int:
     """Insert/overwrite a document (deduplicated by source). Returns the chunk count.
 
-    ``size`` / ``overlap`` are exposed so the retrieval evaluation harness (``kb_eval.py``)
+    ``size`` / ``overlap`` are exposed so the retrieval evaluation harness (``scripts/kb_eval.py``)
     can sweep them; normal callers should keep the defaults.
     """
     from embeddings import build_embedder
@@ -196,7 +196,7 @@ def search(query: str, k: int = 3, embedder=None) -> list[dict]:
 
     The score blends the vector cosine with a lexical-overlap signal (``RERANK_ALPHA``):
     pure vector ranking misses passages that share the query's exact wording, which is
-    common for short factual questions. See ``kb_eval.py`` for the measurements.
+    common for short factual questions. See ``scripts/kb_eval.py`` for the measurements.
 
     Swapping the vector store means **changing only this function** (keep the return shape).
     """
