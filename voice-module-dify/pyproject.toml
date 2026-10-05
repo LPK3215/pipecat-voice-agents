@@ -3,6 +3,10 @@ name = "voice-module"
 version = "0.0.1"
 description = "Phase 3: the voice module (ears and mouth) that plugs into an existing agent platform (the brain)"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "cnb.lpk", email = "4tdEacxA3Uip3zcDiU1QiA+cnb.lpk@noreply.cnb.cool" },
+]
 dependencies = [
     # Framework only. This project deliberately does NOT depend on pipecat-quickstart:
     # phase 1 (pipeline) and phase 2 (business logic) live there, phase 3 is decoupled.
@@ -11,6 +15,9 @@ dependencies = [
     "loguru>=0.7.0",
     "httpx>=0.27.0",  # streaming client for the brain (the platform)
 ]
+
+[project.urls]
+Repository = "https://cnb.cool/lpk3215/pipecat-ai-test"
 
 [dependency-groups]
 dev = [

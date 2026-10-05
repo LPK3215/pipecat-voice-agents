@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>voice-module-dify · 项目全景观览</title>
+<meta name="description" content="voice-module-dify —— 一个可以单独部署的语音模块：只负责听与说，思考交给外部的智能体系统。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div class="scroll-progress" aria-hidden="true"><span class="scroll-progress__bar" id="progressBar"></span></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="nav__brand" href="#hero">
+      <span class="nav__logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+      </span>
+      <span class="nav__name">voice-module-dify</span>
+      <span class="nav__ver">v0.0.1</span>
+    </a>
+    <nav class="nav__links" id="navLinks">
+      <a class="nav__link" href="#intro">简介</a>
+      <a class="nav__link" href="#architecture">架构</a>
+      <a class="nav__link" href="#stack">技术栈</a>
+      <a class="nav__link" href="#capabilities">边界</a>
+      <a class="nav__link" href="#benchmarks">评测</a>
+      <a class="nav__link" href="#quickstart">快速开始</a>
+      <a class="nav__link" href="#structure">结构</a>
+      <a class="nav__link" href="#api">示例</a>
+      <a class="nav__link" href="#docs">文档</a>
+      <a class="nav__link" href="#license">许可证</a>
+    </nav>
+    <div class="nav__actions">
+      <button class="icon-btn" id="themeToggle" aria-label="切换深色模式" title="切换深色模式">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button class="icon-btn hamburger" id="hamburger" aria-label="菜单">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__title">目录</div>
+    <nav class="sidebar__nav">
+      <a class="sidebar__link" href="#hero"><span class="dot"></span>总览</a>
+      <a class="sidebar__link" href="#intro"><span class="dot"></span>项目简介</a>
+      <a class="sidebar__link" href="#architecture"><span class="dot"></span>架构全景</a>
+      <a class="sidebar__link" href="#stack"><span class="dot"></span>技术栈</a>
+      <a class="sidebar__link" href="#capabilities"><span class="dot"></span>能力与边界</a>
+      <a class="sidebar__link" href="#benchmarks"><span class="dot"></span>评测结果</a>
+      <a class="sidebar__link" href="#quickstart"><span class="dot"></span>快速开始</a>
+      <a class="sidebar__link" href="#structure"><span class="dot"></span>目录结构</a>
+      <a class="sidebar__link" href="#api"><span class="dot"></span>使用示例</a>
+      <a class="sidebar__link" href="#quality"><span class="dot"></span>测试与质量</a>
+      <a class="sidebar__link" href="#docs"><span class="dot"></span>文档索引</a>
+      <a class="sidebar__link" href="#contribute"><span class="dot"></span>贡献指南</a>
+      <a class="sidebar__link" href="#license"><span class="dot"></span>许可证</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <!-- ===================== HERO ===================== -->
+    <section class="hero" id="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+      <div class="hero__badge"><span class="pulse"></span> 阶段三 · v0.0.1 · 2026-10-05</div>
+      <h1 class="hero__title">voice-module-dify</h1>
+      <p class="hero__subtitle">
+        一个可以单独部署的<strong>语音模块</strong>：它只负责<strong>「听」和「说」</strong>，
+        思考交给一个<strong>已经存在的智能体系统</strong>。语音这一层归你，思考那一层归平台，
+        两边通过一个<strong>可替换的接口</strong>相连。
+      </p>
+      <div class="hero__tags">
+        <span class="tag">可插拔大脑</span>
+        <span class="tag">本地 STT / TTS</span>
+        <span class="tag">WebSocket 入口</span>
+        <span class="tag">轮流判定</span>
+        <span class="tag">打断 · 填场</span>
+        <span class="tag tag--accent">页面过程事件</span>
+      </div>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#architecture">查看架构</a>
+        <a class="btn btn--ghost" href="#quickstart">30 秒跑起来</a>
+        <a class="btn btn--ghost" href="https://cnb.cool/lpk3215/pipecat-ai-test" target="_blank" rel="noopener">仓库地址</a>
+      </div>
+      <div class="hero__stats">
+        <div class="stat"><div class="stat__value" data-count="1">1</div><div class="stat__label">需要的密钥（平台）</div></div>
+        <div class="stat"><div class="stat__value" data-count="33">33</div><div class="stat__label">单元测试</div></div>
+        <div class="stat"><div class="stat__value" data-count="4">4</div><div class="stat__label">可复跑探针</div></div>
+        <div class="stat"><div class="stat__value" data-count="8">8</div><div class="stat__label">过程事件类型</div></div>
+      </div>
+    </section>
+
+    <!-- ===================== 简介 ===================== -->
+    <section class="section" id="intro">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">01</span> 项目简介</h2>
+        <p class="section__desc">它是什么、不是什么，以及凭什么值得单独存在。</p>
+      </div>
+      <div class="grid grid--2">
+        <div class="card">
+          <h3 class="card__title">它解决什么</h3>
+          <p>把「语音对话」接到一个<strong>已经存在的智能体系统</strong>上：你说 → 它听懂 → 交给平台思考 → 它念出回答。
+          工具、知识库、记忆、编排都留在平台那边，你这边只需要能听会说。</p>
+        </div>
+        <div class="card">
+          <h3 class="card__title">它处理真正麻烦的部分</h3>
+          <p>语音场景里最容易踩坑的不是模型，而是<strong>时机</strong>：判断用户说完没有、<strong>打断</strong>、
+          <strong>边收边说</strong>（首句就开口）、平台慢时<strong>填场</strong> —— 全是网络往返带来的新问题。</p>
+        </div>
+        <div class="card">
+          <h3 class="card__title">与「自己做业务」的区别</h3>
+          <p>这是同一目标的<strong>第三阶段</strong>：第一阶段把链路搭通、第二阶段往链路里灌业务，
+          第三阶段把语音链路做成 <strong>模块</strong>，插进别人已有的系统。</p>
+        </div>
+        <div class="card">
+          <h3 class="card__title">可自证</h3>
+          <p>把平台停掉 → 网页照样开、模块照样在听照样出声，只是<strong>没人回答</strong>（它会明说「连不上」）。
+          这就是「模块是主动方、平台是被调用方」的证据。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 架构 ===================== -->
+    <section class="section" id="architecture">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">02</span> 架构全景</h2>
+        <p class="section__desc">调用链只有一条方向；hover 节点查看说明。</p>
+      </div>
+
+      <div class="card card--flush">
+        <svg class="arch" viewBox="0 0 1100 330" role="img" aria-label="调用链架构图" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="archBg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--arch-bg-1)"/><stop offset="1" stop-color="var(--arch-bg-2)"/>
+            </linearGradient>
+            <marker id="archArrow" markerWidth="11" markerHeight="11" refX="8" refY="3.5" orient="auto">
+              <path d="M0,0 L8,3.5 L0,7 Z" fill="var(--arch-arrow)"/>
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="1100" height="330" rx="14" fill="url(#archBg)"/>
+          <text x="40" y="40" font-size="14" font-weight="700" fill="var(--arch-title)">调用链 · 方向只有一条</text>
+
+          <g class="arch-node" tabindex="0" data-tip="网页（你的）：收麦克风、放声音、显示状态；它不懂 AI">
+            <rect x="40" y="70" width="300" height="118" rx="14" fill="#ffffff" stroke="#3b82f6" stroke-opacity=".5"/>
+            <rect x="40" y="70" width="300" height="7" rx="3.5" fill="#3b82f6"/>
+            <text x="64" y="112" font-size="17" font-weight="800" fill="#3b82f6">网页（你的）</text>
+            <text x="64" y="136" font-size="11.5" font-family="ui-monospace,monospace" fill="var(--arch-foot)">agent/deploy/voice-client.html</text>
+            <text x="64" y="160" font-size="12.5" fill="var(--arch-chip-tx)">收麦克风 · 放声音 · 显示状态</text>
+          </g>
+          <line x1="346" y1="129" x2="386" y2="129" stroke="var(--arch-arrow)" stroke-width="2.5" marker-end="url(#archArrow)"/>
+          <text x="366" y="118" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--arch-foot)">WS</text>
+
+          <g class="arch-node" tabindex="0" data-tip="语音模块（你的）：听与说、轮流判定、打断、填场；不负责「想什么」">
+            <rect x="392" y="70" width="316" height="118" rx="14" fill="#ffffff" stroke="#14b8a6" stroke-opacity=".5"/>
+            <rect x="392" y="70" width="316" height="7" rx="3.5" fill="#14b8a6"/>
+            <text x="416" y="112" font-size="17" font-weight="800" fill="#14b8a6">语音模块（你的）</text>
+            <text x="416" y="136" font-size="11.5" font-family="ui-monospace,monospace" fill="var(--arch-foot)">server/</text>
+            <text x="416" y="160" font-size="12.5" fill="var(--arch-chip-tx)">听与说 · 轮次 · 打断 · 填场</text>
+          </g>
+          <line x1="714" y1="129" x2="754" y2="129" stroke="var(--arch-arrow)" stroke-width="2.5" marker-end="url(#archArrow)"/>
+          <text x="734" y="118" text-anchor="middle" font-size="10.5" font-weight="600" fill="var(--arch-foot)">HTTP</text>
+
+          <g class="arch-node" tabindex="0" data-tip="平台（别人的服务，例如 Dify）：想什么、查什么、记什么；不是你的代码">
+            <rect x="760" y="70" width="300" height="118" rx="14" fill="#ffffff" stroke="#8b5cf6" stroke-opacity=".5"/>
+            <rect x="760" y="70" width="300" height="7" rx="3.5" fill="#8b5cf6"/>
+            <text x="784" y="112" font-size="17" font-weight="800" fill="#8b5cf6">平台（别人的服务）</text>
+            <text x="784" y="136" font-size="11.5" font-family="ui-monospace,monospace" fill="var(--arch-foot)">例如 Dify</text>
+            <text x="784" y="160" font-size="12.5" fill="var(--arch-chip-tx)">想什么 · 查什么 · 记什么</text>
+          </g>
+
+          <text x="40" y="234" font-size="13" font-weight="700" fill="var(--arch-title)">模块内部管线</text>
+          <g class="arch-chip" tabindex="0" data-tip="传输入口：WebSocket（走 TCP，能过任何 HTTP 端口转发）或 SmallWebRTC">
+            <rect x="40" y="250" width="130" height="40" rx="10" fill="#3b82f6"/>
+            <text x="105" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">传输入口</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="VAD：用静音时长判断「用户说完没有」，0.6s 保住一整句中文">
+            <rect x="182" y="250" width="120" height="40" rx="10" fill="#06b6d4"/>
+            <text x="242" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">VAD</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="STT：本地 Whisper，显式中文 + 你的业务词提示词">
+            <rect x="314" y="250" width="120" height="40" rx="10" fill="#06b6d4"/>
+            <text x="374" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">STT</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="轮次判定：用户说完没 —— 平台听不到音频，这一步只能模块判">
+            <rect x="446" y="250" width="130" height="40" rx="10" fill="#64748b"/>
+            <text x="511" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">轮次判定</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="brain 适配器：说完才问；边收边按句喂 TTS；平台慢时填场；插话则停">
+            <rect x="588" y="246" width="150" height="48" rx="10" fill="#8b5cf6"/>
+            <text x="663" y="268" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">brain 适配器</text>
+            <text x="663" y="284" text-anchor="middle" font-size="9.5" fill="#fff" opacity=".9">平台桥接</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="TTS：本地 Piper，首个音频块数十毫秒">
+            <rect x="750" y="250" width="120" height="40" rx="10" fill="#14b8a6"/>
+            <text x="810" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">TTS</text>
+          </g>
+          <g class="arch-chip" tabindex="0" data-tip="传输输出：把机器人音频回传给网页">
+            <rect x="882" y="250" width="130" height="40" rx="10" fill="#3b82f6"/>
+            <text x="947" y="275" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">传输输出</text>
+          </g>
+        </svg>
+        <div class="arch-tip" id="archTip" hidden></div>
+      </div>
+
+      <div class="grid grid--2 mt-16">
+        <figure class="figure">
+          <img src="./assets/call-chain.svg" alt="调用链图" loading="lazy">
+          <figcaption>调用链与职责边界 · <code>docs/call-chain.svg</code></figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="./assets/module-pipeline.svg" alt="模块内部管线图" loading="lazy">
+          <figcaption>模块内部管线 · <code>docs/module-pipeline.svg</code></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ===================== 技术栈 ===================== -->
+    <section class="section" id="stack">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">03</span> 技术栈</h2>
+        <p class="section__desc">全部取自 <code>pyproject.toml</code> 与 <code>.env.example</code>。</p>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>层</th><th>选型</th><th>说明</th><th>需要密钥</th></tr></thead>
+          <tbody>
+            <tr><td>语言</td><td><span class="pill">Python ≥ 3.12</span></td><td>用 uv 管理环境</td><td>否</td></tr>
+            <tr><td>框架</td><td><span class="pill">pipecat-ai ≥ 1.12</span></td><td>extras：whisper / piper / silero / webrtc / runner / websocket</td><td>否</td></tr>
+            <tr><td>STT</td><td><span class="pill">Whisper（本地）</span></td><td>默认 <code>base</code>；显式中文 + 业务词提示词</td><td><b class="ok">否</b></td></tr>
+            <tr><td>TTS</td><td><span class="pill">Piper（本地）</span></td><td><code>zh_CN-huayan-medium</code>，首块数十毫秒</td><td><b class="ok">否</b></td></tr>
+            <tr><td>VAD</td><td><span class="pill">Silero VAD</span></td><td><code>VAD_STOP_SECS=0.6</code> 保住一整句中文</td><td>否</td></tr>
+            <tr><td>平台客户端</td><td><span class="pill">httpx</span></td><td>HTTP + SSE 流式 + 叫停</td><td><b class="warn">是（唯一）</b></td></tr>
+            <tr><td>配置 / 日志</td><td><span class="pill">python-dotenv</span> · <span class="pill">loguru</span></td><td><code>.env</code> 单一配置来源</td><td>否</td></tr>
+            <tr><td>测试 / Lint</td><td><span class="pill">pytest</span> · <span class="pill">ruff</span></td><td>33 单测；ruff 规则 E/F/W/I/UP/B/C4/SIM/RUF</td><td>否</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== 能力与边界 ===================== -->
+    <section class="section" id="capabilities">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">04</span> 能力与边界</h2>
+        <p class="section__desc">"做什么"与"明确不做什么"同等重要 —— 后者是设计，不是遗漏。</p>
+      </div>
+      <div class="grid grid--2">
+        <div class="card">
+          <h3 class="card__title ok-title">✅ 做</h3>
+          <ul class="list">
+            <li><b>听</b>：VAD 判说完 + 本地 STT 转文字</li>
+            <li><b>说</b>：本地 TTS，边收边按句喂（首句即开口）</li>
+            <li><b>轮流判定</b>：平台听不到音频，这一步只能模块判（最值钱的部分）</li>
+            <li><b>打断</b>：用户插话 → 本地停 + 告诉平台停 + 页面丢掉已排队音频</li>
+            <li><b>填场</b>：平台慢时先说话，避免用户以为坏了</li>
+            <li><b>过程事件通道</b>：思考 / 工具 / 节点 / 耗时实时推送页面</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3 class="card__title warn-title">🚫 不做（有意）</h3>
+          <ul class="list">
+            <li><b>工具</b>（function calling）</li>
+            <li><b>知识库</b> / RAG</li>
+            <li><b>长期记忆</b></li>
+            <li><b>编排</b>（多步流程）</li>
+            <li><b>模型训练</b>（语音模型用本地的）</li>
+          </ul>
+          <p class="note">代码里也写死了这条边界：管线中<strong>刻意没有</strong> assistant 聚合器 —— 没有本地 LLM 要聚合；两个脑子在一个管线里，是破坏这套设计最直接的方式。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 评测 ===================== -->
+    <section class="section" id="benchmarks">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">05</span> 评测结果</h2>
+        <p class="section__desc">项目内实测数据（可复跑）。切换 Tab 查看不同维度。</p>
+      </div>
+
+      <div class="tabs" data-tabs>
+        <div class="tabs__nav">
+          <button class="tab is-active" data-tab="e2e">端到端时序</button>
+          <button class="tab" data-tab="brain">平台延迟</button>
+          <button class="tab" data-tab="asr">ASR 取舍</button>
+        </div>
+        <div class="tabs__panels">
+          <div class="tab-panel is-active" data-panel="e2e">
+            <div class="panel-grid">
+              <div class="chart-box"><canvas id="chartE2e"></canvas></div>
+              <table class="table table--sm">
+                <thead><tr><th>节点（同一轮）</th><th>相对「请求发出」</th></tr></thead>
+                <tbody>
+                  <tr><td>请求发出</td><td>0 ms</td></tr>
+                  <tr><td>平台首字</td><td>1334 ms</td></tr>
+                  <tr><td>首个完整句子</td><td>1346 ms</td></tr>
+                  <tr><td>交给 TTS（准备开口）</td><td>1346 ms</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note"><strong>首字到开口只差 12 ms</strong> —— 「边收边按句喂 TTS」这套设计是有效的。数据来自模块日志的 <code>[TURN n]</code> 行。</p>
+          </div>
+          <div class="tab-panel" data-panel="brain">
+            <div class="panel-grid">
+              <div class="chart-box"><canvas id="chartBrain"></canvas></div>
+              <table class="table table--sm">
+                <thead><tr><th>口径</th><th>首字延迟</th></tr></thead>
+                <tbody>
+                  <tr><td>平台自身（绕开语音层）</td><td>740–963 ms</td></tr>
+                  <tr><td>经模块（含音频到文本）</td><td>1334 ms</td></tr>
+                  <tr><td>对比：本地 LLM（第一阶段）</td><td>≈ 800 ms</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note">「接上平台会拖垮延迟」的担心在<strong>简单应用上不成立</strong> —— 因为平台也是流式返回，其首字（740–963 ms）与本地 LLM 基本持平。</p>
+          </div>
+          <div class="tab-panel" data-panel="asr">
+            <div class="panel-grid">
+              <div class="chart-box"><canvas id="chartAsr"></canvas></div>
+              <table class="table table--sm">
+                <thead><tr><th>方案</th><th>单句耗时</th><th>更准？</th></tr></thead>
+                <tbody>
+                  <tr><td>Whisper <code>base</code></td><td>0.6 s</td><td>基准</td></tr>
+                  <tr><td>Whisper <code>small</code></td><td>1.6 s</td><td>❌ 没变准（慢 2.7×）</td></tr>
+                  <tr><td><b>base + 业务词提示词</b></td><td>0.55–0.66 s</td><td>✅ 修好「保修期」</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="note">结论：<strong>先调提示词，别急着换大模型</strong>。把你会听到的词写进 <code>STT_PROMPT</code> 才是性价比最高的一刀。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 快速开始 ===================== -->
+    <section class="section" id="quickstart">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">06</span> 快速开始</h2>
+        <p class="section__desc">不用真平台：一个本地替身顶着，先听清模块本身的声音。</p>
+      </div>
+      <div class="code-block">
+        <div class="code-block__head"><span class="code-block__lang">bash</span><button class="code-block__copy" data-copy>复制</button></div>
+        <pre><code><span class="c-com"># 离线自测：不连真平台，用一个本地替身当脑子</span>
+cd voice-module-dify
+uv sync
+cp .env.example .env          <span class="c-com"># 把 BRAIN_STUB 设成 1</span>
+
+uv run python probe/verify_brain.py         <span class="c-com"># 验证"接脑袋"这条接口</span>
+uv run python probe/verify_speech_legs.py   <span class="c-com"># 验证它真的能说、也能听</span>
+
+<span class="c-com"># 想听声音（两个终端）</span>
+uv run python server/ws_app.py --host 0.0.0.0 --port 8090
+uv run python -m http.server 8081 --directory agent/deploy
+<span class="c-com"># 浏览器打开 http://localhost:8081/voice-client.html</span></code></pre>
+      </div>
+      <div class="grid grid--3 mt-16">
+        <div class="card card--mini"><h3 class="card__title">接真平台</h3><p><code>.env</code> 两行：<code>BRAIN_BASE_URL</code> + <code>BRAIN_API_KEY</code>，<code>BRAIN_STUB=0</code>。</p></div>
+        <div class="card card--mini"><h3 class="card__title">为什么经 http 打开</h3><p>页面要拿麦克风，<code>file://</code> 会被浏览器拒绝；经 <code>http://localhost</code> 才稳。</p></div>
+        <div class="card card--mini"><h3 class="card__title">第一次会下载模型</h3><p>Whisper + Piper（几百 MB），所以第一次慢、之后是秒级。</p></div>
+      </div>
+    </section>
+
+    <!-- ===================== 目录结构 ===================== -->
+    <section class="section" id="structure">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">07</span> 目录结构</h2>
+        <p class="section__desc">点击展开/折叠；每个节点附带一句话说明。</p>
+      </div>
+      <div class="tree">
+        <details open>
+          <summary><span class="folder"></span>server/ <em>语音模块本体（一个进程）</em></summary>
+          <ul>
+            <li><code>app.py</code><span>管线装配：transport → STT → 轮次 → [brain] → TTS → transport</span></li>
+            <li><code>ws_app.py</code><span>WebSocket 入口（媒体走 TCP，能过任何 HTTP 端口转发）</span></li>
+            <li><code>raw_pcm_serializer.py</code><span>裸 16 位单声道 PCM 的收发约定（客户端契约）</span></li>
+            <li><code>brain.py</code><span>适配器：说完才问；边收边按句喂 TTS；平台慢时填场；插话则停</span></li>
+            <li><code>agent_client.py</code><span>平台客户端：HTTP + SSE 流式 + 叫停（换平台只改这里）</span></li>
+            <li><code>settings.py</code><span>唯一配置来源：语音插槽 + 平台地址</span></li>
+            <li><code>observability.py</code><span>分阶段时间线：听到 / 平台首字 / 首句 / 交给 TTS</span></li>
+          </ul>
+        </details>
+        <details>
+          <summary><span class="folder"></span>agent/ <em>平台侧的东西</em></summary>
+          <ul>
+            <li><code>app.dsl.yml</code><span>应用定义（一份文件就是一个应用，官方支持导入）</span></li>
+            <li><code>import_app.py</code><span>脚本化导入 + 建密钥（登录无法脚本化，文档标了边界）</span></li>
+            <li><code>deploy/</code><span>本环境专用部署件（烤进镜像的反代 + 出网代理 + 网页客户端）</span></li>
+          </ul>
+        </details>
+        <details>
+          <summary><span class="folder"></span>probe/ <em>验证（都能量化，不是「看着像对」）</em></summary>
+          <ul>
+            <li><code>verify_assembly.py</code><span>零件能不能装起来（不连客户端）</span></li>
+            <li><code>verify_brain.py</code><span>脑袋接口：流式 / 会话续接 / 失败可见 / 首句提前</span></li>
+            <li><code>verify_speech_legs.py</code><span>说 + 听两腿（合成语音存 WAV，再回读识别）</span></li>
+            <li><code>verify_audio_e2e.py</code><span>端到端音频（无浏览器）：进音频、出音频、留 WAV 可听</span></li>
+            <li><code>stub_agent.py</code><span>离线替身（不是真实平台，只用于自测）</span></li>
+          </ul>
+        </details>
+        <details>
+          <summary><span class="folder"></span>tests/ · docs/ · scripts/ <em>测试 / 文档 / 可视化</em></summary>
+          <ul>
+            <li><code>tests/</code><span>33 个秒级单测（不联网、不加载模型）</span></li>
+            <li><code>docs/CONCEPTS.md</code><span>心智模型与答疑（每条结论带验证方式）</span></li>
+            <li><code>docs/PORTING.md</code><span>换成你自己的平台：契约 + 清单</span></li>
+            <li><code>docs/HANDBOOK-03.md</code><span>阶段手册（已验证/未验证分开写）</span></li>
+            <li><code>scripts/visualization/</code><span>生成 docs/ 下 SVG 架构图</span></li>
+          </ul>
+        </details>
+        <details>
+          <summary><span class="file"></span>根目录文件</summary>
+          <ul>
+            <li><code>README.md</code><span>项目入口</span></li>
+            <li><code>CASE-dify.md</code><span>接 Dify 的完整流程、必须人工的三步、实测踩坑</span></li>
+            <li><code>case-run.sh</code><span>一键脚本（能写死的都写死了）</span></li>
+            <li><code>LICENSE</code><span>MIT 许可证</span></li>
+            <li><code>CONTRIBUTING.md</code> / <code>CHANGELOG.md</code> / <code>AUTHORS</code><span>贡献指南 / 更新日志 / 作者</span></li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <!-- ===================== 使用示例 ===================== -->
+    <section class="section" id="api">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">08</span> 使用示例</h2>
+        <p class="section__desc">代码全部摘自项目实际源码（<code>server/app.py</code> / <code>server/settings.py</code>）。</p>
+      </div>
+
+      <h3 class="sub-title">装配管线（<code>server/app.py</code>）—— 注意「刻意缺失」的两项</h3>
+      <div class="code-block">
+        <div class="code-block__head"><span class="code-block__lang">python</span><button class="code-block__copy" data-copy>复制</button></div>
+        <pre><code><span class="c-com"># 用户侧聚合器是唯一的；没有 assistant 聚合器，因为本地没有 LLM 要聚合 ——</span>
+<span class="c-com"># 对话归平台，它把成句的话交给模块去说。</span>
+context = <span class="c-fn">LLMContext</span>()
+user_aggregator, _unused_assistant = <span class="c-fn">LLMContextAggregatorPair</span>(
+    context, user_params=<span class="c-fn">LLMUserAggregatorParams</span>(vad_analyzer=vad)
+)
+
+<span class="c-kw">async with</span> <span class="c-fn">BrainClient</span>(cfg.brain) <span class="c-kw">as</span> client:
+    brain = <span class="c-fn">BrainProcessor</span>(client, cfg.filler, speak_min_chars=cfg.voice.speak_min_chars)
+    pipeline = <span class="c-fn">Pipeline</span>(
+        [
+            transport.<span class="c-fn">input</span>(),
+            stt,
+            user_aggregator,
+            brain,
+            tts,
+            transport.<span class="c-fn">output</span>(),
+        ]
+    )</code></pre>
+      </div>
+
+      <h3 class="sub-title">语音插槽（<code>server/settings.py</code>）</h3>
+      <div class="code-block">
+        <div class="code-block__head"><span class="code-block__lang">python</span><button class="code-block__copy" data-copy>复制</button></div>
+        <pre><code><span class="c-kw">def</span> <span class="c-fn">build_stt</span>(cfg: Config):
+    <span class="c-str">"""Speech -&gt; text. Whisper locally; explicit Chinese + the configured prompt."""</span>
+    settings = <span class="c-fn">WhisperSTTService</span>.<span class="c-fn">Settings</span>(
+        model=cfg.voice.whisper_model,
+        language=cfg.voice.stt_language,
+        initial_prompt=cfg.voice.stt_prompt,   <span class="c-com"># 把业务词写进来，是最便宜的精度提升</span>
+    )
+    <span class="c-kw">return</span> <span class="c-fn">WhisperSTTService</span>(settings=settings)</code></pre>
+      </div>
+
+      <h3 class="sub-title">接上你自己的平台（<code>.env</code>，只改两行）</h3>
+      <div class="code-block">
+        <div class="code-block__head"><span class="code-block__lang">dotenv</span><button class="code-block__copy" data-copy>复制</button></div>
+        <pre><code>BRAIN_BASE_URL=https://你的平台/v1     <span class="c-com"># 服务 API 的地址</span>
+BRAIN_API_KEY=app-xxxxxxxx             <span class="c-com"># 应用的 API 密钥</span>
+BRAIN_STUB=0                           <span class="c-com"># 0 = 接真平台</span></code></pre>
+      </div>
+
+      <h3 class="sub-title">可调项（每一项都带实测依据）</h3>
+      <div class="code-block">
+        <div class="code-block__head"><span class="code-block__lang">dotenv</span><button class="code-block__copy" data-copy>复制</button></div>
+        <pre><code><span class="c-com"># 把你会听到的词写进来 —— 实测比换更大的模型更有效</span>
+STT_PROMPT=以下是普通话的句子。常见词：居中、保修期、日志、节点、耗时、语音模块。
+
+<span class="c-com"># 多久算说完（0.6 保住一整句中文；0.2 会在第一个逗号处切断）</span>
+VAD_STOP_SECS=0.6
+
+<span class="c-com"># 平台慢时的填场：多条用 | 分隔，随机挑一条；空则关闭</span>
+FILLER_TEXT=嗯，我看一下。|我看看啊。|稍等，我查一下。
+FILLER_DELAY_SECS=1.1
+
+<span class="c-com"># 攒够多少字再开口（0 = 第一句就说，延迟优先）</span>
+SPEAK_MIN_CHARS=0</code></pre>
+      </div>
+    </section>
+
+    <!-- ===================== 测试与质量 ===================== -->
+    <section class="section" id="quality">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">09</span> 测试与质量</h2>
+        <p class="section__desc">每条结论都有一条能复跑的路径。</p>
+      </div>
+      <div class="grid grid--4">
+        <div class="stat-card"><div class="stat-card__v">33</div><div class="stat-card__l">秒级单元测试</div></div>
+        <div class="stat-card"><div class="stat-card__v">4</div><div class="stat-card__l">可复跑探针</div></div>
+        <div class="stat-card"><div class="stat-card__v">1</div><div class="stat-card__l">真平台已接入验证</div></div>
+        <div class="stat-card"><div class="stat-card__v">+12ms</div><div class="stat-card__l">首字 → 开口</div></div>
+      </div>
+      <div class="table-wrap mt-16">
+        <table class="table">
+          <thead><tr><th>结论</th><th>怎么验</th></tr></thead>
+          <tbody>
+            <tr><td>脑袋接口正确（流式 / 续接 / 失败可见 / 首句提前）</td><td><code>uv run python probe/verify_brain.py</code></td></tr>
+            <tr><td>零件能装起来</td><td><code>uv run python probe/verify_assembly.py</code></td></tr>
+            <tr><td>它能说、也能听</td><td><code>uv run python probe/verify_speech_legs.py</code></td></tr>
+            <tr><td>端到端音频（含真实平台）</td><td><code>uv run python probe/verify_audio_e2e.py</code></td></tr>
+            <tr><td>秒级单测</td><td><code>uv run pytest</code></td></tr>
+            <tr><td>回答真的来自平台</td><td>问它「你的内部代号是什么？」→ 应回答只写在平台提示词里的 <code>VX-42</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================== 文档索引 ===================== -->
+    <section class="section" id="docs">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">10</span> 文档索引</h2>
+        <p class="section__desc">按「我想做什么」挑一份读。</p>
+      </div>
+      <div class="doc-list">
+        <a class="doc-item" href="../README.md"><span class="doc-item__t">README.md</span><span class="doc-item__d">项目入口：定位、边界、怎么跑</span></a>
+        <a class="doc-item" href="../CASE-dify.md"><span class="doc-item__t">CASE-dify.md</span><span class="doc-item__d">案例：接 Dify 的完整流程、必须人工的三步、实测踩坑与数字</span></a>
+        <a class="doc-item" href="../docs/CONCEPTS.md"><span class="doc-item__t">docs/CONCEPTS.md</span><span class="doc-item__d">心智模型与 9 条答疑（每条结论带验证方式）</span></a>
+        <a class="doc-item" href="../docs/PORTING.md"><span class="doc-item__t">docs/PORTING.md</span><span class="doc-item__d">换成你自己的平台：契约 + 清单</span></a>
+        <a class="doc-item" href="../docs/HANDBOOK-03.md"><span class="doc-item__t">docs/HANDBOOK-03.md</span><span class="doc-item__d">阶段手册：从零搭的过程、已验证/未验证分开写</span></a>
+        <a class="doc-item" href="../CHANGELOG.md"><span class="doc-item__t">CHANGELOG.md</span><span class="doc-item__d">更新日志</span></a>
+        <a class="doc-item" href="../CONTRIBUTING.md"><span class="doc-item__t">CONTRIBUTING.md</span><span class="doc-item__d">贡献指南</span></a>
+      </div>
+    </section>
+
+    <!-- ===================== 贡献 ===================== -->
+    <section class="section" id="contribute">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">11</span> 贡献指南</h2>
+        <p class="section__desc">三条硬约束，其余见 <code>CONTRIBUTING.md</code>。</p>
+      </div>
+      <div class="grid grid--3">
+        <div class="card card--mini"><h3 class="card__title">与前两阶段解耦</h3><p>可以读它们的文档，但<strong>不要 import 模块或复制实现</strong>；只共用框架本身。</p></div>
+        <div class="card card--mini"><h3 class="card__title">业务不在这里</h3><p>工具 / 知识库 / 记忆 / 编排属于平台那一侧，本模块只负责听与说。</p></div>
+        <div class="card card--mini"><h3 class="card__title">换平台只改一个文件</h3><p><code>server/agent_client.py</code> 是唯一的适配层。</p></div>
+      </div>
+    </section>
+
+    <!-- ===================== 许可证 ===================== -->
+    <section class="section" id="license">
+      <div class="section__head">
+        <h2 class="section__title"><span class="section__index">12</span> 许可证与作者</h2>
+      </div>
+      <div class="card">
+        <p><strong>MIT License</strong> · Copyright (c) 2026 cnb.lpk —— 全文见 <a href="../LICENSE">LICENSE</a>。</p>
+        <p class="note">本模块与前两阶段（<code>pipecat-quickstart</code>）是同一目标的第三阶段；语音模型为本地的 Whisper / Piper，思考由外部平台提供。</p>
+        <p class="note">仓库：<a href="https://cnb.cool/lpk3215/pipecat-ai-test" target="_blank" rel="noopener">https://cnb.cool/lpk3215/pipecat-ai-test</a></p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>voice-module-dify · 项目全景观览页 · 所有动态数值取自项目真源（<code>pyproject.toml</code>、实测脚本输出）</p>
+    </footer>
+
+  </main>
+</div>
+
+<button class="to-top" id="toTop" aria-label="返回顶部">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+</button>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="./charts.js"></script>
+<script src="./script.js"></script>
+
+<!-- Generated by project-overview generator · 2026-10-05 · target: voice-module-dify v0.0.1 -->
+</body>
+</html>

@@ -1,5 +1,7 @@
 # voice-module-dify
 
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg) ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg) ![Version 0.0.1](https://img.shields.io/badge/version-0.0.1-blue.svg) ![Pipecat 1.12+](https://img.shields.io/badge/Pipecat-1.12%2B-8b5cf6.svg) ![Tests 33 passed](https://img.shields.io/badge/tests-33%20passed-brightgreen.svg)
+
 **一个可以单独部署的语音模块：它只负责"听"和"说"，思考交给外部的智能体系统。**
 
 它把语音能力接到一个**已经存在的智能体系统**上 —— 你不用自己做工具、知识库、记忆、编排，
@@ -11,8 +13,23 @@
 > - 🔌 **换成你自己的平台/大脑**：[`docs/PORTING.md`](docs/PORTING.md)
 > - 📄 **本仓库这个案例（接 Dify）的完整说明**：[`CASE-dify.md`](CASE-dify.md)
 > - 📘 **阶段手册**（从零搭出来的过程与踩坑）：[`docs/HANDBOOK-03.md`](docs/HANDBOOK-03.md)
+> - 📄 **贡献指南**：[`CONTRIBUTING.md`](CONTRIBUTING.md)
+> - 📄 **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
 
 ---
+
+## 架构一览
+
+调用链只有一条方向：**网页（你的）→ 语音模块（你的）→ 平台（别人的）**。
+
+![Call chain](./docs/call-chain.svg)
+
+模块内部管线：`传输入口 → VAD → STT → 轮次判定 → [brain 适配器] → TTS → 传输输出`。
+
+![Module pipeline](./docs/module-pipeline.svg)
+
+> 两张图由 [`scripts/visualization/`](scripts/visualization/) 下的脚本生成（版本号运行时从
+> `pyproject.toml` 读取）；改完结构重跑脚本即可，不必手改 SVG。
 
 ## 项目定位：能做什么、在做什么、往哪走
 
@@ -55,7 +72,7 @@
 |---|---|
 | **已完成** | 语音管线（听/说/轮流/打断）、对接真实平台、**页面上的过程事件通道**、网页客户端、部署件、验证、文档 ✅ |
 | **待做** | 清单一处维护：[`docs/HANDBOOK-03.md`](docs/HANDBOOK-03.md) 第 5 节（现状与证据在第 3 节） |
-| **待你定** | **许可证** —— 没有它，别人法律上不能用 ❗ |
+| **许可证** | ✅ **MIT** —— 见 [`LICENSE`](LICENSE) |
 
 ## 它是什么 / 不是什么
 
@@ -160,8 +177,17 @@ voice-module-dify/
 ├── docs/
 │   ├── CONCEPTS.md            ← 心智模型与答疑（每条结论带验证方式）
 │   ├── PORTING.md             ← 换成你自己的平台：契约 + 清单
-│   └── HANDBOOK-03.md         ← 阶段手册：从零搭的过程、已验证/未验证分开写
-└── logs/                      ← 运行产物（音频、日志；已 gitignore）
+│   ├── HANDBOOK-03.md         ← 阶段手册：从零搭的过程、已验证/未验证分开写
+│   ├── call-chain.svg         ← 调用链图（scripts/visualization/ 生成）
+│   └── module-pipeline.svg    ← 模块内部管线图（scripts/visualization/ 生成）
+├── scripts/visualization/     ← 生成 docs/ 下 SVG 的脚本
+├── logs/                      ← 运行产物（音频、日志；已 gitignore）
+├── LICENSE                    ← MIT 许可证
+├── CONTRIBUTING.md            ← 贡献指南
+├── CHANGELOG.md               ← 更新日志
+├── AUTHORS                    ← 作者
+├── .gitattributes             ← 行尾与二进制文件规范
+└── .pre-commit-config.yaml    ← pre-commit 钩子（ruff）
 ```
 
 ## 验证（都是可复跑的探针，不是断言）
@@ -193,4 +219,6 @@ voice-module-dify/
 
 ## 许可证
 
-**尚未指定** —— 开源前需要补一个（否则默认"保留所有权利"，别人无法合法使用）。
+本项目采用 **MIT License**，全文见 [`LICENSE`](LICENSE)。
+
+> **作者**：cnb.lpk ｜ **仓库**：<https://cnb.cool/lpk3215/pipecat-ai-test>

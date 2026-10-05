@@ -7,3 +7,13 @@ logs/
 .ruff_cache/
 data/
 agent/.dify/
+
+# Runtime artifacts (duplicated here so a standalone clone stays clean,
+# independent of the monorepo root .gitignore).
+*.log
+*.wav
+*.onnx
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
