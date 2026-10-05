@@ -9,10 +9,9 @@ import asyncio
 import dataclasses
 
 import pytest
-from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame, TextFrame
-
 from agent_client import BrainClient, BrainError
 from brain import BrainProcessor
+from pipecat.frames.frames import InputAudioRawFrame, OutputAudioRawFrame, TextFrame
 from raw_pcm_serializer import RawPCMFrameSerializer
 from settings import load_config
 
@@ -119,7 +118,7 @@ def test_unreachable_brain_raises_something_the_assistant_can_say():
         raise AssertionError("expected BrainError")
 
     spoken = asyncio.run(run())
-    assert spoken and "错" in spoken or "连不上" in spoken
+    assert (spoken and "错" in spoken) or "连不上" in spoken
 
 
 def test_missing_api_key_is_reported_before_any_request():
