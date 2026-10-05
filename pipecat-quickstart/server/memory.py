@@ -49,6 +49,9 @@ DB_PATH = Path(
     os.getenv("MEMORY_DB", str(Path(__file__).resolve().parent / "data" / "memory.db"))
 )
 
+# Seconds to wait for another process's lock before failing (SQLite's busy timeout).
+BUSY_TIMEOUT_S = 5.0
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS turns (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,8 +120,12 @@ def _conn() -> sqlite3.Connection:
     higher volume switch to aiosqlite -- the replacement point is inside this function.
     """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_S)
     conn.row_factory = sqlite3.Row
+    # Same hardening as knowledge.py (see the note there): WAL + a busy timeout, because the bot,
+    # the ingestion scripts and the probes all open these files from separate processes.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 

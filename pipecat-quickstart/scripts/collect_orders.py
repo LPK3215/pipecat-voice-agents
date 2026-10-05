@@ -21,13 +21,20 @@ Usage:
     cd server
     uv run ../scripts/collect_orders.py                    # built-in demo data
     uv run ../scripts/collect_orders.py --csv orders.csv   # import from CSV (order_id,customer,status,amount)
+    uv run ../scripts/collect_orders.py --url <URL>        # fetch a real public JSON API and map its records
     uv run ../scripts/collect_orders.py --list             # show current orders
+
+``--url`` is the "real network source" example: one HTTP GET against a public API (no key), each
+record mapped explicitly onto the orders table by ``map_api_item``. The mapping is a *business*
+decision, so it is written out in the open -- change those few lines for your own source.
 """
 
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 # Scripts live in scripts/; the project root (server/, sample-data/, docs/) is one level up.
 BASE = Path(__file__).resolve().parent.parent
@@ -46,9 +53,45 @@ DEMO_ORDERS = [
     {"order_id": "A20261001005", "customer": "钱七", "status": "已发货", "amount": 420.0},
 ]
 
+# Polite defaults for the real-network example (a descriptive UA is what public APIs ask for).
+USER_AGENT = "pipecat-quickstart-collector/1.0 (one-off demo ingest; contact: repo owner)"
+FETCH_TIMEOUT = 30.0
 
-def fetch_from_source(csv_path: Path | None = None) -> list[dict]:
-    """Fetch orders from the external source. **This is the only place to rewrite for a real source.**"""
+
+def map_api_item(item: dict) -> dict:
+    """Map **one record** of the external API onto the orders table -- explicitly.
+
+    Change these four lines for your own source; nothing else in the pipeline moves. Demo
+    target: GitHub's public releases API (real, published records, no key required).
+    """
+    return {
+        "order_id": str(item.get("tag_name") or item.get("id") or "").strip(),
+        "customer": str((item.get("author") or {}).get("login") or "").strip(),
+        "status": "预发布" if item.get("prerelease") else "已发布",
+        "amount": 0.0,  # this source has no amount field; map yours here
+    }
+
+
+def fetch_json(url: str) -> list[dict]:
+    """HTTP GET a public JSON API and map its records to the orders shape."""
+    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    with urlopen(request, timeout=FETCH_TIMEOUT) as response:  # noqa: S310 - operator-supplied URL
+        payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    if isinstance(payload, dict):
+        payload = payload.get("data") or payload.get("items") or [payload]
+    if not isinstance(payload, list):
+        raise ValueError(f"{url}: expected a JSON array or object, got {type(payload).__name__}")
+    return [map_api_item(item) for item in payload if isinstance(item, dict)]
+
+
+def fetch_from_source(csv_path: Path | None = None, url: str | None = None) -> list[dict]:
+    """Fetch rows from the external source.
+
+    **This is the only place to rewrite for a real source.** Three working shapes ship here:
+    built-in demo rows, a local CSV export, and a real public JSON API (``--url``).
+    """
+    if url:
+        return fetch_json(url)
     if csv_path is None:
         return DEMO_ORDERS
     rows: list[dict] = []
@@ -68,6 +111,7 @@ def fetch_from_source(csv_path: Path | None = None) -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser(description="ingest order data into the local DB")
     ap.add_argument("--csv", type=Path, default=None, help="CSV file (built-in demo data if omitted)")
+    ap.add_argument("--url", default=None, metavar="URL", help="public JSON API to fetch records from")
     ap.add_argument("--list", action="store_true", help="list current orders and exit")
     args = ap.parse_args()
 
@@ -80,7 +124,7 @@ def main() -> int:
             print(f"  {r.get('order_id')} | {r.get('customer')} | {r.get('status')} | {r.get('amount')}")
         return 0
 
-    items = fetch_from_source(args.csv)
+    items = fetch_from_source(args.csv, url=args.url)
     for it in items:
         memory.upsert_order(
             order_id=it["order_id"],

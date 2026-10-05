@@ -294,6 +294,34 @@ cd server && uv run ../scripts/verify_tools.py --question "现在几点了？" -
 | 库文件本身 | `server/data/memory.db`、`server/data/knowledge.db`（`MEMORY_DB` / `KNOWLEDGE_DB`） | **不用** |
 | **可查的表 / 列（你自己的库结构）** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE` 可覆盖） | **不用** —— 在文件里声明你的表即可 |
 
+**真实网络源（实测，不是假数据）**：两个入口都能直接抓公网上的合规来源，抓回来的东西进数据层，
+和本地文件走同一条路：
+
+```bash
+cd server
+# 非结构化：抓一份真实公开文档（示例用 Pipecat 官方仓库的 README）灌进知识库
+uv run ../scripts/ingest_docs.py --url https://raw.githubusercontent.com/pipecat-ai/pipecat/main/README.md
+# 结构化：抓一个公开 JSON API（示例用 GitHub 发布记录，无需 key）映射进 orders 表
+uv run ../scripts/collect_orders.py --url "https://api.github.com/repos/pipecat-ai/pipecat/releases?per_page=3"
+# 知识库完整性自检（损坏时直接给出重建步骤）
+uv run ../scripts/ingest_docs.py --check
+```
+
+实测：抓回 41,447 字符 → **35 块入库**；入库后问「pipecat 支持哪几种传输方式？」，`search_knowledge`
+命中并答出 **Daily(WebRTC) / FastAPI Websocket / LiveKit / SmallWebRTCTransport / Vonage /
+WebSocket Server / WhatsApp**；问「怎么安装 pipecat？」答出 `uv add "pipecat-ai[option,...]"`
+/ `pip install pipecat-ai`。这些内容**只在那份抓来的文档里** —— 所以这条链是
+**真实网络 → 数据层 → 工具 → 模型**，不是代码里写死的。
+
+> 换成你自己的源：文档直接 `ingest_docs.py --url <你的地址>`；结构化数据改
+> `collect_orders.py::map_api_item` 那几行字段映射即可，其余管线不动。
+> 抓取是**一次性请求**（不是爬虫）：请遵守目标站点的条款与 robots.txt。
+
+> **SQLite 加固**：这两个库会被多个脚本分别打开（灌库 / 机器人 / 探针），因此连接统一使用
+> **WAL + 5 秒忙等**。起因是实测中 `knowledge.db` 出现过一次 btree 损坏（`database disk image
+> is malformed`，`integrity_check` 报 btreeInitPage 错误）；修复后补了 `--check` 与重建指引。
+> 每个源都可重新获取，所以重建只是一条命令。
+
 **把数据删掉会怎样**（不会假报成功）：删掉 `demo-business.json` → 启动时不灌演示数据（只写一行日志）；
 查询答「没有查到符合条件的记录」，`count` 答「结果是 0」（这是真话），`sum` / `avg` 也答「没有查到」
 —— 不会冒出 `None` 这类怪话；请求一个没在自己库里声明的表，明确答「查询没成功：未知的表 XXX」。
@@ -662,7 +690,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 14 | 新增 `knowledge.py` + `embeddings.py`（RAG） | 框架没有知识库；嵌入默认走本地模型，不受单一服务商绑定（多数服务商无 `/v1/embeddings`） |
 | 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
 | 16 | 新增 `flows.py`；上下文摘要改用**框架自带**的 `LLMContextSummarizer` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；摘要由框架在 assistant 聚合器内实现，`enable_auto_context_summarization=True` 即接线完成 |
-| 17 | 新增 `tests/`（93 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、**SQL 注入对抗**、知识库、护栏、编排、摘要、观察者落库、工具状态隔离与异常兜底 |
+| 17 | 新增 `tests/`（109 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、**SQL 注入对抗**、知识库、护栏、编排、摘要、观察者落库、工具状态隔离与异常兜底、抓取解析与字段映射 |
 | 18 | 工具改为**按会话**构建（`build_tools(session_id)`） | 与「会话 ID 不再放模块级」同源：`set_reminder` 的状态原本是模块级列表，多会话时 A 的提醒会计进 B 的计数，而且无上限增长 |
 | 19 | 所有工具 handler 统一兜底（`safe_handler`） | 实测缺陷：`query_data` 的 `limit="十条"` 在 handler 内抛 `ValueError`，没人接住 → 工具跑了但没有结果回到模型，**机器人永不回答**（与忘了 `run_llm=True` 同类的静默失败）。在 `build_tools()` 集中包装，新加工具不会漏 |
 | 20 | 知识库写入侧：稳定 `source` + `--prune` | 原来用「调用时的原样路径」当文档标识：`../README.md` 与 `README.md` 会被当成两篇 → 检索重复命中、`--delete` 必须拼写一致。改为相对仓库根，并支持清掉源文件已不存在的记录（否则会检索到已删除的内容） |

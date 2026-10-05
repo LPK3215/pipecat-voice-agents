@@ -348,6 +348,7 @@ done
 | 13 | 基准脚本的**基线**不是「实际在跑的配置」，或注释说要扫的变量其实没扫 | 数字看着合理，却在和一个没人用的配置对比（如 `asr_bench` 曾拿 `language=None` 当基线）；声称已修的调参从未被测量 | 基线必须等于 `settings.py` 实际下发的参数；注释里写的变量要真出现在循环里；`verify_stack` 对已知 5 秒陷阱改为 WARN 而非沉默 |
 | 14 | 文本搜索用**全局**列名名单（`name`/`message`/`note`/`host`） | 对没有这些列名的表（如 `orders` 用的是 `customer`/`order_id`）`search` 被**静默忽略**，返回未过滤的行，却像"检索成功"一样被模型当真回答 | 每表一份 `TEXT_COLUMNS`；且无可用列时返回错误而不是沉默（并用测试锁住"每张可查表都有可搜列"） |
 | 15 | 把业务数据**写死在代码里**（假数据假装数据层） | 换真实数据要改代码，"数据层"名存实亡；示例工具的城市 / 设备清单也一样写在代码里 | 数据一律放**文件**（`DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` 可覆盖），代码只加载 + 白名单校验；单测把"业务行不许出现在源码里"锁住 |
+| 16 | 多个脚本/进程分别读写**同一个 SQLite 文件**（默认 rollback journal、无忙等） | 实测遇到过一次 **btree 损坏**：读的时候报 `database disk image is malformed`，`integrity_check` 报 `btreeInitPage` 错误 —— 而写入时没有任何报错 | 连接统一开 **WAL + 5s 忙等**（`knowledge.py` / `memory.py` 的 `_conn`），并加 `ingest_docs.py --check` 做完整性检查与重建指引；源都可重新获取，重建只需一条命令 |
 
 ---
 
@@ -454,9 +455,11 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 | **数据与代码分离（数据在数据层）** | `sample-data/*.json` + `DEMO_DATA_FILE` / `SAMPLE_TOOLS_DATA` | ✅ 演示业务行与示例工具数据全部搬出代码：同代码换文件即换答案（实测指标 99.95→42.0、多出 `ALT-0001` 订单、杭州天气消失）；另有架构守卫单测防回退 |
 | **分层联通性（跨层接口是否真实）** | `scripts/verify_layers.py` + `tests/test_memory.py` | ✅ 9/9：空数据层必须答"查不到"（**证伪"写死在代码里"**）、外部 sqlite3 客户端写入立刻可见、替换数据访问层函数即改变工具结果、代码声明列与真实 schema 一致、换数据文件即换接口答案 |
 | **换库不用改代码** | `sample-data/business-schema.json`（`BUSINESS_SCHEMA_FILE`） | ✅ 表/列白名单改为数据文件声明：实测外部建 `tickets` 表 + 文件里声明 → 列表/过滤/搜索/聚合全通；未声明的表明确报"未知的表"。空数据的 `sum/avg` 不再念出 `None`，`count` 的 0 如实回答 |
-| **单元测试** | `server/tests/` | ✅ **100 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明） |
+| **单元测试** | `server/tests/` | ✅ **109 用例**（配置/工具/SQL 注入对抗/知识库/护栏/编排/摘要配置/观察者落库/工具状态隔离/工具异常兜底/时间戳格式/数据与代码分离/跨层边界/空数据诚实回答/自定义表声明/**抓取解析与字段映射/CLI 流程/数据库加固**） |
 | **工具调用成功率实测**（2026-10-05） | `scripts/verify_tools.py --repeat` | ✅ 12/6/3 个工具 = **100% / 95% / 95%**，「谎报执行」**0/60**；详见 `TOOL_TESTS.md` 第 7 节 |
 | **数据接入链路端到端实测**（2026-10-05） | `scripts/collect_orders.py --csv` + `scripts/ingest_docs.py` + `query_data` / `search_knowledge` | ✅ 用假数据全通：CSV 导入**幂等**、聚合与直接查库一致、文档检索答对文档独有数字；样例见 `sample-data/`，详见 `TOOL_TESTS.md` 第 7.4 节 |
+| **真实网络源抓取（非结构化 + 结构化）** | `scripts/ingest_docs.py --url` + `scripts/collect_orders.py --url` | ✅ 实测：抓 Pipecat 官方 README（41,447 字符）→ **35 块入库** → 模型据此答出传输方式清单与安装命令（内容只在该文档里）；抓 GitHub 发布 API → orders 表 20→23。抓取是单次请求，非爬虫 |
+| **SQLite 抗损坏加固** | `knowledge.py` / `memory.py` 的 `_conn`（WAL + 5s 忙等）+ `ingest_docs.py --check` | ✅ 起因是一次**实测 btree 损坏**（`database disk image is malformed`）；现连接统一 WAL，`--check` 报完整性并给出重建步骤 |
 | **检索质量评测与调优**（2026-10-05） | `scripts/kb_eval.py` + `knowledge.py` | ✅ 用**仓库自己的文档**做真实语料 + 15 个手写用例：分块 300→500 + 词面重排 α=0.3，出厂配置对比旧默认（300/0 纯余弦）**hit@1 33%→53%、hit@3 40%→80%、MRR 0.41→0.69**；原默认（300/50 纯余弦）是最差的一档。语料随文档增长，绝对值会漂移，只有同一次运行内可比 |
 
 ### 未完成（按优先级）
@@ -468,7 +471,7 @@ uv run ../scripts/verify_tools.py --question "这个月一共多少笔订单"
 
 | # | 待办 | 性质 | 阻塞 |
 |---|---|---|---|
-| 1 | 把 `fetch_from_source` 指向**你的**真实数据源 | 需要你介入 | 链路**已用假数据全通**（2026-10-05 实测，见上表），只差数据源本身 |
+| 1 | 把 `fetch_from_source` / `--url` 换成**你自己的**源与字段映射 | 需要你的源 | 机制**已用真实公网源跑通**（2026-10-05 实测：抓 Pipecat 官方 README → 35 块入库 → 模型据此作答；抓 GitHub 发布 API → orders 表；见上表）；剩下只是把字段映射改成你的业务字段 |
 | 2 | 换官方 `FlowManager`（阶段式对话） | 可选替换 | 无（`flows.py` 目前只做固定调用链；完整的阶段式对话尚未用到） |
 
 **历史重测方案与前置检查见 `TOOL_TESTS.md` 第 6 节，执行结果见其第 7 节。**

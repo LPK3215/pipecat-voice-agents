@@ -33,6 +33,9 @@ DB_PATH = Path(
     os.getenv("KNOWLEDGE_DB", str(Path(__file__).resolve().parent / "data" / "knowledge.db"))
 )
 
+# Seconds to wait for another process's lock before failing (SQLite's busy timeout).
+BUSY_TIMEOUT_S = 5.0
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
     source     TEXT PRIMARY KEY,
@@ -58,8 +61,16 @@ CREATE INDEX IF NOT EXISTS idx_chunks_dim ON chunks(dim);
 
 def _conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_S)
     conn.row_factory = sqlite3.Row
+    # Hardening, added after this file was once found with a corrupted btree ("database disk
+    # image is malformed", integrity_check: btreeInitPage error): WAL lets a reader run while a
+    # writer commits, and a crash mid-commit is replayed from the -wal file instead of leaving
+    # the main file half-updated. The timeout makes a second script wait for the lock instead of
+    # failing outright. Several scripts (ingest, bot, probes) open the same file, so neither
+    # setting is optional here.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -238,6 +249,18 @@ def search(query: str, k: int = 3, embedder=None) -> list[dict]:
         )
     hits.sort(key=lambda h: -h["score"])
     return hits[: max(1, min(k, len(hits)))]
+
+
+def integrity_check() -> str:
+    """SQLite's own integrity report: ``ok`` when the file is sound.
+
+    Added after a real corruption event (``integrity_check`` reported a btreeInitPage error and
+    reads failed with "database disk image is malformed"). Asking directly turns that cryptic
+    failure into a clear signal, and the caller can tell the operator to rebuild the knowledge
+    base -- every source is re-fetchable, so a rebuild costs one command.
+    """
+    with _conn() as conn:
+        return str(conn.execute("PRAGMA integrity_check").fetchone()[0])
 
 
 def stats() -> dict:
