@@ -245,8 +245,15 @@ my_local_weather  =  recall_fact(城市)  →  get_weather(city)
 模型只需调 `my_local_weather`，中间顺序不依赖它。实测：「我这边天气怎么样」→
 正确回想出「杭州」并报天气。跨阶段的业务对话再上框架自带的 `FlowManager`。
 
-**上下文摘要（`summarize.py`）** —— 超过阈值（默认 20 条）时，把**较早**的消息压成
-一条摘要消息；`system` 与最近 8 条**原文保留**。控制 token / 成本，又不丢最近细节。
+**上下文摘要** —— 用**框架自带**的 `LLMContextSummarizer`：它在 assistant 聚合器内部
+创建并接好事件，我们只需在 `assistant_params` 里打开开关
+（阈值见 `settings.build_summarization_config()`，默认 20 条未摘要消息）。超过阈值时把
+**较早**的消息压成一条摘要，最近几条原文保留。实测：`51 -> 6` 条，可用
+`verify_summarize.py` 复跑。
+
+> 这一版之前是手写观察者（`summarize.py`），已删除 —— 框架已经提供了同样的能力，
+> 而且额外带 token 阈值触发、手动触发与结果校验。这正是 `HANDBOOK.md` 第 7.1 节的教训：
+> **动手写之前先把框架目录翻一遍**。
 
 **成功率度量（`verify_tools.py --repeat N`）** —— 模型是否调工具是**非确定性**的，
 样本量为 1 等于噪声。内建重复统计 + 四种**互斥**结论：
@@ -569,7 +576,7 @@ pipecat 1.12 提供了 `OpenAIRealtimeLLMService`（`services/openai/realtime/ll
 | 13 | 新增 `memory.py`（SQLite：会话历史 / 长期记忆 / 业务表） | 框架**不提供任何持久化**；且 `TurnRecorder` 必须是**观察者**，挂在管线末端收不到文本帧（两侧文本都被各自的聚合器消费） |
 | 14 | 新增 `knowledge.py` + `embeddings.py`（RAG） | 框架没有知识库；嵌入默认走本地模型，不受单一服务商绑定（多数服务商无 `/v1/embeddings`） |
 | 15 | 新增 `guards.py` + 纠正回调 | 「**谎报执行**」是最危险的失效模式：没调工具却声称已完成，用户基于虚假状态做决策 |
-| 16 | 新增 `flows.py` / `summarize.py` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；官方 `FlowManager` / `LLMContextSummarizer` 需额外绑定，这里先给等价的最小实现 |
+| 16 | 新增 `flows.py`；上下文摘要改用**框架自带**的 `LLMContextSummarizer` | 模型不会自己串多步任务（会跳过步骤并自行编造参数）；摘要由框架在 assistant 聚合器内实现，`enable_auto_context_summarization=True` 即接线完成 |
 | 17 | 新增 `tests/`（86 个单元测试） | 回归不必再跑分钟级全链路；覆盖配置解析、工具 handler、SQL 白名单、知识库、护栏、编排、摘要、**观察者落库** |
 
 ### 为什么必须改 VAD（第 4 点）
@@ -660,7 +667,6 @@ pipecat-quickstart/
 │   ├── knowledge.py         # 知识库：文档切块 + 向量检索（换向量库只改这里）
 │   ├── flows.py             # 显式编排：多步工具链（复合工具，顺序由代码保证）
 │   ├── guards.py            # 可信性护栏：谎报执行检测 + 强制纠正
-│   ├── summarize.py         # 上下文摘要（超阈值压缩历史）
 │   ├── pipeline_logging.py  # 日志、对话时间线、故障上报（[ERROR] → 前端）
 │   ├── tests/               # pytest 单元测试（配置/工具/SQL/知识库/护栏/编排/摘要）
 │   ├── pyproject.toml       # 依赖（含 sensevoice 可选 extra）
@@ -673,6 +679,7 @@ pipecat-quickstart/
 ├── collect_orders.py        # 业务数据采集示例（采集与查询分离）
 ├── verify_stack.py          # 端到端自检（完整链路，较慢）
 ├── verify_tools.py          # 工具调用自检（只测后端）
+├── verify_summarize.py      # 上下文摘要自检（撑过阈值，验证框架真的触发压缩）
 ├── kb_eval.py               # 知识库检索质量评测（分块 / 重排 / 候选池 参数扫描）
 ├── asr_bench.py             # ASR 基准：多配置中文识别字错率 / 耗时对比
 ├── live_asr_bench.py        # 真实链路 ASR 基准（经 Opus 编解码）

@@ -144,6 +144,13 @@ DEFAULT_KOKORO_VOICE = "zf_xiaoxiao"
 DEFAULT_VAD_STOP_SECS = 0.6
 VAD_STOP_SECS_OFFICIAL_DEFAULT = 0.2  # official pipecat value, used for hints only
 
+# ---------- Context summarization ----------
+# The framework owns the implementation (LLMContextSummarizer, created inside the
+# assistant aggregator); we only supply the thresholds. Compaction kicks in once more than
+# this many messages are unsummarized, and the newest few are always kept verbatim.
+DEFAULT_SUMMARY_MAX_MESSAGES = 20
+DEFAULT_SUMMARY_MAX_TOKENS = 8000
+
 # ---------- Fixed test sentence used by the self-check scripts ----------
 VERIFY_USER_TEXT = "你好，请用一句话介绍一下你自己。"
 
@@ -240,6 +247,29 @@ def build_llm_extra(thinking_body: dict | None = None) -> dict:
         body["temperature"] = float(temperature)
 
     return {"extra_body": body} if body else {}
+
+
+def build_summarization_config():
+    """Auto context-summarization config for the framework's ``LLMContextSummarizer``.
+
+    pipecat creates the summarizer **inside the assistant aggregator** and wires its events
+    itself; turning it on via ``LLMAssistantAggregatorParams`` together with this config is
+    the whole wiring. The summary is produced by the pipeline's LLM service through the
+    normal frame round-trip, so no separate client is needed.
+
+    This replaced a hand-written observer (``summarize.py``). That version worked, but the
+    framework ships the same thing with token- as well as message-based triggers, manual
+    triggering via ``LLMSummarizeContextFrame``, interruption handling and result
+    validation -- see HANDBOOK.md section 7.1: check the framework before writing your own.
+    """
+    from pipecat.utils.context.llm_context_summarization import (
+        LLMAutoContextSummarizationConfig,
+    )
+
+    return LLMAutoContextSummarizationConfig(
+        max_unsummarized_messages=DEFAULT_SUMMARY_MAX_MESSAGES,
+        max_context_tokens=DEFAULT_SUMMARY_MAX_TOKENS,
+    )
 
 
 # ---------------------------------------------------------------------------

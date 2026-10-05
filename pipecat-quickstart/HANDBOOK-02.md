@@ -55,7 +55,7 @@
 | **⑤ 知识库 / RAG** | **框架不管** —— 自建（`knowledge.py` + `embeddings.py`） | 文档切块 + 向量检索 |
 | **⑥ 编排** | 框架自带 `flows/`（本仓库另有 `flows.py` 做固定调用链） | 多步任务、需要固定顺序的流程 |
 | **⑦ 可信性护栏** | 自建（`guards.py`，挂在 `observers=`） | 检出「谎报执行」，可注入纠正让模型如实重答 |
-| **⑧ 上下文摘要** | 自建（`summarize.py`，挂在 `observers=`） | 超阈值压缩较早消息，控制 token 与成本 |
+| **⑧ 上下文摘要** | **框架自带**（`LLMContextSummarizer`，由 assistant 聚合器内部创建） | 在 `assistant_params` 里打开 `enable_auto_context_summarization` 即接线完成；阈值见 `settings.build_summarization_config()` |
 
 **记住一句话**：框架给的是**接线板**，业务逻辑全在你的代码里。
 
@@ -436,7 +436,7 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 | **知识库 / RAG（文档语义检索）** | `knowledge.py` + `embeddings.py` + `search_knowledge` | ✅ 本地嵌入 + SQLite 向量检索；写入侧 `ingest_docs.py` |
 | **可信性护栏（检测 + 强制拦截）** | `guards.py` + `bot.py` 纠正回调 | ✅ 命中写 `[GUARD]`，并注入纠正让模型如实重答（同动作只纠一次，防循环） |
 | **显式编排（多步任务）** | `flows.py` + 复合工具 `my_local_weather` | ✅ 实测「我这边天气怎么样」正确回想城市（不再自行编「北京」） |
-| **上下文摘要** | `summarize.py` | ✅ 超阈值压缩较早消息；system 与最近 N 条原文保留 |
+| **上下文摘要** | 框架 `LLMContextSummarizer`（阈值见 `settings.py`） | ✅ 已换成官方实现（删除手写观察者）；实测触发 **51 → 6 条**，可用 `verify_summarize.py` 复跑 |
 | **成功率统计** | `verify_tools.py --repeat N` | ✅ 内建四种互斥结论分布；阳性对照实测 5/5 = 100% |
 | **探针四类结论** | `audio_probe.py` | ✅ 打通 / 调用失败 / 无识别 / 不出声 分开报 |
 | **业务表 + 采集示例** | `memory.py` 的 `orders` 表 + `collect_orders.py` | ✅ 采集与查询分离链路打通 |
@@ -455,7 +455,7 @@ uv run ../verify_tools.py --question "这个月一共多少笔订单"
 | # | 待办 | 性质 | 阻塞 |
 |---|---|---|---|
 | 1 | 把 `fetch_from_source` 指向**你的**真实数据源 | 需要你介入 | 链路**已用假数据全通**（2026-10-05 实测，见上表），只差数据源本身 |
-| 2 | 换官方 `LLMContextSummarizer` / `FlowManager`（阶段式对话） | 可选替换 | 无（当前是等价的最小实现，替换点已隔离） |
+| 2 | 换官方 `FlowManager`（阶段式对话） | 可选替换 | 无（`flows.py` 目前只做固定调用链；完整的阶段式对话尚未用到） |
 
 **历史重测方案与前置检查见 `TOOL_TESTS.md` 第 6 节，执行结果见其第 7 节。**
 **检索调优的评测口径与结果见 `kb_eval.py`（可随时复跑）与 `TOOL_TESTS.md` 第 7.5 节。**

@@ -1,8 +1,12 @@
 """Unit tests for the observers that persist / inspect the conversation.
 
-These pin down the components that had failed **silently**: ``TurnRecorder`` used to be
-attached as a pipeline processor and never wrote a single row, and ``ContextSummarizer``
-was never exercised at all. Both are driven here with fake frames, offline.
+These pin down the component that had failed **silently**: ``TurnRecorder`` used to be
+attached as a pipeline processor and never wrote a single row. It is driven here with fake
+frames, offline.
+
+Summarization is no longer covered here -- it is the framework's own
+``LLMContextSummarizer``, enabled through ``LLMAssistantAggregatorParams`` (see
+``tests/test_settings.py`` for the config we hand it).
 
 NOTE: the Chinese strings below are test data -- do not translate.
 """
@@ -94,67 +98,6 @@ def test_turn_recorder_start_frame_resets_buffer(temp_db):
 
     rows = temp_db.recent_turns("s4")
     assert [r["content"] for r in rows] == ["新回答"]
-
-
-# ---------------------------------------------------------------- ContextSummarizer
-def test_summarizer_compacts_over_threshold():
-    from summarize import SUMMARY_PREFIX, ContextSummarizer
-
-    class FakeContext:
-        def __init__(self, n):
-            self.messages = [{"role": "system", "content": "你是助手"}] + [
-                {"role": "user", "content": f"第{i}条"} for i in range(n)
-            ]
-
-        def set_messages(self, messages):
-            self.messages = list(messages)
-
-    ctx = FakeContext(30)  # 31 messages > default threshold of 20
-    summarizer = ContextSummarizer(ctx, llm_call=lambda _msgs: "摘要正文")
-    asyncio.run(summarizer._maybe_summarize())
-
-    assert summarizer.compactions == 1
-    assert any(SUMMARY_PREFIX in str(m.get("content", "")) for m in ctx.messages)
-    assert len(ctx.messages) < 31
-
-
-def test_summarizer_noop_below_threshold():
-    from summarize import ContextSummarizer
-
-    class FakeContext:
-        def __init__(self):
-            self.messages = [{"role": "user", "content": "只有一条"}]
-
-        def set_messages(self, messages):
-            self.messages = list(messages)
-
-    ctx = FakeContext()
-    summarizer = ContextSummarizer(ctx, llm_call=lambda _msgs: "摘要正文")
-    asyncio.run(summarizer._maybe_summarize())
-
-    assert summarizer.compactions == 0
-    assert len(ctx.messages) == 1
-
-
-def test_summarizer_survives_llm_failure():
-    from summarize import ContextSummarizer
-
-    class FakeContext:
-        def __init__(self):
-            self.messages = [{"role": "user", "content": f"第{i}条"} for i in range(30)]
-
-        def set_messages(self, messages):
-            self.messages = list(messages)
-
-    def boom(_msgs):
-        raise RuntimeError("api down")
-
-    ctx = FakeContext()
-    summarizer = ContextSummarizer(ctx, llm_call=boom)
-    asyncio.run(summarizer._maybe_summarize())
-
-    assert summarizer.compactions == 0
-    assert len(ctx.messages) == 30  # untouched
 
 
 # ---------------------------------------------------------------- memory injection

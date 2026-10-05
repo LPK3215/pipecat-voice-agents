@@ -84,3 +84,32 @@ def test_toggle_sentinels(monkeypatch):
         assert settings.tools_enabled(off) is False
     assert settings.thinking_disabled("1") is True
     assert settings.tools_enabled("1") is True
+
+
+# ---------------------------------------------------------------- summarization
+def test_summarization_config_carries_our_thresholds():
+    """Auto-summarization is the framework's job now; we only supply the thresholds."""
+    cfg = settings.build_summarization_config()
+    assert cfg.max_unsummarized_messages == settings.DEFAULT_SUMMARY_MAX_MESSAGES
+    assert cfg.max_context_tokens == settings.DEFAULT_SUMMARY_MAX_TOKENS
+
+
+def test_assistant_aggregator_accepts_the_summarization_config():
+    """The framework builds the summarizer inside the assistant aggregator, so a wrong
+    parameter name or an incompatible config would only show up at runtime -- pin it here."""
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.processors.aggregators.llm_response_universal import (
+        LLMAssistantAggregatorParams,
+        LLMContextAggregatorPair,
+        LLMUserAggregatorParams,
+    )
+
+    user_agg, assistant_agg = LLMContextAggregatorPair(
+        LLMContext(),
+        user_params=LLMUserAggregatorParams(),
+        assistant_params=LLMAssistantAggregatorParams(
+            enable_auto_context_summarization=True,
+            auto_context_summarization_config=settings.build_summarization_config(),
+        ),
+    )
+    assert user_agg is not None and assistant_agg is not None

@@ -130,6 +130,7 @@ server/
 ├── live_asr_bench.py   # 真实链路 ASR 基准：经 Opus 编解码，结论更可信
 ├── kb_eval.py          # 知识库检索质量评测：扫分块 / 重排 / 候选池（第二阶段用）
 ├── verify_tools.py     # 工具调用自检（只测后端）+ --repeat 成功率统计
+├── verify_summarize.py # 上下文摘要自检：撑过阈值，验证框架真的触发压缩
 ├── prewarm.py          # 预热本地模型（首次运行前跑一次，避免首个会话卡在下载）
 └── README.md / HANDBOOK.md / HANDBOOK-02.md / TOOL_TESTS.md   # 文档（本文即 HANDBOOK.md）
 ```
@@ -146,7 +147,6 @@ server/
 ├── knowledge.py        # 知识库：文档切块 + 向量检索
 ├── flows.py            # 显式编排：多步工具链（顺序由代码保证）
 ├── guards.py           # 可信性护栏：谎报执行检测 + 强制纠正
-├── summarize.py        # 上下文摘要（超阈值压缩历史）
 └── tests/              # pytest 单元测试（秒级、不联网）
 
 ../ ingest_docs.py      # 知识库写入侧（灌文档）
@@ -268,6 +268,7 @@ server/
 | 要下最终结论 | `live_asr_bench.py`（真实链路） |
 | 端到端是否真的通 | `audio_probe.py`（**唯一覆盖 VAD 与 STT 的探针**） |
 | 工具调用是否可用 | `verify_tools.py`（含 `--repeat N` 成功率统计） |
+| 上下文摘要是否真的触发 | `verify_summarize.py`（把上下文撑过阈值，等框架的压缩回调） |
 | 调知识库检索质量 | `kb_eval.py`（真实文档语料 + 手写用例，扫分块/重排参数） |
 
 > **重要教训**：`asr_bench.py`（离线）比 `live_asr_bench.py`（真实链路）**偏乐观**。
