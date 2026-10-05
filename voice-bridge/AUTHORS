@@ -1,0 +1,18 @@
+# Authors
+
+## voice-bridge（本分支）
+
+- **cnb.lpk**
+  - 仓库：<https://cnb.cool/lpk3215/pipecat-ai-test>
+  - 贡献：分支定位、语音能力实验、`voice-docs/`、`docs/`、本分支文档（`README` 顶部说明、`CONTRIBUTING.md`、`FAQ.md`）
+
+## 上游：Open WebUI
+
+本分支基于 **Open WebUI `v0.11.4`**：
+
+- **Timothy Jaeryang Baek** (@tjbck) 及全体 Open WebUI 贡献者
+- 项目主页：<https://github.com/open-webui/open-webui>
+- 官网 / 文档：<https://openwebui.com/> ｜ <https://docs.openwebui.com/>
+
+> 本文件仅用于**致谢与归属**，不改变任何许可证条款。
+> 完整授权信息见 [`LICENSE`](./LICENSE) / [`LICENSE_NOTICE`](./LICENSE_NOTICE) / [`LICENSE_HISTORY`](./LICENSE_HISTORY)。
