@@ -91,8 +91,8 @@
 	onMount(async () => {
 		playbackRate = $settings.audio?.tts?.playbackRate ?? 1;
 		conversationMode = $settings.conversationMode ?? false;
-		speechAutoSend = $settings.speechAutoSend ?? false;
-		responseAutoPlayback = $settings.responseAutoPlayback ?? false;
+		speechAutoSend = $settings.speechAutoSend ?? true;
+		responseAutoPlayback = $settings.responseAutoPlayback ?? true;
 
 		STTEngine = $settings?.audio?.stt?.engine ?? '';
 		STTLanguage = $settings?.audio?.stt?.language ?? '';

@@ -1751,14 +1751,14 @@
 								await tick();
 								focus({ preventScroll: true });
 
-								if ($settings?.speechAutoSend ?? false) {
+								if ($settings?.speechAutoSend ?? true) {
 									dispatch('submit', prompt);
 								}
 							}}
 						/>
 					</div>
 					<form
-						class="w-full flex flex-col gap-1.5 {recording ? 'hidden' : ''}"
+						class="w-full flex flex-col gap-1.5"
 						on:submit|preventDefault={() => {
 							dispatch('submit', prompt);
 						}}
