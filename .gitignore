@@ -1,8 +1,8 @@
-# ---- 垃圾/临时目录 ----
+# ---- Trash / temporary directories ----
 .Trash-0/
 .trash/
 
-# ---- 密钥：绝不允许提交 ----
+# ---- Secrets: never commit these ----
 .env
 *.env
 !*.env.example
@@ -15,18 +15,48 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
-# ---- 运行时产物 ----
+# ---- Runtime artifacts ----
 *.wav
 *.onnx
 
-# ---- 运行日志 ----
-# 只忽略 .log，保留 logs/ANALYSIS.md 这类分析报告。
-# 曾误把 44 个 .log 提交进版本库，已用 git rm --cached 移出。
+# ---- Runtime logs ----
+# Only *.log is ignored, so analysis reports such as logs/ANALYSIS.md stay tracked.
+# 44 *.log files were once committed by mistake and had to be removed with git rm --cached.
 *.log
 
-# SQLite 本地持久化（运行时生成，含会话内容，不入库）
+# SQLite local persistence (generated at run time, contains conversation content, never committed)
 *.db
 *.db-journal
-# 含中间斜杠的写法会被锚定到仓库根，匹配不到 pipecat-quickstart/server/data/；
-# 用 **/ 显式匹配任意层级。
+# A pattern containing an interior slash is anchored to the repository root and would not match
+# pipecat-quickstart/server/data/; use **/ to match at any depth.
 **/server/data/
+
+# ---- Node / SvelteKit (pipecat-open-webui frontend) ----
+node_modules/
+build/
+dist/
+.svelte-kit/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# ---- IDE / editors ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Operating systems ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ---- Trash (this environment) ----
+.Trash-*/
+
+# ---- Coverage / general caches ----
+.coverage
+htmlcov/
+.cache/

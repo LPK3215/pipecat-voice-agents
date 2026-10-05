@@ -1,0 +1,41 @@
+适用范围（Scope）
+================
+
+本仓库是一个多项目仓库（monorepo），**各部分许可证不同**，本文件只覆盖「仓库自有内容」。
+请先确认你要用的是哪一部分：
+
+| 范围 | 许可证 |
+|---|---|
+| 仓库自有文件（本 `LICENSE`、`README.md`、`CONTRIBUTING.md`、`CHANGELOG.md`、`FAQ.md`、`AUTHORS`、`.gitignore`、`.gitattributes`、`research/pipecat-项目调研.md` 等） | **MIT**（即本文件正文） |
+| [`pipecat-quickstart/`](pipecat-quickstart/) | **MIT**（见其 `LICENSE`；其中 `server/bot.py` 顶部保留上游 **BSD 2-Clause** 声明） |
+| [`voice-module-dify/`](voice-module-dify/) | **MIT**（见其 `LICENSE`） |
+| [`pipecat-open-webui/`](pipecat-open-webui/) | **不适用本文件** —— 上游代码沿用 **Open WebUI License**（含品牌保留条款），本分支新增的独立文件为 **MIT**，见其 `LICENSE` 与 `LICENSE-SUPPLEMENT.md` |
+
+要点：
+
+- 本文件**不覆盖**任何自带 `LICENSE` 的子目录；各子目录以其自身 `LICENSE` 为准。
+- 本文件**不覆盖** `pipecat-open-webui/`，其中 **"Open WebUI" 品牌不得被更改、移除、遮挡或替换**。
+
+---
+
+MIT License
+
+Copyright (c) 2026 cnb.lpk
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

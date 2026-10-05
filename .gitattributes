@@ -1,0 +1,35 @@
+# Repository-level line-ending and binary rules.
+# Note: each of the three projects also has its own .gitattributes; inside a project, that file applies.
+
+# Text files use LF in the repository; checkout may convert to CRLF on Windows.
+* text=auto eol=lf
+
+# Explicit text types (kept as LF regardless of platform).
+*.py     text
+*.md     text
+*.txt    text
+*.toml   text
+*.json   text
+*.yml    text
+*.yaml   text
+*.js     text
+*.ts     text
+*.svelte text
+*.css    text
+*.html   text
+*.svg    text
+*.sh     text eol=lf
+.gitignore      text
+.gitattributes  text
+
+# Binary / generated artifacts: never diff or merge these.
+*.wav   binary
+*.onnx  binary
+*.db    binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+
+# Keep lock files out of the language statistics.
+*.lock  linguist-generated=true

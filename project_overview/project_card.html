@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pipecat-ai-test · Project Card</title>
+<style>
+  :root{
+    --c1:#22c55e; --c2:#3b82f6; --c3:#a855f7;
+    --card:rgba(255,255,255,.045); --line:rgba(255,255,255,.12);
+    --text:#e6edf7; --muted:#9fb0c7;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#05080f; color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:28px 12px 96px;
+  }
+
+  #card-content{
+    width:800px; max-width:100%;
+    background:linear-gradient(160deg,#0b1224 0%,#0a1020 45%,#0d0f22 100%);
+    border:1px solid var(--line); border-radius:20px; overflow:hidden;
+  }
+
+  /* Hero */
+  .hero{
+    position:relative; padding:38px 40px 30px;
+    background:
+      radial-gradient(90% 120% at 6% 0%, rgba(34,197,94,.22), transparent 58%),
+      radial-gradient(90% 120% at 96% 6%, rgba(168,85,247,.24), transparent 58%),
+      linear-gradient(120deg, rgba(59,130,246,.18), transparent 62%);
+    border-bottom:1px solid var(--line);
+  }
+  .kicker{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;letter-spacing:.18em;color:#7fd4a2;font-weight:600;margin-bottom:12px;}
+  h1{
+    margin:0 0 8px; font-size:40px; line-height:1.1; letter-spacing:-.03em; font-weight:800;
+    background:linear-gradient(115deg,#22c55e,#3b82f6 55%,#a855f7);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .sub{margin:0;font-size:16px;font-weight:600;color:#dbe6f5;}
+  .ver{
+    position:absolute; top:34px; right:40px;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; font-weight:600; color:#cbd5e1;
+    padding:5px 11px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,.05);
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+  .chip{font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.045);color:#c7d5e8;}
+
+  /* Generic section */
+  .sec{padding:24px 40px;border-top:1px solid var(--line);}
+  .sec:first-of-type{border-top:0;}
+  .sec-title{font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--muted);margin:0 0 12px;text-transform:uppercase;}
+  p{margin:0 0 8px;font-size:13.5px;line-height:1.75;color:#c9d6e8;}
+  p strong{color:#fff;}
+
+  /* Architecture */
+  .arch{width:100%;height:auto;display:block;}
+
+  /* Tech stack */
+  .stack{display:flex;flex-wrap:wrap;gap:8px;}
+  .stack .tag{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.045);color:#c7d5e8;}
+
+  /* Highlights */
+  .highlights{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px;}
+  .highlights div{position:relative;padding-left:16px;font-size:13px;color:#c9d6e8;line-height:1.7;}
+  .highlights div::before{content:"";position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:50%;background:linear-gradient(135deg,var(--c1),var(--c2));}
+
+  /* Metrics */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .metric{padding:14px 12px;border-radius:14px;border:1px solid var(--line);background:var(--card);}
+  .metric .num{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1;
+    background:linear-gradient(120deg,#22c55e,#3b82f6,#a855f7);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .metric .num small{font-size:13px;font-weight:700;}
+  .metric .lb{font-size:10.5px;color:var(--muted);margin-top:5px;line-height:1.5;}
+
+  /* Quick start */
+  .cmd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.9;color:#d7e3f4;
+    background:rgba(0,0,0,.42);border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow-x:auto;white-space:pre;}
+
+  /* License */
+  .license{padding:18px 40px 26px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
+    background:rgba(255,255,255,.02);}
+  .license b{font-size:12.5px;color:#dbe6f5;font-weight:600;}
+  .license span{font-size:11px;color:var(--muted);}
+
+  /* Action bar (outside #card-content, so it is never captured in the export) */
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:9;
+    display:flex;gap:10px;justify-content:center;padding:14px;
+    background:rgba(5,8,15,.86);border-top:1px solid var(--line);backdrop-filter:blur(10px);
+  }
+  .btn{font-size:13px;font-weight:700;padding:11px 20px;border-radius:10px;cursor:pointer;border:1px solid var(--line);
+    background:rgba(255,255,255,.06);color:#e6edf7;text-decoration:none;font-family:inherit;
+    transition:transform .15s,border-color .15s;}
+  .btn:hover{transform:translateY(-1px);border-color:var(--c2);}
+  .btn.primary{border-color:transparent;color:#fff;background:linear-gradient(120deg,#22c55e,#3b82f6 55%,#a855f7);}
+  .toast{
+    position:fixed;left:50%;bottom:84px;transform:translate(-50%,10px);
+    background:#0f1b2e;border:1px solid var(--line);color:#dbe6f5;font-size:12.5px;
+    padding:9px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:12;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+  .hint{font-size:11.5px;color:#7c8ba3;text-align:center;margin-top:14px;width:800px;max-width:100%;}
+</style>
+</head>
+<body>
+
+<main id="card-content">
+  <!-- Hero -->
+  <section class="hero">
+    <div class="kicker">MONOREPO · THREE VOICE PROJECTS</div>
+    <h1>pipecat-ai-test</h1>
+    <p class="sub">One repository, three voice projects — answering three different questions.</p>
+    <div class="ver">① v0.1.0 · ② v0.0.1 · ③ v0.11.4</div>
+    <div class="chips">
+      <span class="chip">Pipecat 1.12+</span>
+      <span class="chip">Real-time voice agents</span>
+      <span class="chip">Local STT &amp; TTS</span>
+      <span class="chip">Multi-project repo</span>
+    </div>
+  </section>
+
+  <!-- Value proposition -->
+  <section class="sec">
+    <p class="sec-title">What it solves</p>
+    <p>The same real-time voice capability, built three times under three different host relationships: <strong>you own it</strong>, <strong>it calls out to a platform</strong>, and <strong>it is called by a host</strong>.</p>
+    <p>Not another voice demo — end-of-turn detection, interruption, speaking while receiving, filling silence while the platform is slow, and false-claim detection are all first-class concerns, each backed by a re-runnable probe or unit test.</p>
+  </section>
+
+  <!-- Architecture (condensed) -->
+  <section class="sec">
+    <p class="sec-title">Three projects · two opposite directions</p>
+    <svg class="arch" viewBox="0 0 720 190" role="img" aria-label="The three projects and their call directions">
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L7,3 L0,6 z" fill="#7c8ba3"/>
+        </marker>
+      </defs>
+
+      <rect x="6" y="18" width="216" height="112" rx="14" fill="rgba(34,197,94,.10)" stroke="rgba(34,197,94,.45)" stroke-width="1.6"/>
+      <rect x="6" y="18" width="216" height="5" rx="3" fill="#22c55e"/>
+      <text x="114" y="52" text-anchor="middle" font-size="13.5" font-weight="700" fill="#4ade80" font-family="ui-monospace,Menlo,monospace">pipecat-quickstart</text>
+      <text x="114" y="76" text-anchor="middle" font-size="12" fill="#c9d6e8">Full stack · self-contained</text>
+      <text x="114" y="100" text-anchor="middle" font-size="11.5" fill="#9fb0c7">Voice is the product itself</text>
+
+      <rect x="252" y="18" width="216" height="112" rx="14" fill="rgba(59,130,246,.10)" stroke="rgba(59,130,246,.45)" stroke-width="1.6"/>
+      <rect x="252" y="18" width="216" height="5" rx="3" fill="#3b82f6"/>
+      <text x="360" y="52" text-anchor="middle" font-size="13.5" font-weight="700" fill="#60a5fa" font-family="ui-monospace,Menlo,monospace">voice-module-dify</text>
+      <text x="360" y="76" text-anchor="middle" font-size="12" fill="#c9d6e8">Add-on · me -&gt; platform</text>
+      <text x="360" y="100" text-anchor="middle" font-size="11.5" fill="#9fb0c7">Calls an external platform</text>
+
+      <rect x="498" y="18" width="216" height="112" rx="14" fill="rgba(168,85,247,.11)" stroke="rgba(168,85,247,.45)" stroke-width="1.6"/>
+      <rect x="498" y="18" width="216" height="5" rx="3" fill="#a855f7"/>
+      <text x="606" y="52" text-anchor="middle" font-size="13.5" font-weight="700" fill="#c084fc" font-family="ui-monospace,Menlo,monospace">pipecat-open-webui</text>
+      <text x="606" y="76" text-anchor="middle" font-size="12" fill="#c9d6e8">Symbiont · host -&gt; me</text>
+      <text x="606" y="100" text-anchor="middle" font-size="11.5" fill="#9fb0c7">Called by an existing host</text>
+
+      <line x1="226" y1="74" x2="248" y2="74" stroke="#7c8ba3" stroke-width="1.6" marker-end="url(#ar)"/>
+      <line x1="472" y1="74" x2="494" y2="74" stroke="#7c8ba3" stroke-width="1.6" marker-end="url(#ar)"/>
+
+      <path d="M474 152 L492 152" stroke="#7c8ba3" stroke-width="1.6" marker-end="url(#ar)"/>
+      <path d="M492 168 L474 168" stroke="#7c8ba3" stroke-width="1.6" marker-end="url(#ar)"/>
+      <text x="483" y="186" text-anchor="middle" font-size="10.5" fill="#7c8ba3">opposite</text>
+    </svg>
+  </section>
+
+  <!-- Tech stack -->
+  <section class="sec">
+    <p class="sec-title">Tech stack</p>
+    <div class="stack">
+      <span class="tag">Python</span>
+      <span class="tag">Pipecat 1.12+</span>
+      <span class="tag">FastAPI</span>
+      <span class="tag">SvelteKit</span>
+      <span class="tag">SQLite</span>
+      <span class="tag">Whisper / SenseVoice</span>
+      <span class="tag">Piper</span>
+      <span class="tag">Dify</span>
+    </div>
+  </section>
+
+  <!-- Highlights -->
+  <section class="sec">
+    <p class="sec-title">Highlights</p>
+    <div class="highlights">
+      <div>One pipeline, everything included</div>
+      <div>Voice layer yours, thinking theirs</div>
+      <div>End-of-turn · interruption · streaming</div>
+      <div>Tools · memory · RAG · orchestration</div>
+      <div>False claims of execution get caught</div>
+      <div>Every claim has a re-runnable probe</div>
+    </div>
+  </section>
+
+  <!-- Key metrics -->
+  <section class="sec">
+    <p class="sec-title">Key metrics (measured)</p>
+    <div class="metrics">
+      <div class="metric"><div class="num">1721<small>ms</small></div><div class="lb">① end-to-end "starts speaking"<br>baseline = user finished</div></div>
+      <div class="metric"><div class="num">10.2<small>%</small></div><div class="lb">① SenseVoice char. error rate<br>default STT engine</div></div>
+      <div class="metric"><div class="num">76<small>ms</small></div><div class="lb">① Piper first audio chunk<br>local TTS</div></div>
+      <div class="metric"><div class="num">1334<small>ms</small></div><div class="lb">② request -&gt; platform token<br>self-hosted Dify</div></div>
+    </div>
+  </section>
+
+  <!-- Quick start -->
+  <section class="sec">
+    <p class="sec-title">Quick start</p>
+    <div class="cmd">cd pipecat-quickstart/server
+uv sync --extra sensevoice
+cp .env.example .env   # only MODELSCOPE_API_KEY is required
+uv run bot.py          # http://localhost:7860/client</div>
+  </section>
+
+  <!-- License -->
+  <section class="license">
+    <b>Root &amp; ①② MIT ｜ ③ Open WebUI License + MIT</b>
+    <span>© 2026 cnb.lpk · cnb.cool/lpk3215/pipecat-ai-test</span>
+  </section>
+</main>
+
+<!-- Action bar: outside #card-content, so it is never captured in the exported image -->
+<div class="actions">
+  <button class="btn primary" id="exportBtn" type="button">Export as image</button>
+  <a class="btn" href="./index.html">Open full version</a>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite">Saved</div>
+<p class="hint">The file is named <code>pipecat-ai-test_card_YYYYMMDD.png</code>. If the export fails, use your browser's or system's screenshot tool instead.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1/dist/html2canvas.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var exportBtn = document.getElementById('exportBtn');
+  var toast = document.getElementById('toast');
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 1800);
+  }
+
+  function ymd() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return '' + d.getFullYear() + m + day;
+  }
+
+  // Warm-up: let html2canvas parse the styles ahead of time so the export feels instant
+  function warmUp() {
+    if (typeof html2canvas === 'undefined') return;
+    var ghost = document.createElement('div');
+    ghost.style.cssText = 'position:fixed;left:-9999px;top:0;width:12px;height:12px;background:#000;';
+    document.body.appendChild(ghost);
+    html2canvas(ghost, { backgroundColor: null }).then(function () {
+      document.body.removeChild(ghost);
+    }).catch(function () {
+      if (ghost.parentNode) document.body.removeChild(ghost);
+    });
+  }
+
+  window.addEventListener('load', function () {
+    if (typeof html2canvas === 'undefined') {
+      showToast('html2canvas not loaded — please use a screenshot tool');
+      return;
+    }
+    warmUp();
+  });
+
+  exportBtn.addEventListener('click', function () {
+    if (typeof html2canvas === 'undefined') {
+      alert('html2canvas is not loaded (possibly offline). Please use your browser or system screenshot tool.');
+      return;
+    }
+
+    var node = document.getElementById('card-content');
+    var oldLabel = exportBtn.textContent;
+    exportBtn.disabled = true;
+    exportBtn.textContent = 'Exporting…';
+
+    html2canvas(node, {
+      scrollY: -window.scrollY,
+      useCORS: true,
+      scale: 2,
+      backgroundColor: '#0b1224',
+      windowWidth: node.scrollWidth
+    }).then(function (canvas) {
+      var link = document.createElement('a');
+      link.download = 'pipecat-ai-test_card_' + ymd() + '.png';
+      link.href = canvas.toDataURL('image/png');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Saved');
+    }).catch(function (err) {
+      console.error('[card] export failed', err);
+      alert('Export failed. Please use your browser or system screenshot tool instead.');
+    }).then(function () {
+      exportBtn.disabled = false;
+      exportBtn.textContent = oldLabel;
+    });
+  });
+})();
+</script>
+
+<!-- Generated: 2026-10-06 · generated by AI (CodeBuddy) · project card prompt (step 4)
+     Data source: project_overview/index.html (values inherited verbatim, not rounded or rewritten)
+-->
+</body>
+</html>
