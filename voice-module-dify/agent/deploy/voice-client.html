@@ -144,11 +144,20 @@
 
 <script>
 (() => {
-  // The page is served from the platform's origin; the voice module listens on its own port.
-  // CNB's preview pattern is "<prefix>-<port>.cnb.run", so swap the port unless overridden.
+  // The page is hosted next to the platform, but the voice module listens on its own port.
+  // Two hosting shapes, and getting this wrong means "连接已断开" with no clue why:
+  //   preview : "abc-8080.cnb.run" -> the port is inside the hostname, so swap it
+  //   local   : "localhost:8080"   -> keep the host, use the module's port explicitly
+  // (Measured: using the old rule on localhost produced "ws://localhost/" -- port 80, never
+  //  the module. The IDE forwards the port for you, but the page still has to name it.)
+  const MODULE_PORT = '8090';
   const override = new URLSearchParams(location.search).get('ws');
-  const host = location.hostname.replace(/-\d+\./, '-8090.');
-  const WS_URL = override || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/`;
+  function moduleWsUrl() {
+    const swapped = location.hostname.replace(/-\d+\./, `-${MODULE_PORT}.`);
+    const host = swapped !== location.hostname ? swapped : `${location.hostname}:${MODULE_PORT}`;
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/`;
+  }
+  const WS_URL = override || moduleWsUrl();
 
   const el = (id) => document.getElementById(id);
   const dot = el('dot'), statusText = el('statusText'), transcript = el('transcript');
