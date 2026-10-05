@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Demonstration business rows, deliberately kept OUT of the code (server/memory.py only",
+    "loads them). Replace this file -- or point DEMO_DATA_FILE somewhere else -- to change what",
+    "the tools answer; no code change is involved. Once real ingestion runs, drop this file and",
+    "the loader becomes a no-op.",
+    "Keys must be tables from memory.TABLE_COLUMNS and fields must be columns of that table."
+  ],
+  "metrics": [
+    {"name": "服务可用性", "value": 99.95, "unit": "%", "note": "最近 24 小时"},
+    {"name": "平均响应延迟", "value": 187.0, "unit": "ms", "note": "最近 1 小时"},
+    {"name": "错误率", "value": 0.12, "unit": "%", "note": "最近 1 小时"},
+    {"name": "活跃用户数", "value": 3421.0, "unit": "人", "note": "当前在线"}
+  ],
+  "hosts": [
+    {"name": "web-01", "ip": "10.0.1.11", "region": "华东", "latency_ms": 92.0, "cpu_pct": 41.0, "status": "running"},
+    {"name": "web-02", "ip": "10.0.1.12", "region": "华东", "latency_ms": 431.0, "cpu_pct": 88.5, "status": "degraded"},
+    {"name": "db-01", "ip": "10.0.2.21", "region": "华北", "latency_ms": 156.0, "cpu_pct": 63.2, "status": "running"}
+  ],
+  "alerts": [
+    {"host": "web-02", "level": "critical", "message": "CPU 使用率持续超过 85%", "status": "firing"},
+    {"host": "web-02", "level": "warning", "message": "接口 P99 延迟超过 400ms", "status": "firing"},
+    {"host": "db-01", "level": "warning", "message": "磁盘剩余空间不足 20%", "status": "resolved"}
+  ],
+  "orders": [
+    {"order_id": "A20261001001", "customer": "张三", "status": "已发货", "amount": 299.0},
+    {"order_id": "A20261001002", "customer": "李四", "status": "待发货", "amount": 88.5},
+    {"order_id": "A20261001003", "customer": "王五", "status": "已完成", "amount": 1299.0}
+  ]
+}

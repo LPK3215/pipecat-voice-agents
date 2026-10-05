@@ -25,8 +25,11 @@ units) are functional too. Do not translate them.
 from __future__ import annotations
 
 import ast
+import json
 import operator
+import os
 import time
+from pathlib import Path
 
 from loguru import logger
 from pipecat.adapters.schemas.function_schema import FunctionSchema
@@ -41,36 +44,60 @@ from pipecat.services.llm_service import (
 _RESULT_PROPS = FunctionCallResultProperties(run_llm=True)
 
 
-# ---------------------------------------------------------------- weather (fake data)
+# ---------------------------------------------------------------- demo data (from a file)
+#
+# The demo content -- which cities exist, what their weather is, which devices exist -- lives in
+# ``sample-data/sample-tools.json``, not in this module. Data belongs to the data layer, so
+# replacing it is a file change rather than a code change; a real deployment swaps these tools
+# for ones that query an actual service. ``SAMPLE_TOOLS_DATA`` overrides the path.
+DEMO_DATA_FILE = Path(
+    os.getenv(
+        "SAMPLE_TOOLS_DATA",
+        str(Path(__file__).resolve().parent.parent / "sample-data" / "sample-tools.json"),
+    )
+)
+
+_DATA: dict | None = None
 
 
-_WEATHER = {
-    "北京": (24, "晴"),
-    "上海": (27, "多云"),
-    "杭州": (29, "小雨"),
-    "深圳": (31, "阴"),
-    "广州": (30, "雷阵雨"),
-    "成都": (22, "阴"),
-}
+def load_demo_data(force: bool = False) -> dict:
+    """Return the demo tool data (cached). A missing file yields empty data, never a crash."""
+    global _DATA
+    if _DATA is None or force:
+        try:
+            _DATA = json.loads(DEMO_DATA_FILE.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            logger.warning(f"[SAMPLE] demo data file not found: {DEMO_DATA_FILE}")
+            _DATA = {}
+    return _DATA
+
+
+def _weather_table() -> dict:
+    return load_demo_data().get("weather", {})
+
+
+# ---------------------------------------------------------------- weather (data from the file)
 
 
 async def get_weather(params: FunctionCallParams) -> None:
     """Look up weather. Data is hard-coded locally; it only validates the call path."""
     city = str((params.arguments or {}).get("city", "")).strip()
     key = city.rstrip("市")
+    weather = _weather_table()
 
-    if key not in _WEATHER:
+    if key not in weather:
         await params.result_callback(
             {
                 "found": False,
                 "spoken": f"我还没法查{key or '这个城市'}的天气",
-                "supported_cities": list(_WEATHER),
+                "supported_cities": list(weather),
             },
             properties=_RESULT_PROPS,
         )
         return
 
-    temp, cond = _WEATHER[key]
+    entry = weather[key]
+    temp, cond = entry["temperature_c"], entry["condition"]
     await params.result_callback(
         {
             "found": True,
@@ -239,58 +266,72 @@ CONVERT_SCHEMA = FunctionSchema(
 )
 
 
-# ---------------------------------------------------------------- device control (fake)
+# ---------------------------------------------------------------- device control (data-driven)
+#
+# State is kept **per session**, for the same reason reminders are: a module-level dict would be
+# shared by every conversation (HANDBOOK-02 section 7, item 10). The device list itself comes
+# from the data file, so adding a device is a data edit, not a code edit.
+
+_DEVICE_STATE: dict[str, dict[str, str]] = {}
 
 
-_DEVICES = ["客厅灯", "卧室灯", "空调", "加湿器"]
-_DEVICE_STATE: dict[str, str] = {d: "关闭" for d in _DEVICES}
-
-
-async def control_device(params: FunctionCallParams) -> None:
-    """Toggle a device. **Controls nothing real**, only changes in-memory state.
-
-    Deliberately kept as a "has side effects but is safe" tool: useful for observing
-    whether the model rushes to act when the user merely mentions something in passing.
-    """
-    args = params.arguments or {}
-    device = str(args.get("device", "")).strip()
-    action = str(args.get("action", "")).strip().lower()
-
-    if device not in _DEVICE_STATE:
-        await params.result_callback(
-            {"ok": False, "spoken": f"没有找到{device or '这个设备'}",
-             "available_devices": _DEVICES},
-            properties=_RESULT_PROPS,
-        )
-        return
-
-    target = "开启" if action in ("on", "开启", "打开", "开") else "关闭"
-    _DEVICE_STATE[device] = target
-    await params.result_callback(
-        {
-            "ok": True,
-            "device": device,
-            "state": target,
-            "spoken": f"已经把{device}{target}了",
-        },
-        properties=_RESULT_PROPS,
+def _device_state(session_id: str) -> dict[str, str]:
+    """On/off state for one session, initialised from the data file's device list."""
+    return _DEVICE_STATE.setdefault(
+        session_id, {name: "关闭" for name in load_demo_data().get("devices", [])}
     )
 
 
-DEVICE_SCHEMA = FunctionSchema(
-    name="control_device",
-    description=(
-        "开关家里的设备（客厅灯、卧室灯、空调、加湿器）。"
-        "**只有用户明确要求执行动作时才调用**，例如「把客厅灯关掉」「打开空调」。"
-        "如果用户只是在描述情况或询问，不要调用。"
-    ),
-    properties={
-        "device": {"type": "string", "description": "设备名，如「客厅灯」"},
-        "action": {"type": "string", "enum": ["on", "off"], "description": "开或关"},
-    },
-    required=["device", "action"],
-    handler=control_device,
-)
+def device_schema(session_id: str) -> FunctionSchema:
+    """Build the ``control_device`` schema bound to a single session."""
+
+    async def control_device(params: FunctionCallParams) -> None:
+        """Toggle a device. **Controls nothing real**, only changes in-memory state.
+
+        Deliberately kept as a "has side effects but is safe" tool: useful for observing
+        whether the model rushes to act when the user merely mentions something in passing.
+        """
+        state = _device_state(session_id)
+        args = params.arguments or {}
+        device = str(args.get("device", "")).strip()
+        action = str(args.get("action", "")).strip().lower()
+
+        if device not in state:
+            await params.result_callback(
+                {"ok": False, "spoken": f"没有找到{device or '这个设备'}",
+                 "available_devices": list(state)},
+                properties=_RESULT_PROPS,
+            )
+            return
+
+        target = "开启" if action in ("on", "开启", "打开", "开") else "关闭"
+        state[device] = target
+        await params.result_callback(
+            {
+                "ok": True,
+                "device": device,
+                "state": target,
+                "spoken": f"已经把{device}{target}了",
+            },
+            properties=_RESULT_PROPS,
+        )
+
+    # The prompt's device list is read from the data file, so it cannot drift from the data.
+    devices = "、".join(_device_state(session_id)) or "（数据文件未配置设备）"
+    return FunctionSchema(
+        name="control_device",
+        description=(
+            f"开关家里的设备（{devices}）。"
+            "**只有用户明确要求执行动作时才调用**，例如「把客厅灯关掉」「打开空调」。"
+            "如果用户只是在描述情况或询问，不要调用。"
+        ),
+        properties={
+            "device": {"type": "string", "description": "设备名，如「客厅灯」"},
+            "action": {"type": "string", "enum": ["on", "off"], "description": "开或关"},
+        },
+        required=["device", "action"],
+        handler=control_device,
+    )
 
 
 # ---------------------------------------------------------------- notification (fake send)
@@ -402,12 +443,11 @@ SAMPLE_SCHEMAS: list[FunctionSchema] = [
     WEATHER_SCHEMA,
     CALC_SCHEMA,
     CONVERT_SCHEMA,
-    DEVICE_SCHEMA,
     NOTIFY_SCHEMA,
 ]
 
 
 def sample_schemas(session_id: str) -> list[FunctionSchema]:
-    """All sample tools for one session: the shared stateless set plus this session's
-    ``set_reminder`` (the only stateful one -- see ``reminder_schema``)."""
-    return [*SAMPLE_SCHEMAS, reminder_schema(session_id)]
+    """All sample tools for one session: the shared stateless set plus this session's stateful
+    ones (``set_reminder`` and ``control_device`` -- see their schema factories)."""
+    return [*SAMPLE_SCHEMAS, reminder_schema(session_id), device_schema(session_id)]

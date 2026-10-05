@@ -10,9 +10,12 @@ NOTE: the Chinese strings below are test data / expected spoken output -- do not
 """
 
 import asyncio
+import json
+from pathlib import Path
 
 import pytest
 
+import memory
 import sample_tools
 import tools
 
@@ -50,7 +53,7 @@ def test_every_handler_passes_result_props():
         (sample_tools.get_weather, {"city": "杭州"}),
         (sample_tools.calculate, {"expression": "1+1"}),
         (sample_tools.convert_unit, {"value": 1, "from_unit": "米", "to_unit": "厘米"}),
-        (sample_tools.control_device, {"device": "空调", "action": "on"}),
+        (sample_tools.device_schema("dev-test").handler, {"device": "空调", "action": "on"}),
     ]
     for handler, args in cases:
         p = run(handler, args)
@@ -97,8 +100,63 @@ def test_get_weather_hit_and_miss():
 
 
 def test_control_device():
-    p = run(sample_tools.control_device, {"device": "客厅灯", "action": "off"})
+    p = run(sample_tools.device_schema("dev-test").handler, {"device": "客厅灯", "action": "off"})
     assert p.result["ok"] is True and p.result["state"] == "关闭"
+
+
+# ---------------------------------------------------------------- data lives in the data layer
+def test_demo_rows_come_from_the_data_file_not_the_code():
+    """Architecture guard: business rows belong to the data layer. A row re-appearing in the
+    .py sources is exactly the anti-pattern this project must avoid (fake data hard-coded in
+    the code while pretending to be a data layer)."""
+    data = json.loads(memory.DEMO_DATA_FILE.read_text(encoding="utf-8"))
+    sources = Path(memory.__file__).read_text(encoding="utf-8") + Path(
+        sample_tools.__file__
+    ).read_text(encoding="utf-8")
+    values = [row["order_id"] for row in data["orders"]]
+    values += [row["name"] for row in data["hosts"]]
+    assert values
+    for value in values:
+        assert value not in sources, (
+            f"{value!r} is hard-coded in the code; it belongs in {memory.DEMO_DATA_FILE.name}"
+        )
+
+
+def test_swapping_the_data_file_changes_answers_without_code_changes(tmp_path, monkeypatch):
+    """The point of the separation: point the loader at a different file and the answers change
+    with **no code edit** -- that is what makes the code and the data independent."""
+    alt = tmp_path / "other-tools.json"
+    alt.write_text(
+        json.dumps(
+            {
+                "weather": {"火星": {"temperature_c": -60, "condition": "沙尘"}},
+                "devices": ["月球车"],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sample_tools, "DEMO_DATA_FILE", alt)
+    sample_tools.load_demo_data(force=True)
+
+    hit = run(sample_tools.get_weather, {"city": "火星"})
+    assert hit.result["found"] is True and hit.result["temperature_c"] == -60
+    assert run(sample_tools.get_weather, {"city": "杭州"}).result["found"] is False
+
+    schema = sample_tools.device_schema("alt-session")
+    assert "月球车" in schema.description  # the prompt follows the data as well
+    assert run(schema.handler, {"device": "月球车", "action": "on"}).result["ok"] is True
+
+    monkeypatch.undo()
+    sample_tools.load_demo_data(force=True)  # back to the committed file for other tests
+
+
+def test_device_state_is_per_session():
+    """Same rule as reminders: stateful tools keep state per conversation, not per process."""
+    run(sample_tools.device_schema("dev-a").handler, {"device": "客厅灯", "action": "on"})
+    run(sample_tools.device_schema("dev-b").handler, {"device": "客厅灯", "action": "off"})
+    assert sample_tools._device_state("dev-a")["客厅灯"] == "开启"
+    assert sample_tools._device_state("dev-b")["客厅灯"] == "关闭"
 
 
 # ---------------------------------------------------------------- per-session tool state

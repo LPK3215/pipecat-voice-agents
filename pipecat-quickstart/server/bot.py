@@ -127,7 +127,7 @@ VAD_STOP_SECS_DEFAULT = VAD_STOP_SECS_OFFICIAL_DEFAULT  # official value, for hi
 # knowledge base or database at all -- so these have to be built here.
 # SQLite has zero dependencies and can be swapped later.
 memory.init_db()
-memory.seed_demo_business()  # demo business data; overwritten once real ingestion runs
+memory.seed_demo_business()  # loads demo rows from a DATA FILE, never from code; no-op with real data
 
 
 def _mask(value: str | None) -> str:

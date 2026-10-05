@@ -26,6 +26,7 @@ Chinese -- they are data and prompts for a Chinese-speaking agent.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -540,61 +541,80 @@ def schema_summary() -> str:
     return "; ".join(f"{t}({', '.join(c)})" for t, c in TABLE_COLUMNS.items())
 
 
-def seed_demo_business() -> int:
-    """Seed demo business data so the tool path can be validated without a real data source.
+# ---------------------------------------------------------------- demo data (from a file)
+#
+# Business rows are **data**, so they live in a data file (``sample-data/demo-business.json``)
+# and this module only loads them. They used to be literals right here -- which meant the
+# product path (bot.py) carried demo rows *inside the code*, so switching to real data would
+# have been a code edit instead of a file swap.
+#
+# ``DEMO_DATA_FILE`` overrides the path; a missing file is a no-op (real data is expected then).
+DEMO_DATA_FILE = Path(
+    os.getenv(
+        "DEMO_DATA_FILE",
+        str(Path(__file__).resolve().parent.parent / "sample-data" / "demo-business.json"),
+    )
+)
+
+# Which timestamp column each table takes; the data file stores business fields only.
+_TIMESTAMP_COLUMN = {
+    "metrics": "created_at",
+    "hosts": "created_at",
+    "alerts": "created_at",
+    "orders": "updated_at",
+}
+
+
+def seed_demo_business(path: Path | None = None) -> int:
+    """Load demo business rows **from a data file**, so nothing is hard-coded in the code.
 
     Deliberately **multi-table and foreign-key related** (alerts.host references
     hosts.name), because the value of "the database as a knowledge base" is precisely the
     relations: answering "which alerts does the slowest machine have" needs cross-table
     queries.
 
-    After real ingestion is wired in, the ingestion script replaces this data; the schema
-    does not change.
+    Table and column names are checked against ``TABLE_COLUMNS``, so a malformed file cannot
+    create an unexpected column. Skipped when the table already holds data (real ingestion
+    wins) or when the file is absent -- so pointing ``DEMO_DATA_FILE`` elsewhere, or deleting
+    the file, changes what the tools answer **without touching code**.
     """
+    source = path or DEMO_DATA_FILE
+    if not source.exists():
+        logger.info(f"[MEMORY] no demo data file at {source}; skipping (expected with real data)")
+        return 0
     if query_metrics(limit=1):
         return 0
 
+    data = json.loads(source.read_text(encoding="utf-8"))
     now = time.time()
-    for name, value, unit, note in [
-        ("服务可用性", 99.95, "%", "最近 24 小时"),
-        ("平均响应延迟", 187.0, "ms", "最近 1 小时"),
-        ("错误率", 0.12, "%", "最近 1 小时"),
-        ("活跃用户数", 3421.0, "人", "当前在线"),
-    ]:
-        record_metric(name, value, unit, note)
-
-    hosts = [
-        ("web-01", "10.0.1.11", "华东", 92.0, 41.0, "running"),
-        ("web-02", "10.0.1.12", "华东", 431.0, 88.5, "degraded"),
-        ("db-01", "10.0.2.21", "华北", 156.0, 63.2, "running"),
-    ]
-    alerts = [
-        ("web-02", "critical", "CPU 使用率持续超过 85%", "firing"),
-        ("web-02", "warning", "接口 P99 延迟超过 400ms", "firing"),
-        ("db-01", "warning", "磁盘剩余空间不足 20%", "resolved"),
-    ]
-    orders = [
-        ("A20261001001", "张三", "已发货", 299.0),
-        ("A20261001002", "李四", "待发货", 88.5),
-        ("A20261001003", "王五", "已完成", 1299.0),
-    ]
-
+    total = 0
     with _conn() as conn:
-        conn.executemany(
-            "INSERT OR IGNORE INTO hosts "
-            "(name, ip, region, latency_ms, cpu_pct, status, created_at) VALUES (?,?,?,?,?,?,?)",
-            [(*h, now) for h in hosts],
-        )
-        conn.executemany(
-            "INSERT INTO alerts (host, level, message, status, created_at) VALUES (?,?,?,?,?)",
-            [(*a, now) for a in alerts],
-        )
-        conn.executemany(
-            "INSERT OR IGNORE INTO orders "
-            "(order_id, customer, status, amount, updated_at) VALUES (?,?,?,?,?)",
-            [(*o, now) for o in orders],
-        )
+        for table, rows in data.items():
+            if table.startswith("_"):  # "_comment" in the data file
+                continue
+            columns = TABLE_COLUMNS.get(table)
+            if not columns:
+                logger.warning(f"[MEMORY] demo data: unknown table {table!r}; skipped")
+                continue
+            for row in rows:
+                unknown = set(row) - set(columns)
+                if unknown:
+                    logger.warning(
+                        f"[MEMORY] demo data: {table} has no column(s) {sorted(unknown)}; row skipped"
+                    )
+                    continue
+                values = dict(row)
+                timestamp_column = _TIMESTAMP_COLUMN.get(table)
+                if timestamp_column:
+                    values[timestamp_column] = now
+                keys = ",".join(values)
+                marks = ",".join("?" for _ in values)
+                # Table/columns whitelist-checked above, values bound as parameters.
+                conn.execute(
+                    f"INSERT OR IGNORE INTO {table} ({keys}) VALUES ({marks})",  # noqa: S608
+                    tuple(values.values()),
+                )
+                total += 1
 
-    total = 4 + len(hosts) + len(alerts) + len(orders)
-    logger.info(f"[MEMORY] seeded {total} demo business rows (demo data, not real business)")
+    logger.info(f"[MEMORY] loaded {total} demo business rows from {source.name}")
     return total

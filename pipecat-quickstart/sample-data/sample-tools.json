@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "Data for the demonstration tools in server/sample_tools.py. It lives here, not in the code:",
+    "swapping the file (or SAMPLE_TOOLS_DATA) changes the answers without touching code.",
+    "A real deployment replaces these tools with ones that query an actual service/table."
+  ],
+  "weather": {
+    "北京": {"temperature_c": 24, "condition": "晴"},
+    "上海": {"temperature_c": 27, "condition": "多云"},
+    "杭州": {"temperature_c": 29, "condition": "小雨"},
+    "深圳": {"temperature_c": 31, "condition": "阴"},
+    "广州": {"temperature_c": 30, "condition": "雷阵雨"},
+    "成都": {"temperature_c": 22, "condition": "阴"}
+  },
+  "devices": ["客厅灯", "卧室灯", "空调", "加湿器"]
+}
