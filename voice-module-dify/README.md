@@ -1,84 +1,131 @@
-# voice-module（第三阶段）
+# voice-module-dify
 
-**它是什么**：一个**可单独部署的语音模块** —— 只负责"耳朵和嘴"（听、说、轮流、打断），
-**脑袋（LLM / 工具 / 知识库 / 记忆）由外部的智能体平台提供**。
+**一个可以单独部署的语音模块：它只负责"听"和"说"，思考交给外部的智能体系统。**
 
-> **目录名里的 `-dify` 标记的是"这个案例接的是谁"**，不是"模块依赖 Dify" ✗。
-> 调用方向是 **语音模块主动调用 Dify**（不是 Dify 里装了语音模块）：
-> `网页（你的）→ 语音模块（你的）→ Dify（别人的服务）`。
-> **换大脑只改 `.env` 两行**，模块与网页一行都不用动。
->
-> 📄 完整案例：**[`CASE-dify.md`](CASE-dify.md)**（架构关系、一键流程、必须人工的三步、实测踩坑与数字）
-> 🧠 设计说明与答疑：**[`docs/CONCEPTS.md`](docs/CONCEPTS.md)**（谁在干什么、常见误解、每个结论怎么验证）
-> 🔁 一键跑：`bash case-run.sh`
+它把语音能力接到一个**已经存在的智能体系统**上 —— 你不用自己做工具、知识库、记忆、编排，
+那些都留在那边的平台上；你这边只需要能听会说。
 
-**它不是什么**：它**不**实现任何业务逻辑。工具、知识库、记忆、编排全部在平台那边 ——
-这正是第三阶段存在的理由：**不想再做一遍第二阶段**。
+> - 🧠 **它到底谁在干什么**（心智模型 + 8 条答疑）：[`docs/CONCEPTS.md`](docs/CONCEPTS.md)
+> - 🔌 **换成你自己的平台/大脑**：[`docs/PORTING.md`](docs/PORTING.md)
+> - 📄 **本仓库这个案例（接 Dify）的完整说明**：[`CASE-dify.md`](CASE-dify.md)
+> - 📘 **阶段手册**（从零搭出来的过程与踩坑）：[`docs/HANDBOOK-03.md`](docs/HANDBOOK-03.md)
 
-## 与 `pipecat-quickstart` 的关系：完全解耦
+---
 
-| | 说明 |
+## 它是什么 / 不是什么
+
+| | |
 |---|---|
-| 能否 import quickstart 的模块 | **不能**（`settings.py` 的 STT/TTS/Tool/记忆 等一概不用） |
-| 能否调用它的脚本 | **不能** |
-| 可以做什么 | **读它的文档**（第一阶段讲管线怎么搭、插槽怎么换；第二阶段讲业务怎么做）当作参考 |
-| 共用的东西 | 只有**框架本身**（`pipecat-ai`）—— 大家都是在它上面写代码 |
+| **是** | 语音的输入输出层：判断用户说完没有、语音转文字、文字转语音、打断、延迟控制；以及一个能直接用的网页客户端 |
+| **不是** | 业务逻辑。工具、知识库、记忆、编排**一个都没有** —— 那些在平台那边 |
 
-> 阶段划分：**第一阶段**＝把语音链路搭通（本模块要重新实现的那部分）；
-> **第二阶段**＝往链路里灌业务（本模块**不做**，交给平台）；
-> **第三阶段**＝把语音能力做成一个模块，插进别人已有的智能体系统。
+**方向只有一条**：`网页（你的）→ 语音模块（你的）→ 平台（别人的服务）`。
+模块是**主动方**，平台是**被调用方**。
+[自证方法](docs/CONCEPTS.md#2-谁是主人方向只有一个)：把平台停掉，网页照样开、模块照样在听照样出声，只是没人回答了。
 
-## 目录
+## 30 秒跑起来（不需要任何平台）
+
+```bash
+cd voice-module-dify
+uv sync
+cp .env.example .env        # 把 BRAIN_STUB 设成 1（用一个本地替身当脑子）
+uv run python probe/verify_brain.py     # 验证"接脑袋"这条接口
+uv run python probe/verify_speech_legs.py   # 验证它真的能说、也能听
+```
+
+想听声音（连网页）：
+```bash
+uv run python server/ws_app.py --host 0.0.0.0 --port 8090   # 语音走 WebSocket
+# 用浏览器打开 agent/deploy/voice-client.html（或按 CASE-dify.md 的方式托管它）
+```
+
+## 接上你自己的平台
+
+只需要 `.env` 两行：
+
+```bash
+BRAIN_BASE_URL=https://你的平台/v1     # 服务 API 的地址
+BRAIN_API_KEY=app-xxxxxxxx             # 应用的 API 密钥
+BRAIN_STUB=0
+```
+
+**对你的平台的要求**（就三条，细节见 [`docs/PORTING.md`](docs/PORTING.md)）：
+
+1. 一个"发一句话、流式回一段话"的接口（`POST /chat-messages`，`response_mode=streaming`）
+2. 一个会话标识（`conversation_id`），让平台记住多轮上下文
+3. 一个"叫停"接口（用户插话时用）
+
+不满足这三条也能接 —— 写一个小的适配层即可，`server/agent_client.py` 是**唯一**要改的文件。
+
+## 目录结构（每个文件一行）
 
 ```
 voice-module-dify/
-├── agent/
-│   ├── app.dsl.yml        # 平台侧的应用定义文件——一个应用就是一页 YAML（官方支持导入）
-│   └── import_app.py      # 把定义文件导入平台并创建 API key（脚本化，不点界面）
-├── server/
-│   ├── settings.py        # 唯一配置来源（语音插槽 + 平台的地址）
-│   ├── agent_client.py    # 平台的客户端：HTTP + SSE 流式；含"叫停"接口
-│   ├── brain.py           # 适配器：用户说完 → 请求平台 → 流式吐字 → 喂 TTS
-│   ├── observability.py   # 自己的时间线观测（不在管线里记日志就等着瞎猜）
-│   └── app.py             # 从零装配管线：传输 → VAD → STT → [适配器] → TTS → 传输
-├── probe/
-│   ├── stub_agent.py      # 离线自测用的**替身脑袋**（不是真实平台）
-│   └── verify_brain.py    # 探针：验证"接上脑袋"这条链路 + 量延迟
-└── docs/                  # 第三阶段手册（待补）
+├── README.md                  ← 你正在看的这一页
+├── CASE-dify.md               ← 案例：接 Dify 的完整流程、必须人工的三步、实测踩坑与数字
+├── case-run.sh                ← 一键脚本（能写死的都写死了，只有密钥要你填）
+├── pyproject.toml / uv.lock   ← 依赖（只依赖 pipecat 与少量常青库）
+│
+├── server/                    ← 语音模块本体（一个进程）
+│   ├── app.py                 ← 管线装配：传输 → STT → 轮流判定 → [适配器] → TTS → 传输
+│   ├── ws_app.py              ← WebSocket 入口（媒体走 TCP，能过任何 HTTP 端口转发）
+│   ├── raw_pcm_serializer.py  ← 裸 16 位单声道 PCM 的收发约定（客户端契约）
+│   ├── brain.py               ← 适配器：说完才问；边收边按句喂 TTS；平台慢时填场；插话则停
+│   ├── agent_client.py        ← 对话平台的客户端：HTTP + SSE 流式 + 叫停（**换平台只改这里**）
+│   ├── settings.py            ← 唯一配置来源：语音插槽 + 平台地址
+│   └── observability.py       ← 分阶段时间线：听到 / 平台首字 / 首句 / 交给 TTS
+│
+├── agent/                     ← 平台侧的东西
+│   ├── app.dsl.yml            ← 应用定义（一份文件就是一个应用，官方支持导入）
+│   ├── import_app.py          ← 脚本化导入 + 建密钥（登录无法脚本化，文档里标了边界）
+│   └── deploy/                ← 本环境专用的部署件
+│       ├── Dockerfile.nginx   ← 把反向代理烤进镜像（本环境 Docker 看不到工作区）
+│       ├── Dockerfile.ssrf    ← 同上：出网代理
+│       ├── nginx.conf         ← 反向代理规则 + /dsl/（应用定义下载）+ /voice/（网页）
+│       └── voice-client.html  ← 浏览器客户端：麦克风 → PCM → WebSocket，回放 PCM
+│
+├── probe/                     ← 验证（都能量化，不是"看着像对"）
+│   ├── verify_assembly.py     ← 零件能不能装起来（不连客户端）
+│   ├── verify_brain.py        ← 脑袋接口：流式 / 会话续接 / 失败可见 / 首句提前
+│   ├── verify_speech_legs.py  ← 说 + 听两腿（合成语音存成 WAV，再回读识别）
+│   ├── verify_audio_e2e.py    ← 端到端音频（无浏览器）：进音频、出音频、留 WAV 可听
+│   └── stub_agent.py          ← 离线替身（**不是**真实平台，只用于自测）
+│
+├── tests/                     ← 秒级单测（不联网、不加载模型）
+├── docs/
+│   ├── CONCEPTS.md            ← 心智模型与答疑（每条结论带验证方式）
+│   ├── PORTING.md             ← 换成你自己的平台：契约 + 清单
+│   └── HANDBOOK-03.md         ← 阶段手册：从零搭的过程、已验证/未验证分开写
+└── logs/                      ← 运行产物（音频、日志；已 gitignore）
 ```
 
-## 快速开始（离线自测，不需要平台）
+## 验证（都是可复跑的探针，不是断言）
 
-```bash
-cd voice-module
-uv sync
-# 先不接真实平台：用替身脑袋验证管线的"脑袋接口"与延迟
-cp .env.example .env          # BRAIN_STUB=1 走替身
-uv run python probe/verify_brain.py
-```
+| 结论 | 命令 |
+|---|---|
+| 端到端音频可用（含真实平台） | `uv run python probe/verify_audio_e2e.py` |
+| 脑袋接口正确 | `uv run python probe/verify_brain.py` |
+| 它能说、能听 | `uv run python probe/verify_speech_legs.py` |
+| 零件装配正确 | `uv run python probe/verify_assembly.py` |
+| 秒级单测 | `uv run pytest` |
 
-## 接上真实的平台（案例）
+实测数字（自托管 Dify 1.17.1 + 魔搭模型，2026-10-05）：
 
-```bash
-# 1) 起平台（自托管，需要 Docker）：见 docs/ 里的步骤
-# 2) 把应用定义导入平台（等价于"在界面里把应用搭好"，但这里是脚本）
-uv run python agent/import_app.py --dsl agent/app.dsl.yml
-# 3) 把拿到的 API key 填进 .env（BRAIN_BASE_URL / BRAIN_API_KEY），然后正常跑
-uv run python server/app.py
-```
+| 指标 | 数值 |
+|---|---|
+| 请求发出 → 平台首字 | 1334 ms |
+| 平台首字 → 首句 → 交给 TTS | +12 ms |
+| 平台自身的首字延迟（绕开语音层） | 740–963 ms |
+| 端到端音频往返 | ✅ 318,720 字节 / 10.0 秒音频 |
 
-## 三个必须记住的设计点
+## 诚实边界（有意没做 / 还没验证）
 
-1. **轮流判定留在语音模块**：平台听不到音频，"用户说完了没"只能由模块判（VAD + 端点检测 + 打断）。
-   这是本模块最值钱的部分，不是可以省掉的部分。
-2. **平台必须流式返回**：它是网络往返，不像本地 LLM。非流式会让"多久开口"直接垮掉，
-   所以适配器按"**首句就开口**"设计（边收边按句子喂给 TTS）。
-3. **平台慢的时候要有回声**：等待期间必须让用户听到点东西（填场语音），
-   否则用户会以为坏了 —— 这是语音场景独有的要求，前两个阶段都不涉及。
+- **打断**：模块会停止并告诉平台停，但浏览器里已排队的音频可能播完（页面上有「停止」按钮兜底）。
+- **没有多租户 / 鉴权**：当前是单机、单会话的形态。
+- **平台的登录无法脚本化**（要求密码先加密、成功后走 Cookie），所以平台侧有三步必须人工 —— 见 [`CASE-dify.md`](CASE-dify.md) 第 3 节。
+- **本环境特有的坑**（Docker 守护进程看不到工作区 → 靠文件挂载的容器起不来）已用"烤镜像"绕过；
+  换正常机器不需要这些，但 `agent/deploy/` 留在这里当参考。
 
-## 当前状态
+## 许可证
 
-**进行中**：骨架、脑袋接口、管线装配都已跑通（两个探针可复跑）；
-**真平台接入与端到端音频还没做**。
-
-👉 详细进度、已验证/未验证清单、下一步：**[`docs/HANDBOOK-03.md`](docs/HANDBOOK-03.md)**
+**尚未指定** —— 开源前需要补一个（否则默认"保留所有权利"，别人无法合法使用）。
